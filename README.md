@@ -15,3 +15,5 @@ npm run dev
 ```bash
 docker-compose up --build
 ```
+
+Then access at http://localhost:${PORT}  (port default is 3050).
