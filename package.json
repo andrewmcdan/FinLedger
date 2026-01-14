@@ -4,8 +4,8 @@
   "private": true,
   "description": "Web-based accounting and financial management system",
   "scripts": {
-    "start": "node src/server.js ./.env",
-    "dev": "nodemon src/server.js",
+    "start": "node src/server.js --env-file=.env",
+    "dev": "nodemon src/server.js --env-file=.env",
     "test": "node --test"
   },
   "dependencies": {
