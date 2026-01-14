@@ -13,5 +13,5 @@ npm run dev
 ### Or With Docker
 
 ```bash
-docker-compose up
+docker-compose up --build
 ```
