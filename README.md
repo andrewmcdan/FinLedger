@@ -36,5 +36,11 @@ docker compose up --build
 
 Visit `http://localhost:3050` (or the port set in `.env`).
 
-## Notes
-- The backend currently serves a placeholder response at `/`. The frontend shell lives in `public/` and can be wired up with `express.static` when ready.
+## Testing
+Run the built-in Node.js test runner:
+
+```bash
+npm test
+```
+
+Tests live in `tests/`. Add new test files there as the project grows.
