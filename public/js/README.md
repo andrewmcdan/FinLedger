@@ -1,3 +1,3 @@
 # public/js
 
-Client-side JavaScript for UI behavior.
+Client-side application code. Entry point is `app.js`.
