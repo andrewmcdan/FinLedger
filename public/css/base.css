@@ -3,7 +3,7 @@
   --bg-deep: #31724e;
   --surface: rgba(255, 255, 255, 0.82);
   --surface-strong: #ffffff;
-  --ink: #1f2a35;
+  --ink: #084e17;
   --muted: #4f5d6b;
   --accent: #084e17;
   --accent-strong: #738b71;
@@ -30,7 +30,7 @@ body {
   font-family: var(--font-sans);
   color: var(--ink);
   background:
-    radial-gradient(circle at 12% 18%, rgba(255, 221, 168, 0.45), transparent 55%),
+    radial-gradient(circle at 12% 18%, rgba(255, 221, 168, 0.45), transparent 95%),
     radial-gradient(circle at 85% 5%, rgba(88, 199, 196, 0.28), transparent 48%),
     linear-gradient(135deg, var(--bg), var(--bg-deep));
 }
