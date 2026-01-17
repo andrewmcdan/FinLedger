@@ -20,6 +20,6 @@ INSERT INTO users (
   'active',
   crypt('{{ADMIN_PASSWORD}}', gen_salt('bf')),
   now(),
-  now() + interval '10000 days'
+  now() + interval '365 days'
 )
 ON CONFLICT DO NOTHING;
