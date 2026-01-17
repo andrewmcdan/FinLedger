@@ -12,11 +12,6 @@ Copy `.env.example` to `.env` and adjust values as needed.
 cp .env.example .env
 ```
 
-Current variables used by local and Docker setups:
-- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`
-- `PORT`
-- `ADMIN_USERNAME`, `ADMIN_PASSWORD`
-
 ## Run locally (without Docker)
 Make sure PostgreSQL is running with credentials matching `.env`, then:
 
