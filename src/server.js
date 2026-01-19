@@ -1,4 +1,5 @@
 const express = require("express");
+const authRoutes = require("./routes/auth");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,6 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 // wire in static files found in ../public/
 app.use(express.static("public"));
+app.use("/api/auth", authRoutes);
 
 // TODO: Add the authentication middleware here
 

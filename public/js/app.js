@@ -86,3 +86,8 @@ async function renderRoute() {
 
 window.addEventListener("hashchange", renderRoute);
 window.addEventListener("DOMContentLoaded", renderRoute);
+
+import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
+
+window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
+window.addEventListener("hashchange", updateLoginLogoutButton);
