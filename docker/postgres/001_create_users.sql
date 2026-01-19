@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
   suspension_end_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+-- security question answers shall be adjusted to all lowercase before hashing
   security_question_1 TEXT,
   security_answer_hash_1 TEXT,
   security_question_2 TEXT,

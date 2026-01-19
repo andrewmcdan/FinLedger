@@ -1,3 +1,15 @@
+/**
+ * Database Initialization Script
+ *
+ * This script connects to the Postgres database using environment variables and
+ * runs all .sql files found in the docker/postgres/ directory in alphabetical order.
+ * The SQL files can contain template placeholders like {{ADMIN_USERNAME}}, which
+ * are replaced with values from environment variables (.env) before execution.
+ *
+ * Usage:
+ *   node scripts/init-db.js
+ */
+
 const fs = require("fs/promises");
 const path = require("path");
 const { Client } = require("pg");
