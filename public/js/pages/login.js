@@ -1,3 +1,5 @@
+import getUrlParam from "./../utils/url_params.js";
+
 async function replacePageContent(pageName) {
     const container = document.querySelector("[data-login-container]");
     if (!container) {
@@ -9,62 +11,115 @@ async function replacePageContent(pageName) {
     }
     container.innerHTML = await response.text();
 }
-        
+
+function setMessage(text) {
+    const messageBox = document.querySelector("[data-login-message]");
+
+    if (text === null || text == "" || text === undefined) {
+        if (messageBox) {
+            messageBox.classList.add("hidden");
+        }
+        return;
+    }
+    if (messageBox) {
+        messageBox.textContent = text;
+        messageBox.classList.remove("hidden");
+    }
+}
 
 export default function initLogin() {
     const form = document.querySelector("[data-login]");
-    const message = document.querySelector("[data-login-message]");
     const container = document.querySelector("[data-login-container]");
-    if (!form || !message || !container) {
+    if (!form || !container) {
         return;
     }
 
-    message.classList.add("hidden");
+    setMessage();
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
-        message.textContent = "Login is wired. Connect to the auth API next.";
     });
 
     const newUserButton = document.getElementById("new_user");
     if (newUserButton) {
-        newUserButton.addEventListener("click", async () => {
-            await replacePageContent("register");
-            history.pushState({ page: "register" }, "");
-            window.onpopstate = async () => {
-                await replacePageContent("login");
-                window.onpopstate = null;
-                initLogin();
-            };
-
-            const form = document.querySelector("[data-register]");
-            if (form) {
-                form.addEventListener("submit", (event) => {
-                    event.preventDefault();
-                    // TODO: Handle registration logic
-                });
-            }
-        });
+        newUserButton.addEventListener("click", newUserLogic);
     }
 
     const forgotPasswordButton = document.getElementById("forgot_password");
     if (forgotPasswordButton) {
-        forgotPasswordButton.addEventListener("click", async () => {
-            await replacePageContent("forgot-password");
-            history.pushState({ page: "forgot-password" }, "");
-            window.onpopstate = async () => {
-                await replacePageContent("login");
-                window.onpopstate = null;
-                initLogin();
-            };
-            
-            const form = document.querySelector("[data-forgot-password]");
-            if (form) {
-                form.addEventListener("submit", (event) => {
-                    event.preventDefault();
-                    // TODO: Handle password reset logic
-                });
-            }
+        forgotPasswordButton.addEventListener("click", forgotPasswordLogic);
+    }
+
+    // Determine if the url has a reset token parameter
+    const resetToken = getUrlParam("reset_token");
+    if (resetToken) {
+        replacePageContent("forgot-password_submit").then(async () => {
+            await newPasswordLogic(resetToken);
         });
     }
 }
+
+let newUserLogic = async function () {
+    await replacePageContent("register");
+    setMessage();
+    history.pushState({ page: "register" }, "");
+    window.onpopstate = async () => {
+        await replacePageContent("login");
+        window.onpopstate = null;
+        initLogin();
+    };
+
+    const form = document.querySelector("[data-register]");
+    if (form) {
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            // TODO: Handle registration logic
+        });
+    }
+};
+
+let forgotPasswordLogic = async function () {
+    await replacePageContent("forgot-password_init");
+    setMessage();
+    history.pushState({ page: "forgot-password" }, "");
+    window.onpopstate = async () => {
+        await replacePageContent("login");
+        window.onpopstate = null;
+        initLogin();
+    };
+
+    const form = document.querySelector("[data-forgot-password]");
+    if (form) {
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            // TODO: Handle password reset logic
+            // This should check that the email or user ID exists and then send a reset token via email.
+            // If the operation is not successful, display an error message.
+            setMessage("Email or User ID submitted. Check your email for further instructions.");
+        });
+    }
+};
+
+let newPasswordLogic = async function (resetToken) {
+    setMessage();
+    console.log(resetToken);
+    const form = document.querySelector("[data-forgot-password]");
+    if (form) {
+        // load security question via API using the reset token
+        // For now, we'll use a placeholder
+        for (var i = 1; i <= 3; i++) {
+            const questionLabel = document.getElementById(`security_question_${i}`);
+            if (questionLabel) {
+                questionLabel.textContent = `Question ${i}?`; // Placeholder question
+            }
+        }
+
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            // TODO: Handle password reset submission logic
+            // This should validate the reset token, security question answers, and set the new password.
+            // If successful, show a success message.
+            setMessage("Password has been reset. You can now log in with your new password.");
+        });
+    }
+};
