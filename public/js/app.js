@@ -3,6 +3,7 @@ const routes = {
     transactions: { title: "Transactions", page: "transactions", module: "transactions" },
     reports: { title: "Reports", page: "reports", module: "reports" },
     login: { title: "Login", page: "login", module: "login" },
+    help: { title: "Help", page: "help", module: "help" },
 };
 
 const DEFAULT_ROUTE = "dashboard";
