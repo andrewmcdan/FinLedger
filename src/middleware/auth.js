@@ -10,6 +10,7 @@ const authMiddleware = (req, res, next) => {
     }
 
     req.user = { id: token };
+    // TODO: Verify the token against the logged_in_users table in the database.
     return next();
 };
 
