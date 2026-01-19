@@ -26,7 +26,7 @@ function request(path, port) {
                 res.on("end", () => {
                     resolve({ statusCode: res.statusCode, body: data });
                 });
-            }
+            },
         );
 
         req.on("error", reject);

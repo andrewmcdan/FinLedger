@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
   security_question_1 TEXT,
   security_answer_hash_1 TEXT,
   security_question_2 TEXT,
-  security_answer_hash_2 TEXT
+  security_answer_hash_2 TEXT,
   security_question_3 TEXT,
   security_answer_hash_3 TEXT
 );

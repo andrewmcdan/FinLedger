@@ -24,6 +24,8 @@ const templateValues = {
     ADMIN_EMAIL: process.env.ADMIN_EMAIL,
     ADMIN_FIRST_NAME: process.env.ADMIN_FIRST_NAME || "Admin",
     ADMIN_LAST_NAME: process.env.ADMIN_LAST_NAME || "User",
+    PASSWORD_EXPIRATION_DAYS: process.env.PASSWORD_EXPIRATION_DAYS || "90",
+    PASSWORD_MIN_LENGTH: process.env.PASSWORD_MIN_LENGTH || "8",
 };
 
 // If the admin email is not set in the .env file or environment, derive it from the username.
@@ -57,11 +59,8 @@ function getClient() {
         host: process.env.POSTGRES_HOST || "localhost",
         port: Number(process.env.POSTGRES_PORT || 5432),
         user: process.env.POSTGRES_USER || "finledger",
-        password:
-            process.env.POSTGRES_PASSWORD ||
-            "finledger",
-        database:
-            process.env.POSTGRES_DB || "finledger",
+        password: process.env.POSTGRES_PASSWORD || "finledger",
+        database: process.env.POSTGRES_DB || "finledger",
     });
 }
 
@@ -69,9 +68,7 @@ function getClient() {
 // prepended with a number to ensure the correct order.
 async function getSqlFiles() {
     const entries = await fs.readdir(SQL_DIR);
-    return entries
-        .filter((entry) => entry.toLowerCase().endsWith(".sql"))
-        .sort();
+    return entries.filter((entry) => entry.toLowerCase().endsWith(".sql")).sort();
 }
 
 // Main
