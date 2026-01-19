@@ -1,4 +1,4 @@
-import getUrlParam from "./../utils/url_params.js";
+import getUrlParam from "/js/utils/url_params.js";
 
 async function replacePageContent(pageName) {
     const container = document.querySelector("[data-login-container]");
@@ -34,7 +34,7 @@ export default function initLogin() {
         return;
     }
 
-    setMessage();
+    setMessage(); // Clear any existing messages
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -66,6 +66,7 @@ let newUserLogic = async function () {
     window.onpopstate = async () => {
         await replacePageContent("login");
         window.onpopstate = null;
+        // Go back to login page, re-initialize login logic
         initLogin();
     };
 
@@ -85,6 +86,7 @@ let forgotPasswordLogic = async function () {
     window.onpopstate = async () => {
         await replacePageContent("login");
         window.onpopstate = null;
+        // Go back to login page, re-initialize login logic
         initLogin();
     };
 
@@ -105,7 +107,8 @@ let newPasswordLogic = async function (resetToken) {
     console.log(resetToken);
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        // load security question via API using the reset token
+        // load security question via API using the reset token. This should fail if the reset token is invalid or expired.
+        // In the case of failure, show an error message and do not allow submission.
         // For now, we'll use a placeholder
         for (var i = 1; i <= 3; i++) {
             const questionLabel = document.getElementById(`security_question_${i}`);
