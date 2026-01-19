@@ -263,3 +263,6 @@ button:hover {
         padding: 1.5rem 1.25rem 2.5rem;
     }
 }
+.hidden {
+    display: none;
+}

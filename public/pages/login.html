@@ -1,4 +1,4 @@
-<section class="page narrow">
+<section class="page narrow" data-login-container>
     <header class="page-header">
         <h1>Sign in</h1>
         <p>Use your organization credentials.</p>
@@ -12,7 +12,9 @@
             <label for="password">Password</label>
             <input id="password" name="password" type="password" autocomplete="current-password" required />
         </div>
-        <button type="submit">Continue</button>
+        <button type="submit">Log In</button>
+        <button type="button" id="new_user">New User</button>
+        <button type="button" id="forgot_password">Forgot Password</button>
     </form>
-    <p class="notice" data-login-message>Connect your auth service to enable sign-in.</p>
+    <p class="notice" data-login-message></p>
 </section>
