@@ -7,10 +7,9 @@
 }
 
 .app-header {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
     gap: 1.5rem;
     width: 100%;
     padding: 1.1rem 2.5rem;
@@ -23,6 +22,7 @@
     display: flex;
     align-items: center;
     gap: 0.9rem;
+    justify-self: start;
 }
 
 .brand-mark {
@@ -63,6 +63,11 @@
     background: rgba(255, 255, 255, 0.6);
     border: 1px solid var(--border);
     backdrop-filter: blur(6px);
+    justify-self: center;
+}
+
+.user-profile-button-contianer {
+    justify-self: end;
 }
 
 .app-nav a {
@@ -254,8 +259,8 @@ button:hover {
 
 @media (max-width: 720px) {
     .app-header {
-        flex-direction: column;
-        align-items: flex-start;
+        grid-template-columns: 1fr;
+        justify-items: start;
         padding: 1rem 1.25rem;
     }
 
