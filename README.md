@@ -41,3 +41,17 @@ npm test
 ```
 
 Tests live in `tests/`. Add new test files there as the project grows.
+
+## Development
+To run the app in development mode with auto-reloading:
+
+```bash
+npm run dev
+```
+
+If you want to use the postgresql database in a Docker container during development, run:
+
+```bash
+docker compose up db
+```
+Then ensure your `.env` file points to the Docker container's database settings.

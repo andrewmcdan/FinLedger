@@ -66,8 +66,12 @@
     justify-self: center;
 }
 
-.user-profile-button-contianer {
+.user-profile-button-container {
     justify-self: end;
+}
+
+#user_profile_button img{
+    width: 30px;
 }
 
 .app-nav a {
