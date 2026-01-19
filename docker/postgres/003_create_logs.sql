@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS logs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  details JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -19,5 +19,20 @@ CREATE TABLE IF NOT EXISTS users (
   suspension_start_at TIMESTAMPTZ,
   suspension_end_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+-- security question answers shall be adjusted to all lowercase before hashing
+  security_question_1 TEXT,
+  security_answer_hash_1 TEXT,
+  security_question_2 TEXT,
+  security_answer_hash_2 TEXT,
+  security_question_3 TEXT,
+  security_answer_hash_3 TEXT
+);
+
+-- Table to track password history for users to enforce password reuse policies.
+CREATE TABLE IF NOT EXISTS password_history (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  password_hash TEXT NOT NULL,
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
