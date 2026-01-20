@@ -140,3 +140,5 @@ vite.config.ts.timestamp-*
 
 # user-icons
 user-icons/
+
+logs/
