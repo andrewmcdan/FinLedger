@@ -8,13 +8,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // wire in static files found in ../public/
-app.use(express.static("public"));
+
 app.use("/images", imageRoutes);
 // Mount auth routes at /api/auth
 app.use("/api/auth", authRoutes);
 
 app.use(authMiddleware);
 // Any routes added after this point will require authentication
+app.use(express.static("web"));
 
 app.get("/api/secure-data", (req, res) => {
     res.json({ data: "This is secure data accessible only to authenticated users." });

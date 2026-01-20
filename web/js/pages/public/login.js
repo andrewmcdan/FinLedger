@@ -53,18 +53,18 @@ export default function initLogin() {
     // Determine if the url has a reset token parameter
     const resetToken = getUrlParam("reset_token");
     if (resetToken) {
-        replacePageContent("forgot-password_submit").then(async () => {
+        replacePageContent("public/forgot-password_submit").then(async () => {
             await newPasswordLogic(resetToken);
         });
     }
 }
 
 let newUserLogic = async function () {
-    await replacePageContent("register");
+    await replacePageContent("public/register");
     setMessage();
     history.pushState({ page: "register" }, "");
     window.onpopstate = async () => {
-        await replacePageContent("login");
+        await replacePageContent("public/login");
         window.onpopstate = null;
         // Go back to login page, re-initialize login logic
         initLogin();
@@ -80,11 +80,11 @@ let newUserLogic = async function () {
 };
 
 let forgotPasswordLogic = async function () {
-    await replacePageContent("forgot-password_init");
+    await replacePageContent("public/forgot-password_init");
     setMessage();
     history.pushState({ page: "forgot-password" }, "");
     window.onpopstate = async () => {
-        await replacePageContent("login");
+        await replacePageContent("public/login");
         window.onpopstate = null;
         // Go back to login page, re-initialize login logic
         initLogin();

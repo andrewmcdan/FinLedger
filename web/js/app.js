@@ -29,7 +29,7 @@ function setActiveNav(routeKey) {
 }
 
 async function fetchPageMarkup(pageName) {
-    const response = await fetch(`pages/${pageName}.html`);
+    const response = await fetch(`pages/public/${pageName}.html`);
     if (!response.ok) {
         throw new Error(`Unable to load ${pageName}`);
     }
@@ -42,7 +42,7 @@ async function loadModule(moduleName) {
     }
 
     try {
-        const module = await import(`./pages/${moduleName}.js`);
+        const module = await import(`./pages/public/${moduleName}.js`);
         if (typeof module.default === "function") {
             module.default();
         }
