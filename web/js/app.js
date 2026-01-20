@@ -1,9 +1,10 @@
 const routes = {
-    dashboard: { title: "Dashboard", page: "dashboard", module: "dashboard" },
-    transactions: { title: "Transactions", page: "transactions", module: "transactions" },
-    reports: { title: "Reports", page: "reports", module: "reports" },
-    login: { title: "Login", page: "login", module: "login" },
-    help: { title: "Help", page: "help", module: "help" },
+    dashboard: { title: "Dashboard", page: "pages/dashboard", module: "pages/dashboard" },
+    transactions: { title: "Transactions", page: "pages/transactions", module: "pages/transactions" },
+    reports: { title: "Reports", page: "pages/reports", module: "pages/reports" },
+    login: { title: "Login", page: "pages/public/login", module: "pages/public/login" },
+    help: { title: "Help", page: "pages/public/help", module: "pages/public/help" },
+    logout: { title: "Logout", page: "pages/public/logout", module: "pages/public/logout" }
 };
 
 const DEFAULT_ROUTE = "dashboard";
@@ -29,8 +30,14 @@ function setActiveNav(routeKey) {
 }
 
 async function fetchPageMarkup(pageName) {
-    const response = await fetch(`pages/public/${pageName}.html`);
+    const response = await fetch(`${pageName}.html`);
     if (!response.ok) {
+        // If the return code is 401, we should redirect to login.
+        if (response.status === 401) {
+            console.log("Unauthorized access, redirecting to login");
+            window.location.hash = "#/login";  
+            return;
+        }
         throw new Error(`Unable to load ${pageName}`);
     }
     return response.text();
@@ -42,12 +49,18 @@ async function loadModule(moduleName) {
     }
 
     try {
-        const module = await import(`./pages/public/${moduleName}.js`);
+        const module = await import(`./${moduleName}.js`);
         if (typeof module.default === "function") {
             module.default();
         }
     } catch (error) {
         console.error(`Failed to load module ${moduleName}`, error);
+        if (error.message.includes("404")) {
+            return;
+        }
+        if (error.message.includes("401")) {
+            window.location.hash = "#/login";  
+        }
     }
 }
 

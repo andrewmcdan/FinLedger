@@ -5,9 +5,8 @@ const non_auth_paths_begin = ["/api/auth/status", "/images", "/js/utils", "/js/u
 const non_auth_paths_full = ["/"];
 
 const authMiddleware = (req, res, next) => {
-    // if req is for a public route, skip authentication
+    // If req is for a public route, skip authentication
     console.log(req.path);
-    // return next();
     if (non_auth_paths_begin.some((publicPath) => req.path.startsWith(publicPath)) || non_auth_paths_full.includes(req.path)) {
         return next();
     }
@@ -26,6 +25,11 @@ const authMiddleware = (req, res, next) => {
     req.user = { token: token, id: user_id };
     const loggedIn = getUserLoggedInStatus(user_id, token);
     if (!loggedIn) {
+        if(req.path.startsWith("/pages/")) {
+            logger.log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: user_id }, "authMiddleware");
+            // Redirect to login page for page requests
+            return res.redirect("/pages/public/login.html");
+        }
         return res.status(401).json({ error: "Invalid or expired token" });
     }
     logger.log("info", `User ${user_id} authenticated successfully`, { user_id: user_id }, "authMiddleware");

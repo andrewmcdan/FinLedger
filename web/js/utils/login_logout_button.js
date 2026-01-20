@@ -25,8 +25,9 @@ export async function updateLoginLogoutButton() {
         return;
     }
     if (await isLoggedIn()) {
-        login_button.textContent = `Logout (${username})`;
-        login_button.href = "#/logout";
+        const username = localStorage.getItem("username") || "User";
+        login_button.textContent = `Logout: (${username})`;
+        login_button.href = "#/logout"; // TODO: Implement logout route
     } else {
         login_button.textContent = "Login";
         login_button.href = "#/login";
