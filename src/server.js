@@ -25,8 +25,8 @@ app.get("/api/secure-data", (req, res) => {
 // This allows the server to be imported without starting it, which is useful for testing.
 if (require.main === module) {
     app.listen(PORT, () => {
-        logger.log('trace',`Server listening on port ${PORT}`);
-        logger.log('trace',`Visit http://localhost:${PORT}`);
+        logger.log('fatal',`Server listening on port ${PORT}`, {"express": "listening"}, "server.js");
+        logger.log('fatal',`Visit http://localhost:${PORT}`, {"express": "listening"}, "server.js");
     });
 }
 

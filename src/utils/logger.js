@@ -13,9 +13,8 @@ const CONSOLE_LOG_LEVEL = process.env.CONSOLE_LOG_LEVEL || "debug";
 const levels = { trace: 0, debug: 1, info: 2, warn: 3, error: 4, fatal: 5 };
 
 // Main logging function
-const log = async (level, message, context = null, source = "") => {
+const log = async (level, message, context = null, source = "", user_id = null) => {
     const timestamp = new Date().toISOString();
-    const logEntry = { timestamp, level, message, context, source };
     const levelValue = levels[level] !== undefined ? levels[level] : levels.info;
 
     // Log to console
@@ -27,10 +26,13 @@ const log = async (level, message, context = null, source = "") => {
     if (LOG_TO_DB && levelValue >= levels[DB_LOG_LEVEL]) {
         try {
             const query = `
-                INSERT INTO app_logs (level, message, context, source)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO app_logs (level, message, context, source${user_id ? ", user_id" : ""})
+                VALUES ($1, $2, $3, $4${user_id ? ", $5" : ""})
             `;
             const values = [level, message, context, source];
+            if (user_id) {
+                values.push(user_id);
+            }
             await db.query(query, values);
         }
         catch (error) {
