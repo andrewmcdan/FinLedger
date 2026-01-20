@@ -3,5 +3,5 @@ CREATE TABLE If NOT EXISTS logged_in_users (
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token TEXT NOT NULL,
   login_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  logout_at TIMESTAMPTZ
+  logout_at TIMESTAMPTZ DEFAULT now() + INTERVAL '1 hour'
 );
