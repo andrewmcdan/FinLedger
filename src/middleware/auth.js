@@ -6,7 +6,6 @@ const non_auth_paths_full = ["/"];
 
 const authMiddleware = (req, res, next) => {
     // If req is for a public route, skip authentication
-    console.log(req.path);
     if (non_auth_paths_begin.some((publicPath) => req.path.startsWith(publicPath)) || non_auth_paths_full.includes(req.path)) {
         return next();
     }
