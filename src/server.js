@@ -3,6 +3,7 @@ const authRoutes = require("./routes/auth");
 const imageRoutes = require("./routes/images");
 const authMiddleware = require("./middleware/auth");
 const logger = require("./utils/logger");
+const {getCallerInfo} = require("./utils/utilities");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,8 +26,8 @@ app.get("/api/secure-data", (req, res) => {
 // This allows the server to be imported without starting it, which is useful for testing.
 if (require.main === module) {
     app.listen(PORT, () => {
-        logger.log('fatal',`Server listening on port ${PORT}`, {"express": "listening"}, "server.js");
-        logger.log('fatal',`Visit http://localhost:${PORT}`, {"express": "listening"}, "server.js");
+        logger.log('fatal',`Server listening on port ${PORT}`, {"express": "listening"}, getCallerInfo());
+        logger.log('fatal',`Visit http://localhost:${PORT}`, {"express": "listening"}, getCallerInfo());
     });
 }
 

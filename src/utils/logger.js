@@ -43,7 +43,7 @@ const log = async (level, message, context = null, source = "", user_id = null) 
     // Log to file
     if (LOG_TO_FILE && levelValue >= levels[LOG_TO_FILE_LEVEL]) {
         const fs = require("fs");
-        const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message} ${JSON.stringify(context)}\n`;
+        const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message} ${JSON.stringify(context)} ${source.file}:${source.line}:${source.column}\n`;
         // If file doesn't exist, create it
         if (!fs.existsSync(LOG_FILE_PATH)) {
             fs.writeFileSync(LOG_FILE_PATH, "");
