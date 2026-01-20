@@ -2,6 +2,7 @@ const express = require("express");
 const { getUserLoggedInStatus } = require("../controllers/users.js");
 const router = express.Router();
 
+// Endpoint to check if user is logged in
 router.get("/status", (req, res) => {
     const authHeader = req.get("authorization");
     if (!authHeader) {
