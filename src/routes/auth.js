@@ -1,13 +1,23 @@
 const express = require("express");
-
+const { getUserLoggedInStatus } = require("../controllers/users.js");
 const router = express.Router();
 
 router.get("/status", (req, res) => {
-    res.json({ ok: true , loggedIn: true});
-    // Here we should check if the user is logged in by checking the token from req.user.id
-    // against the logged_in_users table in the database.
-    // For now, we just return ok: true for demonstration purposes.
-    console.log("Checking login status for user ID:", req.user.id);
+    const authHeader = req.get("authorization");
+    if (!authHeader) {
+        return res.json({ ok: false , loggedIn: false});
+    }
+    const [scheme, token] = authHeader.split(" ");
+    if (scheme !== "Bearer" || !token) {
+        return res.json({ ok: false , loggedIn: false});
+    }
+    const user_id = req.get("User_ID");
+    if (!user_id) {
+        return res.json({ ok: false , loggedIn: false});
+    }
+    req.user = { token: token, id: user_id };
+    const loggedIn = getUserLoggedInStatus(user_id, token);
+    res.json({ ok: true , loggedIn: loggedIn});
 });
 
 module.exports = router;

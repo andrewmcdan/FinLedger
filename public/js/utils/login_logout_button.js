@@ -3,6 +3,10 @@ async function isLoggedIn() {
         const response = await fetch("/api/auth/status", {
             method: "GET",
             credentials: "include",
+            headers: {
+                "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}`,
+                'User_ID': `${localStorage.getItem("user_id") || ""}`
+            }
         });
         if (!response.ok) {
             return false;

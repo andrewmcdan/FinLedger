@@ -10,6 +10,7 @@ router.get("/user-icon.png", (req, res) => {
     res.sendFile(path.resolve(__dirname, "./../../user-icons/default.png"));
 
     const pathRoot = path.resolve(__dirname, "./../../user-icons/");
+    
 });
 
 module.exports = router;

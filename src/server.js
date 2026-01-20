@@ -8,14 +8,13 @@ const PORT = process.env.PORT || 3000;
 
 // wire in static files found in ../public/
 app.use(express.static("public"));
-
-app.use("/images", imageRoutes); // Example for image routes
+app.use("/images", imageRoutes);
+// Mount auth routes at /api/auth
+app.use("/api/auth", authRoutes);
 
 app.use(authMiddleware);
 // Any routes added after this point will require authentication
 
-// Mount auth routes at /api/auth
-app.use("/api/auth", authRoutes);
 
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.
