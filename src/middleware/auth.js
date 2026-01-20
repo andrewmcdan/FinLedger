@@ -1,4 +1,5 @@
 const { getUserLoggedInStatus } = require("../controllers/users.js");
+const logger = require("../utils/logger.js");
 
 const authMiddleware = (req, res, next) => {
     const authHeader = req.get("authorization");
@@ -18,6 +19,7 @@ const authMiddleware = (req, res, next) => {
     if (!loggedIn) {
         return res.status(401).json({ error: "Invalid or expired token" });
     }
+    logger.log('info', `User ${user_id} authenticated successfully`, { user_id: user_id }, "authMiddleware");
     return next();
 };
 

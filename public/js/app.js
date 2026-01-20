@@ -91,7 +91,3 @@ import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 
 window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
 window.addEventListener("hashchange", updateLoginLogoutButton);
-
-// set debug authorization for testing purposes
-localStorage.setItem("auth_token", "test-token-123");
-localStorage.setItem("user_id", "1");
