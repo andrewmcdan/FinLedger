@@ -4,7 +4,10 @@ const routes = {
     reports: { title: "Reports", page: "pages/reports", module: "pages/reports" },
     login: { title: "Login", page: "pages/public/login", module: "pages/public/login" },
     help: { title: "Help", page: "pages/public/help", module: "pages/public/help" },
-    logout: { title: "Logout", page: "pages/public/logout", module: "pages/public/logout" }
+    logout: { title: "Logout", page: "pages/public/logout", module: "pages/public/logout" },
+    not_logged_in: { title: "Not Logged In", page: "pages/public/not_logged_in", module: null },
+    not_found: { title: "Page Not Found", page: "pages/public/not_found", module: null },
+    not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null }
 };
 
 const DEFAULT_ROUTE = "dashboard";
@@ -31,16 +34,23 @@ function setActiveNav(routeKey) {
 
 async function fetchPageMarkup(pageName) {
     const response = await fetch(`${pageName}.html`);
-    if (!response.ok) {
-        // If the return code is 401, we should redirect to login.
-        if (response.status === 401) {
-            console.log("Unauthorized access, redirecting to login");
-            window.location.hash = "#/login";  
+    if (response.ok) return response.text();
+    console.log("Fetch page markup failed:", response.status);
+    if (response.status === 401) { // Unauthorized
+        // if the returned content is {"error": "Missing Authorization header"}, then redirect to not_logged_in.html
+        let resJson = await response.clone().json();
+        if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing User_ID header" || resJson.error == "Invalid or expired token") {
+            window.location.hash = "#/not_logged_in";
+            return;
+        }if(resJson.error === "Role not permitted") {
+            window.location.hash = "#/not_authorized";
             return;
         }
-        throw new Error(`Unable to load ${pageName}`);
+        console.log("Unauthorized access, redirecting to login");
+        window.location.hash = "#/login";
+        return;
     }
-    return response.text();
+    throw new Error(`Unable to load ${pageName}`);
 }
 
 async function loadModule(moduleName) {
@@ -59,7 +69,7 @@ async function loadModule(moduleName) {
             return;
         }
         if (error.message.includes("401")) {
-            window.location.hash = "#/login";  
+            window.location.hash = "#/login";
         }
     }
 }
@@ -77,14 +87,14 @@ async function renderRoute() {
 
     const routeKey = getRouteFromHash();
     const route = routes[routeKey];
-    const pageName = route ? route.page : "not-found";
+    const pageName = route ? route.page : "#/not_found";
 
     try {
         const markup = await fetchPageMarkup(pageName);
         view.innerHTML = markup;
     } catch (error) {
         try {
-            const markup = await fetchPageMarkup("not-found");
+            const markup = await fetchPageMarkup("pages/public/not_found");
             view.innerHTML = markup;
         } catch (fallbackError) {
             view.innerHTML = '<section class="page"><h1>Page not found</h1></section>';
