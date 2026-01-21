@@ -3,7 +3,7 @@ const { getUserLoggedInStatus } = require("../controllers/users.js");
 const router = express.Router();
 
 // Endpoint to check if user is logged in
-router.get("/status", (req, res) => {
+router.get("/status", async (req, res) => {
     const authHeader = req.get("authorization");
     if (!authHeader) {
         return res.json({ ok: false , loggedIn: false});
@@ -17,7 +17,7 @@ router.get("/status", (req, res) => {
         return res.json({ ok: false , loggedIn: false});
     }
     req.user = { token: token, id: user_id };
-    const loggedIn = getUserLoggedInStatus(user_id, token);
+    const loggedIn = await getUserLoggedInStatus(user_id, token);
     res.json({ ok: true , loggedIn: loggedIn});
 });
 
