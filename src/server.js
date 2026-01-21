@@ -20,10 +20,6 @@ app.use(authMiddleware);
 app.use(express.static("web"));
 app.use("/documents", userDocRoutes);
 
-app.get("/api/secure-data", (req, res) => {
-    res.json({ data: "This is secure data accessible only to authenticated users." });
-});
-
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.
 if (require.main === module) {
