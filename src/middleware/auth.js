@@ -1,7 +1,7 @@
 const { getUserLoggedInStatus } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
 
-const non_auth_paths_begin = ["/api/auth/status", "/images", "/js/utils", "/js/utils", "/js/app.js", "/css/", "/pages/public", "/js/pages/public"];
+const non_auth_paths_begin = ["/api/auth/status", "/images", "/js/utils", "/js/app.js", "/css/", "/pages/public", "/js/pages/public"];
 const non_auth_paths_full = ["/"];
 
 const authMiddleware = (req, res, next) => {
