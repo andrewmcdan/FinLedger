@@ -87,7 +87,7 @@ async function renderRoute() {
 
     const routeKey = getRouteFromHash();
     const route = routes[routeKey];
-    const pageName = route ? route.page : "#/not_found";
+    const pageName = route ? route.page : routes.not_found.page;
 
     try {
         const markup = await fetchPageMarkup(pageName);
