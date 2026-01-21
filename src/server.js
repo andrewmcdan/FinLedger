@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 // wire in static files found in ../public/
 
 app.use("/images", imageRoutes);
-// Mount auth routes at /api/auth
+// Mount auth routes at /api/auth (public)
 app.use("/api/auth", authRoutes);
 
 app.use(authMiddleware);

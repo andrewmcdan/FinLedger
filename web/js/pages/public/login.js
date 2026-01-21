@@ -1,5 +1,3 @@
-import getUrlParam from "/js/utils/url_params.js";
-
 async function replacePageContent(pageName) {
     const container = document.querySelector("[data-login-container]");
     if (!container) {
@@ -27,6 +25,19 @@ function setMessage(text) {
     }
 }
 
+let getUrlParamFn = null;
+
+async function loadUrlParamHelper() {
+    if (getUrlParamFn) {
+        return getUrlParamFn;
+    }
+    // Use an absolute URL so it resolves when the module itself is loaded from a blob URL.
+    const moduleUrl = new URL("/js/utils/url_params.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    getUrlParamFn = module.default;
+    return getUrlParamFn;
+}
+
 export default function initLogin() {
     const form = document.querySelector("[data-login]");
     const container = document.querySelector("[data-login-container]");
@@ -38,6 +49,33 @@ export default function initLogin() {
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
+        const formData = new FormData(form);
+        const username = formData.get("username");
+        const password = formData.get("password");
+        fetch("/api/auth/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ username, password }),
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.token) {
+                    setMessage("Login successful!");
+                    // You might want to store the token and user info here
+                    localStorage.setItem("user_id", data.user_id);
+                    localStorage.setItem("auth_token", data.token);
+                    localStorage.setItem("username", data.username);
+                    // Redirect to the main app page or refresh
+                    window.location.href = "/#/dashboard";
+                } else {
+                    setMessage("Login failed: " + (data.error || "Unknown error"));
+                }
+            })
+            .catch((error) => {
+                setMessage("An error occurred: " + error.message);
+            });
     });
 
     const newUserButton = document.getElementById("new_user");
@@ -51,12 +89,18 @@ export default function initLogin() {
     }
 
     // Determine if the url has a reset token parameter
-    const resetToken = getUrlParam("reset_token");
-    if (resetToken) {
-        replacePageContent("public/forgot-password_submit").then(async () => {
-            await newPasswordLogic(resetToken);
+    loadUrlParamHelper()
+        .then((getUrlParam) => {
+            const resetToken = getUrlParam("reset_token");
+            if (resetToken) {
+                replacePageContent("public/forgot-password_submit").then(async () => {
+                    await newPasswordLogic(resetToken);
+                });
+            }
+        })
+        .catch((error) => {
+            console.error("Failed to load url_params helper:", error);
         });
-    }
 }
 
 let newUserLogic = async function () {

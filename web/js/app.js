@@ -1,13 +1,13 @@
 const routes = {
-    dashboard: { title: "Dashboard", page: "pages/dashboard", module: "pages/dashboard" },
-    transactions: { title: "Transactions", page: "pages/transactions", module: "pages/transactions" },
-    reports: { title: "Reports", page: "pages/reports", module: "pages/reports" },
-    login: { title: "Login", page: "pages/public/login", module: "pages/public/login" },
-    help: { title: "Help", page: "pages/public/help", module: "pages/public/help" },
-    logout: { title: "Logout", page: "pages/public/logout", module: "pages/public/logout" },
+    dashboard: { title: "Dashboard", page: "pages/dashboard", module: "js/pages/dashboard" },
+    transactions: { title: "Transactions", page: "pages/transactions", module: "js/pages/transactions" },
+    reports: { title: "Reports", page: "pages/reports", module: "js/pages/reports" },
+    login: { title: "Login", page: "pages/public/login", module: "js/pages/public/login" },
+    help: { title: "Help", page: "pages/public/help", module: "js/pages/public/help" },
+    logout: { title: "Logout", page: "pages/public/logout", module: "js/pages/public/logout" },
     not_logged_in: { title: "Not Logged In", page: "pages/public/not_logged_in", module: null },
     not_found: { title: "Page Not Found", page: "pages/public/not_found", module: null },
-    not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null }
+    not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null },
 };
 
 const DEFAULT_ROUTE = "dashboard";
@@ -33,16 +33,24 @@ function setActiveNav(routeKey) {
 }
 
 async function fetchPageMarkup(pageName) {
-    const response = await fetch(`${pageName}.html`);
+    const response = await fetch(`${pageName}.html`,{
+        credentials: "include",
+        headers: {
+            "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}`,
+            'User_id': `${localStorage.getItem("user_id") || ""}`
+        }
+    });
     if (response.ok) return response.text();
     console.log("Fetch page markup failed:", response.status);
-    if (response.status === 401) { // Unauthorized
+    if (response.status === 401) {
+        // Unauthorized
         // if the returned content is {"error": "Missing Authorization header"}, then redirect to not_logged_in.html
         let resJson = await response.clone().json();
         if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing User_ID header" || resJson.error == "Invalid or expired token") {
             window.location.hash = "#/not_logged_in";
             return;
-        }if(resJson.error === "Role not permitted") {
+        }
+        if (resJson.error === "Role not permitted") {
             window.location.hash = "#/not_authorized";
             return;
         }
@@ -54,12 +62,31 @@ async function fetchPageMarkup(pageName) {
 }
 
 async function loadModule(moduleName) {
+    // TODO: Rewrite this so that it sends auth headers when it loads the module from the server.
+    // Will have to modify it to use fetch() instead of dynamic import().
     if (!moduleName) {
         return;
     }
 
     try {
-        const module = await import(`./${moduleName}.js`);
+        const response = await fetch(`./${moduleName}.js`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem("auth_token")}`,
+                'User_id': `${localStorage.getItem("user_id") || ""}`
+            }
+        });
+        if(!response.ok) {
+            if(response.status === 401) {
+                window.location.hash = "#/login";
+                return;
+            }
+            throw new Error(`Unable to load module ${moduleName}: ${response.status}`);
+        }
+        const moduleText = await response.text();
+        const blob = new Blob([moduleText], { type: 'application/javascript' });
+        const moduleUrl = URL.createObjectURL(blob);
+        const module = await import(moduleUrl);
+        URL.revokeObjectURL(moduleUrl);
         if (typeof module.default === "function") {
             module.default();
         }

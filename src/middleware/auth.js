@@ -1,7 +1,7 @@
 const { getUserLoggedInStatus } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
 
-const non_auth_paths_begin = ["/api/auth/status", "/images", "/js/utils", "/js/app.js", "/css/", "/pages/public", "/js/pages/public"];
+const non_auth_paths_begin = ["/api/auth/status", "/api/auth/logout", "/images", "/js/utils", "/js/app.js", "/css/", "/pages/public", "/js/pages/public"];
 const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html"];
 
 const authMiddleware = async (req, res, next) => {
@@ -17,9 +17,9 @@ const authMiddleware = async (req, res, next) => {
     if (scheme !== "Bearer" || !token) {
         return res.status(401).json({ error: "Invalid Authorization header" });
     }
-    const user_id = req.get("User_ID");
+    const user_id = req.get("User_id");
     if (!user_id) {
-        return res.status(401).json({ error: "Missing User_ID header" });
+        return res.status(401).json({ error: "Missing User_id header" });
     }
     req.user = { token: token, id: user_id };
     const loggedIn = await getUserLoggedInStatus(user_id, token);
