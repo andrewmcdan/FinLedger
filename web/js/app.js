@@ -62,6 +62,8 @@ async function fetchPageMarkup(pageName) {
 }
 
 async function loadModule(moduleName) {
+    // TODO: Rewrite this so that it sends auth headers when it loads the module from the server.
+    // Will have to modify it to use fetch() instead of dynamic import().
     if (!moduleName) {
         return;
     }
