@@ -19,6 +19,7 @@ app.use(authMiddleware);
 // Any routes added after this point will require authentication
 app.use(express.static("web"));
 app.use("/documents", userDocRoutes);
+app.use("api/users", require("./routes/users"));
 
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.
