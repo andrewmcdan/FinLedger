@@ -15,6 +15,21 @@ const path = require("path");
 const { Client } = require("pg");
 
 const SQL_DIR = path.resolve(__dirname, "..", "docker", "postgres"); // This path contains the SQL files to run
+const MIGRATIONS_DIR = path.join(SQL_DIR, "migrations");
+const VERBOSE = process.env.DB_INIT_VERBOSE !== "0";
+
+function logInfo(message) {
+    if (VERBOSE) {
+        console.log(message);
+    }
+}
+
+function logError(message, error) {
+    console.error(message);
+    if (error) {
+        console.error(error);
+    }
+}
 
 // SQL files use templates like {{ADMIN_USERNAME}}, which are replaced with these values. Doing so allows
 // us to keep sensitive values in the .env file instead of in the SQL files.
@@ -52,9 +67,11 @@ function applyTemplate(sql) {
 // Create a new Postgres client using environment variables. Sane defaults are provided.
 function getClient() {
     if (process.env.DATABASE_URL) {
+        logInfo("Using DATABASE_URL for Postgres connection.");
         return new Client({ connectionString: process.env.DATABASE_URL });
     }
 
+    logInfo("Using POSTGRES_* environment variables for Postgres connection.");
     return new Client({
         host: process.env.POSTGRES_HOST || "localhost",
         port: Number(process.env.POSTGRES_PORT || 5432),
@@ -64,43 +81,129 @@ function getClient() {
     });
 }
 
-// Find all .sql files in the SQL_DIR directory, sorted alphabetically. Each file should be
-// prepended with a number to ensure the correct order.
-async function getSqlFiles() {
-    const entries = await fs.readdir(SQL_DIR);
+async function dirExists(dir) {
+    try {
+        const stat = await fs.stat(dir);
+        return stat.isDirectory();
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            logInfo(`Directory not found: ${dir}`);
+            return false;
+        }
+        throw error;
+    }
+}
+
+// Find all .sql files in the provided directory, sorted alphabetically. Each file should be
+// prepended with a number or timestamp to ensure the correct order.
+async function getSqlFiles(dir) {
+    if (!(await dirExists(dir))) {
+        return [];
+    }
+    const entries = await fs.readdir(dir);
     return entries.filter((entry) => entry.toLowerCase().endsWith(".sql")).sort();
+}
+
+// Ensure the schema_migrations table exists. This keeps track of which migration files have been applied.
+async function ensureMigrationsTable(client) {
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            id BIGSERIAL PRIMARY KEY,
+            filename TEXT NOT NULL UNIQUE,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    `);
+}
+
+// Apply all non-applied migration files from the migrations directory
+async function applyMigrations(client) {
+    const migrationFiles = await getSqlFiles(MIGRATIONS_DIR);
+    if (migrationFiles.length === 0) {
+        logInfo(`No migration files found in ${MIGRATIONS_DIR}`);
+        return;
+    }
+
+    const { rows } = await client.query("SELECT filename FROM schema_migrations");
+    const applied = new Set(rows.map((row) => row.filename));
+
+    for (const file of migrationFiles) {
+        if (applied.has(file)) {
+            logInfo(`Skipping already applied migration ${file}`);
+            continue;
+        }
+
+        const fullPath = path.join(MIGRATIONS_DIR, file);
+        const rawSql = await fs.readFile(fullPath, "utf8");
+        const sql = applyTemplate(rawSql);
+
+        logInfo(`Running migration ${file}`);
+        await client.query("BEGIN");
+        try {
+            // Skip empty migration files
+            if (sql.trim()) {
+                await client.query(sql);
+            } else {
+                logInfo(`Skipping empty migration ${file}`);
+            }
+            await client.query("INSERT INTO schema_migrations (filename) VALUES ($1)", [file]);
+            await client.query("COMMIT");
+        } catch (error) {
+            await client.query("ROLLBACK");
+            logError(`Migration failed: ${file}`, error);
+            throw error;
+        }
+    }
 }
 
 // Main
 async function run() {
-    const sqlFiles = await getSqlFiles();
+    logInfo(`Base SQL directory: ${SQL_DIR}`);
+    logInfo(`Migrations directory: ${MIGRATIONS_DIR}`);
+    const sqlFiles = await getSqlFiles(SQL_DIR);
     if (sqlFiles.length === 0) {
-        console.log(`No SQL files found in ${SQL_DIR}`);
-        return;
+        logInfo(`No base SQL files found in ${SQL_DIR}`);
+    } else {
+        logInfo(`Base SQL files: ${sqlFiles.join(", ")}`);
     }
 
     const client = getClient();
-    await client.connect();
+    try {
+        await client.connect();
+        logInfo("Connected to Postgres.");
+    } catch (error) {
+        logError("Failed to connect to Postgres.", error);
+        throw error;
+    }
 
     try {
         for (const file of sqlFiles) {
             const fullPath = path.join(SQL_DIR, file);
             const rawSql = await fs.readFile(fullPath, "utf8");
             if (!rawSql.trim()) {
+                logInfo(`Skipping empty SQL file ${file}`);
                 continue;
             }
 
             // Replace templates and run
             const sql = applyTemplate(rawSql);
-            console.log(`Running ${file}`);
-            await client.query(sql);
+            logInfo(`Running ${file}`);
+            try {
+                await client.query(sql);
+            } catch (error) {
+                logError(`Failed running ${file}`, error);
+                throw error;
+            }
         }
+
+        await ensureMigrationsTable(client);
+        await applyMigrations(client);
     } finally {
         await client.end();
+        logInfo("Postgres connection closed.");
     }
 }
 
 run().catch((error) => {
-    console.error("Database init failed:", error);
+    logError("Database init failed.", error);
     process.exit(1);
 });

@@ -20,13 +20,14 @@ CREATE TABLE IF NOT EXISTS users (
   suspension_end_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
--- security question answers shall be adjusted to all lowercase before hashing
   security_question_1 TEXT,
   security_answer_hash_1 TEXT,
   security_question_2 TEXT,
   security_answer_hash_2 TEXT,
   security_question_3 TEXT,
-  security_answer_hash_3 TEXT
+  security_answer_hash_3 TEXT,
+  reset_token TEXT,
+  reset_token_expires_at TIMESTAMPTZ
 );
 
 -- Table to track password history for users to enforce password reuse policies.

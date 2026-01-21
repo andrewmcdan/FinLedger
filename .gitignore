@@ -137,3 +137,10 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# user-icons
+user-icons/*
+!user-icons/default.png
+user-docs/*
+
+logs/
