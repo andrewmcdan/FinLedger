@@ -1,5 +1,3 @@
-import getUrlParam from "/js/utils/url_params.js";
-
 async function replacePageContent(pageName) {
     const container = document.querySelector("[data-login-container]");
     if (!container) {
@@ -25,6 +23,19 @@ function setMessage(text) {
         messageBox.textContent = text;
         messageBox.classList.remove("hidden");
     }
+}
+
+let getUrlParamFn = null;
+
+async function loadUrlParamHelper() {
+    if (getUrlParamFn) {
+        return getUrlParamFn;
+    }
+    // Use an absolute URL so it resolves when the module itself is loaded from a blob URL.
+    const moduleUrl = new URL("/js/utils/url_params.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    getUrlParamFn = module.default;
+    return getUrlParamFn;
 }
 
 export default function initLogin() {
@@ -78,12 +89,18 @@ export default function initLogin() {
     }
 
     // Determine if the url has a reset token parameter
-    const resetToken = getUrlParam("reset_token");
-    if (resetToken) {
-        replacePageContent("public/forgot-password_submit").then(async () => {
-            await newPasswordLogic(resetToken);
+    loadUrlParamHelper()
+        .then((getUrlParam) => {
+            const resetToken = getUrlParam("reset_token");
+            if (resetToken) {
+                replacePageContent("public/forgot-password_submit").then(async () => {
+                    await newPasswordLogic(resetToken);
+                });
+            }
+        })
+        .catch((error) => {
+            console.error("Failed to load url_params helper:", error);
         });
-    }
 }
 
 let newUserLogic = async function () {

@@ -1,10 +1,10 @@
 const routes = {
-    dashboard: { title: "Dashboard", page: "pages/dashboard", module: "pages/dashboard" },
-    transactions: { title: "Transactions", page: "pages/transactions", module: "pages/transactions" },
-    reports: { title: "Reports", page: "pages/reports", module: "pages/reports" },
-    login: { title: "Login", page: "pages/public/login", module: "pages/public/login" },
-    help: { title: "Help", page: "pages/public/help", module: "pages/public/help" },
-    logout: { title: "Logout", page: "pages/public/logout", module: "pages/public/logout" },
+    dashboard: { title: "Dashboard", page: "pages/dashboard", module: "js/pages/dashboard" },
+    transactions: { title: "Transactions", page: "pages/transactions", module: "js/pages/transactions" },
+    reports: { title: "Reports", page: "pages/reports", module: "js/pages/reports" },
+    login: { title: "Login", page: "pages/public/login", module: "js/pages/public/login" },
+    help: { title: "Help", page: "pages/public/help", module: "js/pages/public/help" },
+    logout: { title: "Logout", page: "pages/public/logout", module: "js/pages/public/logout" },
     not_logged_in: { title: "Not Logged In", page: "pages/public/not_logged_in", module: null },
     not_found: { title: "Page Not Found", page: "pages/public/not_found", module: null },
     not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null },
@@ -69,7 +69,24 @@ async function loadModule(moduleName) {
     }
 
     try {
-        const module = await import(`./${moduleName}.js`);
+        const response = await fetch(`./${moduleName}.js`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem("auth_token")}`,
+                'User_id': `${localStorage.getItem("user_id") || ""}`
+            }
+        });
+        if(!response.ok) {
+            if(response.status === 401) {
+                window.location.hash = "#/login";
+                return;
+            }
+            throw new Error(`Unable to load module ${moduleName}: ${response.status}`);
+        }
+        const moduleText = await response.text();
+        const blob = new Blob([moduleText], { type: 'application/javascript' });
+        const moduleUrl = URL.createObjectURL(blob);
+        const module = await import(moduleUrl);
+        URL.revokeObjectURL(moduleUrl);
         if (typeof module.default === "function") {
             module.default();
         }

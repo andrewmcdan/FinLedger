@@ -47,8 +47,27 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/logout", (req, res) => {
-    // Implement logout logic here
-    res.status(501).json({ error: "Not implemented" });
+    const authHeader = req.get("authorization");
+    if (!authHeader) {
+        return res.status(401).json({ error: "Missing Authorization header" });
+    }
+    const [scheme, token] = authHeader.split(" ");
+    if (scheme !== "Bearer" || !token) {
+        return res.status(401).json({ error: "Invalid Authorization header" });
+    }
+    const user_id = req.get("user_id");
+    if (!user_id) {
+        return res.status(401).json({ error: "Missing User_id header" });
+    }
+    // Set the logout_at column for user to now()
+    db.query("UPDATE logged_in_users SET logout_at = NOW() WHERE user_id = $1 AND token = $2", [user_id, token])
+        .then(() => {
+            res.json({ ok: true, message: "Logged out successfully" });
+        })
+        .catch((error) => {
+            console.error("Error during logout:", error);
+            res.status(500).json({ error: "Internal server error" });
+        });
 });
 
 module.exports = router;
