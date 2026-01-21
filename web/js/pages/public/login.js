@@ -38,6 +38,33 @@ export default function initLogin() {
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
+        const formData = new FormData(form);
+        const username = formData.get("username");
+        const password = formData.get("password");
+        fetch("/api/auth/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ username, password }),
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.token) {
+                    setMessage("Login successful!");
+                    // You might want to store the token and user info here
+                    localStorage.setItem("user_id", data.user_id);
+                    localStorage.setItem("auth_token", data.token);
+                    localStorage.setItem("username", data.username);
+                    // Redirect to the main app page or refresh
+                    window.location.href = "/#/dashboard";
+                } else {
+                    setMessage("Login failed: " + (data.error || "Unknown error"));
+                }
+            })
+            .catch((error) => {
+                setMessage("An error occurred: " + error.message);
+            });
     });
 
     const newUserButton = document.getElementById("new_user");

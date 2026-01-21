@@ -7,7 +7,7 @@ const routes = {
     logout: { title: "Logout", page: "pages/public/logout", module: "pages/public/logout" },
     not_logged_in: { title: "Not Logged In", page: "pages/public/not_logged_in", module: null },
     not_found: { title: "Page Not Found", page: "pages/public/not_found", module: null },
-    not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null }
+    not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null },
 };
 
 const DEFAULT_ROUTE = "dashboard";
@@ -33,16 +33,24 @@ function setActiveNav(routeKey) {
 }
 
 async function fetchPageMarkup(pageName) {
-    const response = await fetch(`${pageName}.html`);
+    const response = await fetch(`${pageName}.html`,{
+        credentials: "include",
+        headers: {
+            "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}`,
+            'User_id': `${localStorage.getItem("user_id") || ""}`
+        }
+    });
     if (response.ok) return response.text();
     console.log("Fetch page markup failed:", response.status);
-    if (response.status === 401) { // Unauthorized
+    if (response.status === 401) {
+        // Unauthorized
         // if the returned content is {"error": "Missing Authorization header"}, then redirect to not_logged_in.html
         let resJson = await response.clone().json();
         if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing User_ID header" || resJson.error == "Invalid or expired token") {
             window.location.hash = "#/not_logged_in";
             return;
-        }if(resJson.error === "Role not permitted") {
+        }
+        if (resJson.error === "Role not permitted") {
             window.location.hash = "#/not_authorized";
             return;
         }

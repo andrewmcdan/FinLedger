@@ -17,9 +17,9 @@ const authMiddleware = async (req, res, next) => {
     if (scheme !== "Bearer" || !token) {
         return res.status(401).json({ error: "Invalid Authorization header" });
     }
-    const user_id = req.get("User_ID");
+    const user_id = req.get("User_id");
     if (!user_id) {
-        return res.status(401).json({ error: "Missing User_ID header" });
+        return res.status(401).json({ error: "Missing User_id header" });
     }
     req.user = { token: token, id: user_id };
     const loggedIn = await getUserLoggedInStatus(user_id, token);
