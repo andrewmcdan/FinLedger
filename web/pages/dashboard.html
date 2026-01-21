@@ -20,11 +20,46 @@
             <p class="meta">Aging 30-60 days</p>
         </article>
     </div>
-    <section class="card">
-        <h2>Alerts</h2>
-        <div class="stack">
-            <div class="notice">3 invoices are overdue.</div>
-            <div class="notice">Reconcile March payroll by Friday.</div>
+    <% if (role === "administrator") { %>
+    <section class="stack">
+        <h2>User Management</h2>
+        <div class="grid">
+            <article class="card">
+                <article class="data-row">
+                    <h2>User Approvals</h2>
+                    <p class="value">User 1 <button class="button-small">Approve</button></p>
+                    <p class="meta">Pending since 01/15/2026</p>
+                </article>
+            </article>
+            <article class="card">
+                <h2>Users with Expired Passwords</h2>
+                <article class="data-row">
+                    <p class="value">User 3 <button class="button-small">Suspend User</button></p>
+                    <p class="meta">Password Expired on 01/01/2026</p>
+                </article>
+                <article class="data-row">
+                    <p class="value">User 4 <button class="button-small">Suspend User</button></p>
+                    <p class="meta">Password Expired on 01/02/2026</p>
+                </article>
+            </article>
+        </div>
+        <div class="grid">
+            <article class="card">
+                <article class="data-row">
+                    <h2>Suspended Users</h2>
+                    <p class="value">User 2</p>
+                    <p class="meta">Ends 01/01/2027 at 12:00A</p>
+                </article>
+            </article>
         </div>
     </section>
+    <% } else { %>
+    <section class="card">
+        <h2>Your Workspace</h2>
+        <p class="meta">Signed in as role: <%= role %></p>
+        <div class="stack">
+            <div class="notice">Your most recent transactions</div>
+        </div>
+    </section>
+    <% } %>
 </section>

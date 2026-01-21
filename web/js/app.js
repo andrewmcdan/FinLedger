@@ -13,6 +13,13 @@ const routes = {
 const DEFAULT_ROUTE = "dashboard";
 const view = document.getElementById("app");
 const navLinks = Array.from(document.querySelectorAll(".app-nav [data-route]"));
+const brandLogo = document.querySelector("[data-brand-logo]");
+if (brandLogo) {
+    brandLogo.addEventListener("click", () => {
+        window.location.hash = `#/${DEFAULT_ROUTE}`;
+    });
+    brandLogo.style.cursor = "pointer";
+}
 
 function getRouteFromHash() {
     const hash = window.location.hash.replace(/^#\/?/, "");

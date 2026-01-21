@@ -1,15 +1,22 @@
 const express = require("express");
+const path = require("path");
+const ejs = require("ejs");
 const authRoutes = require("./routes/auth");
 const imageRoutes = require("./routes/images");
 const userDocRoutes = require("./routes/user_docs");
 const authMiddleware = require("./middleware/auth");
+const db = require("./db/db");
 const logger = require("./utils/logger");
 const { getCallerInfo } = require("./utils/utilities");
+const usersRoutes = require("./routes/users");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // wire in static files found in ../public/
+app.engine("html", ejs.renderFile);
+app.set("view engine", "html");
+app.set("views", path.join(__dirname, "..", "web", "pages"));
 
 app.use("/images", imageRoutes);
 // Mount auth routes at /api/auth (public)
@@ -17,9 +24,19 @@ app.use("/api/auth", authRoutes);
 
 app.use(authMiddleware);
 // Any routes added after this point will require authentication
+app.get("/pages/dashboard.html", async (req, res, next) => {
+    try {
+        const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
+        // If no user found, role is 'none'
+        const role = result.rows[0]?.role || "none";
+        res.render("dashboard", { role });
+    } catch (error) {
+        next(error);
+    }
+});
 app.use(express.static("web"));
 app.use("/documents", userDocRoutes);
-app.use("api/users", require("./routes/users"));
+app.use("/api/users", usersRoutes);
 
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.
