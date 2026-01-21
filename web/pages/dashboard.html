@@ -20,17 +20,36 @@
             <p class="meta">Aging 30-60 days</p>
         </article>
     </div>
+    <% 
+    let usersWithPendingApprovals = users.filter(user => user.status === 'pending').length;
+    console.log(`Users with pending approvals: ${usersWithPendingApprovals}`);
+
+    let userWithSuspendedAccounts = users.filter(user => user.status === 'suspended').length;
+    console.log(`Users with suspended accounts: ${userWithSuspendedAccounts}`);
+
+    let currentlyLoggedInUsers = users.filter(user => user.isLoggedIn).length;
+    console.log(`Currently logged-in users: ${currentlyLoggedInUsers}`);
+
+    let totalUsers = users.length;
+    console.log(`Total users: ${totalUsers}`);
+    %>
     <% if (role === "administrator") { %>
     <section class="stack">
         <h2>User Management</h2>
         <div class="grid">
+            <% if (usersWithPendingApprovals > 0) { %>
             <article class="card">
+                <h2>User Approvals</h2>
+                <% users.filter(user => user.status === 'pending').forEach(user => { %>
                 <article class="data-row">
-                    <h2>User Approvals</h2>
-                    <p class="value">User 1 <button class="button-small">Approve</button></p>
-                    <p class="meta">Pending since 01/15/2026</p>
+                    <p class="value"><%= user.username %> <button onclick="(()=>{
+                        // TODO: call the approve user endpoint
+                    })()" class="button-small">Approve</button></p>
+                    <p class="meta">Pending since <%= user.created_at %></p>
                 </article>
+                <% }); %>
             </article>
+            <% } %>
             <article class="card">
                 <h2>Users with Expired Passwords</h2>
                 <article class="data-row">
@@ -45,10 +64,33 @@
         </div>
         <div class="grid">
             <article class="card">
+                <h2>Suspended Users</h2>
                 <article class="data-row">
-                    <h2>Suspended Users</h2>
                     <p class="value">User 2</p>
                     <p class="meta">Ends 01/01/2027 at 12:00A</p>
+                </article>
+            </article>
+            <article class="card">
+                <h2>Currently Logged-in Users</h2>
+                <article class="data-row">
+                    <p class="value">User 2</p>
+                </article>
+            </article>
+        </div>
+        <div class="grid">
+            <article class="card">
+                <h2>All Users</h2>
+                <article class="data-row">
+                    <p class="value">User 2</p>
+                </article>
+                <article class="data-row">
+                    <p class="value">User 2</p>
+                </article>
+                <article class="data-row">
+                    <p class="value">User 2</p>
+                </article>
+                <article class="data-row">
+                    <p class="value">User 2</p>
                 </article>
             </article>
         </div>

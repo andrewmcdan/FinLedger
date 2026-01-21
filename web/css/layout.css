@@ -149,7 +149,7 @@
 
 .card h2 {
     margin: 0 0 0.5rem;
-    font-size: 1.05rem;
+    font-size: 1.5rem;
 }
 
 .value {
@@ -172,11 +172,6 @@
 
 .data-row + .data-row {
     border-top: 1px solid var(--border);
-}
-
-.data-row h2 {
-    margin: 0;
-    font-size: 0.95rem;
 }
 
 .data-row .value {

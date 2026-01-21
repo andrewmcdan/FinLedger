@@ -9,6 +9,7 @@ const db = require("./db/db");
 const logger = require("./utils/logger");
 const { getCallerInfo } = require("./utils/utilities");
 const usersRoutes = require("./routes/users");
+const usersController = require("./controllers/users");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,7 +30,9 @@ app.get("/pages/dashboard.html", async (req, res, next) => {
         const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
         // If no user found, role is 'none'
         const role = result.rows[0]?.role || "none";
-        res.render("dashboard", { role });
+        const loggedInUsers = await usersController.listLoggedInUsers();
+        const users = await usersController.listUsers();
+        res.render("dashboard", { role, loggedInUsers, users });
     } catch (error) {
         next(error);
     }
