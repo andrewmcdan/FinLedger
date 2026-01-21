@@ -6,7 +6,6 @@ const db = require("../db/db");
 
 // Placeholder function to check if a user is logged in. This should interface with the database functions in ../db/db.js
 const getUserLoggedInStatus = async (user_id, token) => {
-    // TODO: query the database to check if the user with user_id is logged in, using the token for verification
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
     if (result.rows.length === 0) {
         return false;
