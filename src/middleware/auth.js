@@ -4,7 +4,7 @@ const logger = require("../utils/logger.js");
 const non_auth_paths_begin = ["/api/auth/status", "/images", "/js/utils", "/js/app.js", "/css/", "/pages/public", "/js/pages/public"];
 const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html"];
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     // If req is for a public route, skip authentication
     if (non_auth_paths_begin.some((publicPath) => req.path.startsWith(publicPath)) || non_auth_paths_full.includes(req.path)) {
         return next();
@@ -22,7 +22,7 @@ const authMiddleware = (req, res, next) => {
         return res.status(401).json({ error: "Missing User_ID header" });
     }
     req.user = { token: token, id: user_id };
-    const loggedIn = getUserLoggedInStatus(user_id, token);
+    const loggedIn = await getUserLoggedInStatus(user_id, token);
     if (!loggedIn) {
         if(req.path.startsWith("/pages/")) {
             logger.log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: user_id }, "authMiddleware");
