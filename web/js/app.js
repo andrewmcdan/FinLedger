@@ -21,28 +21,6 @@ if (brandLogo) {
     brandLogo.style.cursor = "pointer";
 }
 
-const profileNameSpan = document.querySelector("[data-profile-name]");
-if (profileNameSpan) {
-    const username = localStorage.getItem("username") || "User";
-    profileNameSpan.textContent = "Profile: " + username;
-}
-
-const userIconImg = document.querySelector("[data-user-icon]");
-if (userIconImg) {
-    // Use fetch with auth headers to get the user icon
-    fetchWithAuth("/images/user-icon.png").then(response => {
-        if (response.ok) {
-            return response.blob();
-        }
-        throw new Error("Failed to load user icon");
-    }).then(blob => {
-        const objectURL = URL.createObjectURL(blob);
-        userIconImg.src = objectURL;
-    }).catch(error => {
-        console.error("Error loading user icon:", error);
-    });
-}
-
 function getRouteFromHash() {
     const hash = window.location.hash.replace(/^#\/?/, "");
     const routeKey = hash.split("?")[0].split("/")[0];
@@ -67,13 +45,13 @@ function fetchWithAuth(url, options = {}) {
     const mergedHeaders = {
         Authorization: `Bearer ${authToken}`,
         User_id: `${userId}`,
-        ...(options.headers || {})
+        ...(options.headers || {}),
     };
 
     return fetch(url, {
         ...options,
         credentials: options.credentials || "include",
-        headers: mergedHeaders
+        headers: mergedHeaders,
     });
 }
 
@@ -107,15 +85,15 @@ async function loadModule(moduleName) {
 
     try {
         const response = await fetchWithAuth(`./${moduleName}.js`);
-        if(!response.ok) {
-            if(response.status === 401) {
+        if (!response.ok) {
+            if (response.status === 401) {
                 window.location.hash = "#/login";
                 return;
             }
             throw new Error(`Unable to load module ${moduleName}: ${response.status}`);
         }
         const moduleText = await response.text();
-        const blob = new Blob([moduleText], { type: 'application/javascript' });
+        const blob = new Blob([moduleText], { type: "application/javascript" });
         const moduleUrl = URL.createObjectURL(blob);
         const module = await import(moduleUrl);
         URL.revokeObjectURL(moduleUrl);
@@ -158,6 +136,40 @@ async function renderRoute() {
         } catch (fallbackError) {
             view.innerHTML = '<section class="page"><h1>Page not found</h1></section>';
         }
+    }
+
+    const profileNameSpan = document.querySelector("[data-profile-name]");
+    if (profileNameSpan) {
+        const username = localStorage.getItem("username") || "None";
+        profileNameSpan.textContent = "Profile: " + username;
+    }
+
+    const userIconImg = document.querySelector("[data-user-icon]");
+    if (userIconImg) {
+        // Use fetch with auth headers to get the user icon
+        fetchWithAuth("/images/user-icon.png")
+            .then((response) => {
+                if (response.ok) {
+                    return response.blob();
+                }
+                // if the response if 401 Unauthorized use the default icon at /public_images/user-icon.png
+                if (response.status === 401) {
+                    return fetch("/public_images/default.png").then((res) => {
+                        if (res.ok) {
+                            return res.blob();
+                        }
+                        throw new Error("Failed to load default user icon");
+                    });
+                }
+                throw new Error("Failed to load user icon");
+            })
+            .then((blob) => {
+                const objectURL = URL.createObjectURL(blob);
+                userIconImg.src = objectURL;
+            })
+            .catch((error) => {
+                console.error("Error loading user icon:", error);
+            });
     }
 
     document.title = route ? `FinLedger - ${route.title}` : "FinLedger";

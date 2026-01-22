@@ -7,6 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
+const {sendEmail} = require("./../services/email");
 
 const getUserLoggedInStatus = async (user_id, token) => {
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
@@ -36,7 +37,7 @@ const isAdmin = async (userId) => {
 };
 
 const getUserById = async (userId) => {
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, profile_image_url, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
     if (userResult.rowCount === 0) {
         return null;
     }
@@ -80,6 +81,32 @@ const suspendUser = async (userId, startDate, durationDays) => {
     await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [startDate, endDate, userId]);
 };
 
+const changePassword = async (userId, newPassword) => {
+    // First thing to do is check the password complexity
+    // Length check
+    if (newPassword.length < 8) {
+        throw new Error("Password must be at least 8 characters long");
+    }
+    // Uppercase, lowercase, digit, special character check
+    const uppercaseRegex = /[A-Z]/;
+    const lowercaseRegex = /[a-z]/;
+    const digitRegex = /[0-9]/;
+    const specialCharRegex = /[!@#$%^&*(),.?":{}|<>]/;
+    if (!uppercaseRegex.test(newPassword) || !lowercaseRegex.test(newPassword) || !digitRegex.test(newPassword) || !specialCharRegex.test(newPassword)) {
+        throw new Error("Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
+    }
+    // Next we check the password_history table to ensure the new password is not the same as any of the user's past passwords
+    const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
+    for (const row of pastPasswordsResult.rows) {
+        const matchResult = await db.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
+        if (matchResult.rows.length > 0) {
+            throw new Error("New password cannot be the same as any past passwords");
+        }
+    }
+    logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
+    await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false WHERE id = $2", [newPassword, userId]);
+};
+
 /**
  *
  * @param {String} firstName
@@ -96,6 +123,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     // username should be made of the first name initial, the full last name, and a four digit (two-digit month and two-digit year) of when the account is created
     const username = `${firstName.charAt(0)}${lastName}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`;
     if (role !== "accountant" && role !== "administrator" && role !== "manager") {
+        logger.log("error", `Invalid role specified when creating user: ${role}`, { function: "createUser" }, utilities.getCallerInfo());
         throw new Error("Invalid role specified");
     }
     let tempPasswordFlag = false;
@@ -107,17 +135,25 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         tempPasswordFlag = true;
     }
     if (firstName.length === 0 || lastName.length === 0 || email.length === 0) {
+        logger.log("error", "First name, last name, email, and password cannot be empty when creating user", { function: "createUser" }, utilities.getCallerInfo());
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, profile_image_url, username", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
+    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, user_icon_path, username", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
     // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
-    const profileImageUrl = result.rows[0].profile_image_url;
-    if (profileImage && profileImageUrl) {
-        const destPath = path.join(__dirname, "../../user-icons/", profileImageUrl);
-        fs.renameSync(profileImage, destPath);
+    const userIconPath = result.rows[0].user_icon_path;
+    if (profileImage && userIconPath) {
+        console.log("Moving profile image to permanent location:", profileImage, " to ", userIconPath);
+        const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
+        const destPath = path.join(__dirname, "../../user-icons/", userIconPath);
+        fs.renameSync(sourcePath, destPath);
     }
-    // TODO: Send email to user with account details and temporary password if applicable
+    if (tempPasswordFlag) {
+        const emailSubject = "Your FinLedger Account Has Been Created";
+        const emailBody = `Dear ${firstName} ${lastName},\n\nYour FinLedger account has been created successfully.\n\nUsername: ${username}\nTemporary Password: ${password}\n\nPlease log in and change your password at your earliest convenience.\n\nBest regards,\nFinLedger Team`;
+        let result = await sendEmail(email, emailSubject, emailBody);
+        logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
+    }
     return result.rows[0];
 };
 
@@ -131,4 +167,5 @@ module.exports = {
     createUser,
     rejectUser,
     suspendUser,
+    changePassword,
 };

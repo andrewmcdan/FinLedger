@@ -1,4 +1,4 @@
-const db = require("../db/db.js");
+const db = require("../db/db");
 
 // Get LOG_TO_FILE, LOG_FILE_PATH, LOG_TO_FILE_LEVEL, LOG_TO_DB, DB_LOG_LEVEL, LOG_TO_CONSOLE, CONSOLE_LOG_LEVEL from environment variables
 const LOG_TO_FILE = process.env.LOG_TO_FILE === "true";
@@ -19,13 +19,13 @@ const log = async (level, message, context = null, source = "", user_id = null) 
 
     // Log to console
     if (LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL]) {
-        console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context===null ? "" : context);
+        console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context===null ? "" : context, `${source.file}:${source.line}:${source.column}`);
     }
 
     // Log to database
     if (LOG_TO_DB && levelValue >= levels[DB_LOG_LEVEL]) {
         try {
-            const query = `
+            const queryString = `
                 INSERT INTO app_logs (level, message, context, source${user_id ? ", user_id" : ""})
                 VALUES ($1, $2, $3, $4${user_id ? ", $5" : ""})
             `;
@@ -33,7 +33,7 @@ const log = async (level, message, context = null, source = "", user_id = null) 
             if (user_id) {
                 values.push(user_id);
             }
-            await db.query(query, values);
+            await db.query(queryString, values);
         }
         catch (error) {
             console.error("Failed to log to database:", error);
