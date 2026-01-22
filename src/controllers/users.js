@@ -7,6 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
+const {sendEmail} = require("./../services/email");
 
 const getUserLoggedInStatus = async (user_id, token) => {
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
@@ -143,7 +144,12 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         const destPath = path.join(__dirname, "../../user-icons/", profileImageUrl);
         fs.renameSync(profileImage, destPath);
     }
-    // TODO: Send email to user with account details and temporary password if applicable
+    if (tempPasswordFlag) {
+        const emailSubject = "Your FinLedger Account Has Been Created";
+        const emailBody = `Dear ${firstName} ${lastName},\n\nYour FinLedger account has been created successfully.\n\nUsername: ${username}\nTemporary Password: ${password}\n\nPlease log in and change your password at your earliest convenience.\n\nBest regards,\nFinLedger Team`;
+        let result = await sendEmail(email, emailSubject, emailBody);
+        logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
+    }
     return result.rows[0];
 };
 
