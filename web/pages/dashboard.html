@@ -20,11 +20,107 @@
             <p class="meta">Aging 30-60 days</p>
         </article>
     </div>
-    <section class="card">
-        <h2>Alerts</h2>
-        <div class="stack">
-            <div class="notice">3 invoices are overdue.</div>
-            <div class="notice">Reconcile March payroll by Friday.</div>
+    <% 
+    let usersWithPendingApprovalsLength = users.filter(user => user.status === 'pending').length;
+    let usersWithSuspendedAccountsLength = users.filter(user => user.status === 'suspended').length;
+    %>
+    <% if (role === "administrator") { %>
+    <section class="stack">
+        <h2>User Management</h2>
+        <div class="grid">
+            
+            <article class="card">
+                <h2>User Approvals</h2>
+                <% if (usersWithPendingApprovalsLength == 0) { %>
+                <p class="meta">No pending user approvals</p>
+                <% } %>
+                <% users.filter(user => user.status === 'pending').forEach(user => { %>
+                <article class="data-row" data-user_id-<%= user.id %>>
+                    <p class="value"><%= user.username %> <button onclick="(async()=>{
+                        let response = await fetch('/api/users/approve-user/' + <%= user.id %>, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + localStorage.getItem('auth_token'),
+                                'User_id': localStorage.getItem('user_id')
+                            }
+                        });
+                        if (response.ok) {
+                            alert('User approved successfully');
+                            // remove the user row from the DOM
+                            document.querySelector('[data-user_id-<%= user.id %>]').remove();
+                        } else {
+                            alert('Error approving user');
+                        }
+                    })()" class="button-small">Approve</button></p>
+                    <p class="meta">Pending since <%= user.created_at %></p>
+                </article>
+                <% }); %>
+            </article>
+            <article class="card">
+                <h2>Users with Expired Passwords</h2>
+                <% if (users.filter(user => user.password_expired).length == 0) { %>
+                <p class="meta">No users with expired passwords</p>
+                <% } %>
+                <% for (let user of users.filter(user => user.password_expires_at < new Date())) { %>
+                <article class="data-row">
+                    <p class="value"><%= user.username %> <button class="button-small">Suspend User</button></p>
+                    <p class="meta">Password Expired on <%= user.password_expires_at %></p>
+                </article>
+                <% } %>
+            </article>
+        </div>
+        <div class="grid">
+            <article class="card">
+                <h2>Suspended Users</h2>
+                <% if (usersWithSuspendedAccountsLength == 0) { %>
+                <p class="meta">No suspended user accounts</p>
+                <% } %>
+                <% users.filter(user => user.status === 'suspended').forEach(user => { %>
+                <article class="data-row">
+                    <p class="value"><%= user.username %></p>
+                    <p class="meta">Ends <%= user.suspension_end_at %></p>
+                </article>
+                <% }); %>
+            </article>
+            <article class="card">
+                <h2>Currently Logged-in Users</h2>
+                <% if (loggedInUsers.length == 0) { %>
+                <p class="meta">No users currently logged in</p>
+                <% } %>
+                <% loggedInUsers.forEach(user => { %>
+                <article class="data-row">
+                    <p class="value"><%
+                        // get the username from the users array
+                        let matchedUser = users.find(u => u.id === user.user_id);
+                        if (matchedUser) {
+                            %><%= matchedUser.username %><%
+                        } else {
+                            %>Unknown User<%
+                        }
+                        %></p>
+                </article>
+                <% }); %>
+            </article>
+        </div>
+        <div class="grid">
+            <article class="card">
+                <h2>All Users</h2>
+                <% users.forEach(user => { %>
+                <article class="data-row">
+                    <p class="value"><%= user.username %></p>
+                </article>
+                <% }); %>
+            </article>
         </div>
     </section>
+    <% } else { %>
+    <section class="card">
+        <h2>Your Workspace</h2>
+        <p class="meta">Signed in as role: <%= role %></p>
+        <div class="stack">
+            <div class="notice">Your most recent transactions</div>
+        </div>
+    </section>
+    <% } %>
 </section>

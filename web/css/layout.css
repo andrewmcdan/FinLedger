@@ -149,7 +149,7 @@
 
 .card h2 {
     margin: 0 0 0.5rem;
-    font-size: 1.05rem;
+    font-size: 1.5rem;
 }
 
 .value {
@@ -162,6 +162,30 @@
     margin: 0.5rem 0 0;
     color: var(--muted);
     font-size: 0.85rem;
+}
+
+.data-row {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.65rem 0;
+}
+
+.data-row + .data-row {
+    border-top: 1px solid var(--border);
+}
+
+.data-row .value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.data-row .meta {
+    margin: 0;
+    font-size: 0.8rem;
 }
 
 .stack {
@@ -201,6 +225,12 @@ button {
 button:hover {
     transform: translateY(-1px);
     box-shadow: 0 8px 18px rgba(11, 123, 108, 0.25);
+}
+
+button.button-small,
+.button-small button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.9rem;
 }
 
 .badge {
