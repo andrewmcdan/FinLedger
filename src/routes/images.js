@@ -6,7 +6,7 @@ const logger = require("../utils/logger");
 const utilities = require("../utils/utilities");
 
 const pathRoot = path.resolve(__dirname, "./../../user-icons/");
-const pathDefault = path.resolve(__dirname, "./../../public_images/default.png");
+const pathDefault = path.resolve(__dirname, "./../../web/public_images/default.png");
 
 router.get("/user-icon.png", async (req, res) => {
     logger.log("info", `Request for user icon by user ID ${req.user ? req.user.id : "unknown"}`, { function: "user-icon" }, utilities.getCallerInfo());
