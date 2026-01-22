@@ -13,6 +13,7 @@ const usersController = require("./controllers/users");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.use(express.json());
 
 // wire in static files found in ../public/
 app.engine("html", ejs.renderFile);

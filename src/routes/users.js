@@ -4,7 +4,7 @@
 
 const express = require("express");
 const router = express.Router();
-const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser } = require("../controllers/users.js");
+const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser } = require("../controllers/users.js");
 
 router.get("/get-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
@@ -64,6 +64,25 @@ router.get("/approve-user/:userId", async (req, res) => {
     }
     await approveUser(userIdToApprove);
     return res.json({ message: "User approved successfully" });
+});
+
+router.post("/create-user", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const { first_name, last_name, email, password, role, address, date_of_birth, profile_image } = req.body;
+    console.log(req.body);
+    try {
+        const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, profile_image);
+        return res.json({ user: newUser });
+    } catch (error) {
+        console.error("Error creating user:", error);
+        return res.status(500).json({ error: "Failed to create user" });
+    }
 });
 
 module.exports = router;

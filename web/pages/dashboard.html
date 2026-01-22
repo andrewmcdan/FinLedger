@@ -115,7 +115,27 @@
         <div class="grid">
             <article class="card">
                 <h2>Create User</h2>
-                <form id="create-user-form" class="stack">
+                <form id="create-user-form" class="stack" onsubmit="(async(event)=>{
+                        event.preventDefault();
+                        const form = document.getElementById('create-user-form');
+                        const formData = new FormData(form);
+                        const response = await fetch('/api/users/create-user', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer ' + localStorage.getItem('auth_token'),
+                                'User_id': localStorage.getItem('user_id'),
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(Object.fromEntries(formData))
+                        });
+                        if (response.ok) {
+                            alert('User created successfully');
+                            form.reset();
+                        } else {
+                            const errorData = await response.json();
+                            alert('Error creating user: ' + errorData.message);
+                        }
+                    })(event)">
                     <div class="field">
                         <label for="first_name">First Name</label>
                         <input type="text" id="first_name" name="first_name" required>
