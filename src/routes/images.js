@@ -2,11 +2,13 @@ const path = require("path");
 const express = require("express");
 const router = express.Router();
 const { getUserById } = require("../controllers/users");
+const logger = require("../utils/logger");
+const utilities = require("../utils/utilities");
 
 const pathRoot = path.resolve(__dirname, "./../../user-icons/");
 
 router.get("/user-icon.png", async (req, res) => {
-    console.log("sending image for user:", req.user ? req.user.id : "no user");
+    logger.log("info", `Request for user icon by user ID ${req.user ? req.user.id : "unknown"}`, { function: "user-icon" }, utilities.getCallerInfo());
     // Get the user's icon filename based on req.user.id
     if (!req.user || !req.user.id) {
         // No user info, send default icon

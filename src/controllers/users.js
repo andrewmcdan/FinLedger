@@ -5,6 +5,8 @@
 const db = require("../db/db");
 const fs = require("fs");
 const path = require("path");
+const logger = require("./../utils/logger");
+const utilities = require("./../utils/utilities");
 
 const getUserLoggedInStatus = async (user_id, token) => {
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
@@ -24,6 +26,7 @@ const getUserLoggedInStatus = async (user_id, token) => {
 };
 
 const isAdmin = async (userId) => {
+    logger.log("trace", `Checking if user ${userId} is an administrator`, { function: "isAdmin" }, utilities.getCallerInfo());
     return db.query("SELECT role FROM users WHERE id = $1", [userId]).then((result) => {
         if (result.rowCount === 0) {
             return false;
@@ -61,14 +64,17 @@ const listLoggedInUsers = async () => {
 };
 
 const approveUser = async (userId) => {
+    logger.log("info", `Approving user with ID ${userId}`, { function: "approveUser" }, utilities.getCallerInfo());
     await db.query("UPDATE users SET status = 'active' WHERE id = $1", [userId]);
 };
 
 const rejectUser = async (userId) => {
+    logger.log("info", `Rejecting user with ID ${userId}`, { function: "rejectUser" }, utilities.getCallerInfo());
     await db.query("UPDATE users SET status = 'rejected' WHERE id = $1", [userId]);
 };
 
 const suspendUser = async (userId, startDate, durationDays) => {
+    logger.log("info", `Suspending user with ID ${userId} from ${startDate} for ${durationDays} days`, { function: "suspendUser" }, utilities.getCallerInfo());
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + durationDays);
     await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [startDate, endDate, userId]);
@@ -123,4 +129,6 @@ module.exports = {
     listLoggedInUsers,
     approveUser,
     createUser,
+    rejectUser,
+    suspendUser,
 };
