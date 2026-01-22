@@ -39,14 +39,24 @@ function setActiveNav(routeKey) {
     });
 }
 
-async function fetchPageMarkup(pageName) {
-    const response = await fetch(`${pageName}.html`,{
-        credentials: "include",
-        headers: {
-            "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}`,
-            'User_id': `${localStorage.getItem("user_id") || ""}`
-        }
+function fetchWithAuth(url, options = {}) {
+    const authToken = localStorage.getItem("auth_token") || "";
+    const userId = localStorage.getItem("user_id") || "";
+    const mergedHeaders = {
+        Authorization: `Bearer ${authToken}`,
+        User_id: `${userId}`,
+        ...(options.headers || {})
+    };
+
+    return fetch(url, {
+        ...options,
+        credentials: options.credentials || "include",
+        headers: mergedHeaders
     });
+}
+
+async function fetchPageMarkup(pageName) {
+    const response = await fetchWithAuth(`${pageName}.html`);
     if (response.ok) return response.text();
     console.log("Fetch page markup failed:", response.status);
     if (response.status === 401) {
@@ -76,12 +86,7 @@ async function loadModule(moduleName) {
     }
 
     try {
-        const response = await fetch(`./${moduleName}.js`, {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem("auth_token")}`,
-                'User_id': `${localStorage.getItem("user_id") || ""}`
-            }
-        });
+        const response = await fetchWithAuth(`./${moduleName}.js`);
         if(!response.ok) {
             if(response.status === 401) {
                 window.location.hash = "#/login";
