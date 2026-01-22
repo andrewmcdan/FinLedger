@@ -78,9 +78,9 @@ router.post("/create-user", async (req, res) => {
         logger.log("warn", `Access denied for user ID ${requestingUserId} to create a new user. Administrator role required.`, { function: "create-user" }, utilities.getCallerInfo());
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
-    const { first_name, last_name, email, password, role, address, date_of_birth, profile_image } = req.body;
+    const { first_name, last_name, email, password, role, address, date_of_birth, user_icon_name } = req.body;
     try {
-        const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, profile_image);
+        const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, user_icon_name);
         logger.log("info", `New user created with ID ${newUser.id} by admin user ID ${requestingUserId}`, { function: "create-user" }, utilities.getCallerInfo());
         return res.json({ user: newUser });
     } catch (error) {

@@ -117,8 +117,32 @@
                 <h2>Create User</h2>
                 <form id="create-user-form" class="stack" onsubmit="(async(event)=>{
                         event.preventDefault();
+                        // upload the profile image if provided to /images/upload-user-icon
+                        const profileImageInput = document.getElementById('user_icon');
+                        let profileImageFilename = null;
+                        if (profileImageInput.files.length > 0) {
+                            profileImageFilename = profileImageInput.value.split('\\').pop();
+                            console.log('Uploading profile image: ' + profileImageFilename);
+                            console.log(profileImageInput);
+                            const imageFormData = new FormData();
+                            imageFormData.append('user_icon', profileImageInput.files[0]);
+                            const imageResponse = await fetch('/images/upload-user-icon', {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': 'Bearer ' + localStorage.getItem('auth_token'),
+                                    'User_id': localStorage.getItem('user_id'),
+                                },
+                                body: imageFormData
+                            });
+                            if (!imageResponse.ok) {
+                                const imageErrorData = await imageResponse.json();
+                                alert('Error uploading profile image: ' + (imageErrorData.error || imageErrorData.message));
+                            }
+                        }
                         const form = document.getElementById('create-user-form');
                         const formData = new FormData(form);
+                        // get the file name from the file input and append it to the form data
+                        formData.append('user_icon_name', profileImageFilename);
                         const response = await fetch('/api/users/create-user', {
                             method: 'POST',
                             headers: {
@@ -135,6 +159,7 @@
                             const errorData = await response.json();
                             alert('Error creating user: ' + errorData.message);
                         }
+                        
                     })(event)">
                     <div class="field">
                         <label for="first_name">First Name</label>
@@ -165,8 +190,8 @@
                         </select>
                     </div>
                     <div class="field">
-                        <label for="profile_image">Profile Image</label>
-                        <input type="file" id="profile_image" name="profile_image" accept="image/*">
+                        <label for="user_icon">Profile Image</label>
+                        <input type="file" id="user_icon" name="user_icon" accept="image/png, image/jpeg, image/jpg, image/gif">
                     </div>
                     <button type="submit">Create User</button>
                 </form>

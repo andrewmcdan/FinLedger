@@ -37,7 +37,7 @@ const isAdmin = async (userId) => {
 };
 
 const getUserById = async (userId) => {
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, profile_image_url, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
     if (userResult.rowCount === 0) {
         return null;
     }
@@ -123,6 +123,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     // username should be made of the first name initial, the full last name, and a four digit (two-digit month and two-digit year) of when the account is created
     const username = `${firstName.charAt(0)}${lastName}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`;
     if (role !== "accountant" && role !== "administrator" && role !== "manager") {
+        logger.log("error", `Invalid role specified when creating user: ${role}`, { function: "createUser" }, utilities.getCallerInfo());
         throw new Error("Invalid role specified");
     }
     let tempPasswordFlag = false;
@@ -134,15 +135,18 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         tempPasswordFlag = true;
     }
     if (firstName.length === 0 || lastName.length === 0 || email.length === 0) {
+        logger.log("error", "First name, last name, email, and password cannot be empty when creating user", { function: "createUser" }, utilities.getCallerInfo());
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, profile_image_url, username", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
+    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, user_icon_path, username", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
     // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
-    const profileImageUrl = result.rows[0].profile_image_url;
-    if (profileImage && profileImageUrl) {
-        const destPath = path.join(__dirname, "../../user-icons/", profileImageUrl);
-        fs.renameSync(profileImage, destPath);
+    const userIconPath = result.rows[0].user_icon_path;
+    if (profileImage && userIconPath) {
+        console.log("Moving profile image to permanent location:", profileImage, " to ", userIconPath);
+        const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
+        const destPath = path.join(__dirname, "../../user-icons/", userIconPath);
+        fs.renameSync(sourcePath, destPath);
     }
     if (tempPasswordFlag) {
         const emailSubject = "Your FinLedger Account Has Been Created";
