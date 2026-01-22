@@ -64,6 +64,16 @@ const approveUser = async (userId) => {
     await db.query("UPDATE users SET status = 'active' WHERE id = $1", [userId]);
 };
 
+const rejectUser = async (userId) => {
+    await db.query("UPDATE users SET status = 'rejected' WHERE id = $1", [userId]);
+};
+
+const suspendUser = async (userId, startDate, durationDays) => {
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + durationDays);
+    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [startDate, endDate, userId]);
+};
+
 /**
  *
  * @param {String} firstName
