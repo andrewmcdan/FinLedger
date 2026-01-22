@@ -81,6 +81,8 @@
 
 #user_profile_button img{
     width: 30px;
+    height: 30px;
+    border-radius: 999px;
 }
 
 .app-nav a {

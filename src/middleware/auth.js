@@ -1,5 +1,6 @@
 const { getUserLoggedInStatus } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
+const utilities = require("../utils/utilities.js");
 
 const non_auth_paths_begin = ["/api/auth/status", "/api/auth/logout", "/public_images", "/js/utils", "/js/app.js", "/js/background", "/css/", "/pages/public", "/js/pages/public"];
 const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html"];
@@ -25,13 +26,12 @@ const authMiddleware = async (req, res, next) => {
     const loggedIn = await getUserLoggedInStatus(user_id, token);
     if (!loggedIn) {
         if(req.path.startsWith("/pages/")) {
-            logger.log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: user_id }, "authMiddleware");
-            // Redirect to login page for page requests
+            logger.log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: user_id }, utilities.getCallerInfo());
             return res.redirect("/pages/public/login.html");
         }
         return res.status(401).json({ error: "Invalid or expired token" });
     }
-    logger.log("info", `User ${user_id} authenticated successfully`, { user_id: user_id }, "authMiddleware");
+    logger.log("info", `User ${user_id} authenticated successfully`, { user_id: user_id }, utilities.getCallerInfo());
     return next();
 };
 

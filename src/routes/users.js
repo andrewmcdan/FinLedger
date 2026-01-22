@@ -4,7 +4,7 @@
 
 const express = require("express");
 const router = express.Router();
-const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser } = require("../controllers/users.js");
+const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, changePassword } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 
@@ -107,6 +107,21 @@ router.post("/create-user", async (req, res) => {
         logger.log("error", `Error creating user by admin user ID ${requestingUserId}: ${error}`, { function: "create-user" }, utilities.getCallerInfo());
         return res.status(500).json({ error: "Failed to create user" });
     }
+});
+
+router.post("/changePassword", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    const { newPassword } = req.body;
+    try {
+        await changePassword(requestingUserId, newPassword);
+        return res.json({ message: "Password changed successfully" });
+    } catch (error) {
+        logger.log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
+        return res.status(500).json({ error: "Failed to change password" });
+    }   
 });
 
 module.exports = router;
