@@ -21,6 +21,28 @@ if (brandLogo) {
     brandLogo.style.cursor = "pointer";
 }
 
+const profileNameSpan = document.querySelector("[data-profile-name]");
+if (profileNameSpan) {
+    const username = localStorage.getItem("username") || "User";
+    profileNameSpan.textContent = "Profile: " + username;
+}
+
+const userIconImg = document.querySelector("[data-user-icon]");
+if (userIconImg) {
+    // Use fetch with auth headers to get the user icon
+    fetchWithAuth("/images/user-icon.png").then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        throw new Error("Failed to load user icon");
+    }).then(blob => {
+        const objectURL = URL.createObjectURL(blob);
+        userIconImg.src = objectURL;
+    }).catch(error => {
+        console.error("Error loading user icon:", error);
+    });
+}
+
 function getRouteFromHash() {
     const hash = window.location.hash.replace(/^#\/?/, "");
     const routeKey = hash.split("?")[0].split("/")[0];

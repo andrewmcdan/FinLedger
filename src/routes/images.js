@@ -1,16 +1,30 @@
 const path = require("path");
-
 const express = require("express");
-
 const router = express.Router();
+const { getUserById } = require("../controllers/users");
 
-router.get("/user-icon.png", (req, res) => {
-    // find the user's icon based on req.user.id
-    // For now, just send a placeholder image located at ./../user-icons/default.png
-    res.sendFile(path.resolve(__dirname, "./../../user-icons/default.png"));
+const pathRoot = path.resolve(__dirname, "./../../user-icons/");
 
-    const pathRoot = path.resolve(__dirname, "./../../user-icons/");
-    
+router.get("/user-icon.png", async (req, res) => {
+    console.log("sending image for user:", req.user ? req.user.id : "no user");
+    // Get the user's icon filename based on req.user.id
+    if (!req.user || !req.user.id) {
+        // No user info, send default icon
+        return res.sendFile(path.join(pathRoot, "default.png"));
+    }
+    const userIconFileName = await getUserById(req.user.id.toString()).then((user) => {
+        if (user && user.profile_image_url) {
+            return path.basename(user.profile_image_url);
+        }
+        return "default.png";
+    });
+    const userIconPath = path.join(pathRoot, userIconFileName);
+    res.sendFile(userIconPath, (err) => {
+        if (err) {
+            console.error("Error sending user icon file:", err);
+            res.sendFile(path.join(pathRoot, "default.png"));
+        }
+    });
 });
 
 module.exports = router;
