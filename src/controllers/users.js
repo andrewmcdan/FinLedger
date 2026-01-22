@@ -80,6 +80,32 @@ const suspendUser = async (userId, startDate, durationDays) => {
     await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [startDate, endDate, userId]);
 };
 
+const changePassword = async (userId, newPassword) => {
+    // First thing to do is check the password complexity
+    // Length check
+    if (newPassword.length < 8) {
+        throw new Error("Password must be at least 8 characters long");
+    }
+    // Uppercase, lowercase, digit, special character check
+    const uppercaseRegex = /[A-Z]/;
+    const lowercaseRegex = /[a-z]/;
+    const digitRegex = /[0-9]/;
+    const specialCharRegex = /[!@#$%^&*(),.?":{}|<>]/;
+    if (!uppercaseRegex.test(newPassword) || !lowercaseRegex.test(newPassword) || !digitRegex.test(newPassword) || !specialCharRegex.test(newPassword)) {
+        throw new Error("Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
+    }
+    // Next we check the password_history table to ensure the new password is not the same as any of the user's past passwords
+    const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
+    for (const row of pastPasswordsResult.rows) {
+        const matchResult = await db.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
+        if (matchResult.rows.length > 0) {
+            throw new Error("New password cannot be the same as any past passwords");
+        }
+    }
+    logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
+    await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false WHERE id = $2", [newPassword, userId]);
+};
+
 /**
  *
  * @param {String} firstName
@@ -131,4 +157,5 @@ module.exports = {
     createUser,
     rejectUser,
     suspendUser,
+    changePassword,
 };
