@@ -28,7 +28,6 @@
     <section class="stack">
         <h2>User Management</h2>
         <div class="grid">
-            
             <article class="card">
                 <h2>User Approvals</h2>
                 <% if (usersWithPendingApprovalsLength == 0) { %>
@@ -111,6 +110,105 @@
                     <p class="value"><%= user.username %></p>
                 </article>
                 <% }); %>
+            </article>
+        </div>
+        <div class="grid">
+            <article class="card">
+                <h2>Create User</h2>
+                <form id="create-user-form" class="stack">
+                    <div class="field">
+                        <label for="first_name">First Name</label>
+                        <input type="text" id="first_name" name="first_name" required>
+                    </div>
+                    <div class="field">
+                        <label for="last_name">Last Name</label>
+                        <input type="text" id="last_name" name="last_name" required>
+                    </div>
+                    <div class="field">
+                        <label for="Address">Address</label>
+                        <input type="text" id="address" name="address" required>
+                    </div>
+                    <div class="field">
+                        <label for="date_of_birth">Date of Birth</label>
+                        <input type="date" id="date_of_birth" name="date_of_birth" required>
+                    </div>
+                    <div class="field">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="field">
+                        <label for="role">Role</label>
+                        <select id="role" name="role" required>
+                            <option value="administrator">Administrator</option>
+                            <option value="manager">Manager</option>
+                            <option value="accountant">Accountant</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="profile_image">Profile Image</label>
+                        <input type="file" id="profile_image" name="profile_image" accept="image/*">
+                    </div>
+                    <button type="submit">Create User</button>
+                </form>
+            </article>
+            <div class="stack">
+                <article class="card">
+                    <h2>Delete User</h2>
+                    <form id="delete-user-form" class="stack">
+                        <div class="field">
+                            <label for="username">Username</label>
+                            <input type="text" id="username" name="username" required>
+                        </div>
+                        <button type="submit">Delete User</button>
+                    </form>            
+                </article>
+                <article class="card">
+                    <h2>Reset User Password</h2>
+                    <form id="reset-password-form" class="stack">
+                        <div class="field">
+                            <label for="username">Username</label>
+                            <input type="text" id="username" name="username" required>
+                        </div>
+                        <button type="submit">Reset Password</button>
+                    </form>
+                </article>
+                <article class="card">
+                    <h2>Suspend User Account</h2>
+                    <form id="suspend-user-form" class="stack">
+                        <div class="field">
+                            <label for="username">Username</label>
+                            <input type="text" id="username" name="username" required>
+                        </div>
+                        <div class="field">
+                            <label for="suspension_start_date">Suspension Start Date</label>
+                            <input type="date" id="suspension_start_date" name="suspension_start_date" required>
+                        </div>
+                        <div class="field">
+                            <label for="suspension_end_date">Suspension End Date</label>
+                            <input type="date" id="suspension_end_date" name="suspension_end_date" required>
+                        </div>
+                        <button type="submit">Suspend User</button>
+                    </form>
+                </article>
+            </div>
+        </div>
+        <div class="grid">
+            <article class="card">
+                <h2>Email User</h2>
+                <form id="email-user-form" class="stack">
+                    <div class="field">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="field">
+                        <label for="subject">Subject</label>
+                        <input type="text" id="subject" name="subject" required>
+                    </div>
+                    <div class="field">
+                        <label for="message">Message</label>
+                        <textarea id="message" name="message" required></textarea>
+                    </div>
+                    <button type="submit">Send Email</button>
             </article>
         </div>
     </section>
