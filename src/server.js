@@ -13,13 +13,13 @@ const usersController = require("./controllers/users");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.use(express.json());
 
 // wire in static files found in ../public/
 app.engine("html", ejs.renderFile);
 app.set("view engine", "html");
 app.set("views", path.join(__dirname, "..", "web", "pages"));
 
-app.use("/images", imageRoutes);
 // Mount auth routes at /api/auth (public)
 app.use("/api/auth", authRoutes);
 
@@ -40,6 +40,7 @@ app.get("/pages/dashboard.html", async (req, res, next) => {
 app.use(express.static("web"));
 app.use("/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/images", imageRoutes);
 
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.

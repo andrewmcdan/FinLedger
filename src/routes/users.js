@@ -4,7 +4,8 @@
 
 const express = require("express");
 const router = express.Router();
-const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser } = require("../controllers/users.js");
+const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser } = require("../controllers/users.js");
+const logger = require("../utils/logger.js");
 
 router.get("/get-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
@@ -64,6 +65,27 @@ router.get("/approve-user/:userId", async (req, res) => {
     }
     await approveUser(userIdToApprove);
     return res.json({ message: "User approved successfully" });
+});
+
+router.post("/create-user", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    logger.log("info", `User ID ${requestingUserId} is attempting to create a new user`, { function: "create-user" }, logger.getCallerInfo());
+    if (!(await isAdmin(requestingUserId))) {
+        logger.log("warn", `Access denied for user ID ${requestingUserId} to create a new user. Administrator role required.`, { function: "create-user" }, logger.getCallerInfo());
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const { first_name, last_name, email, password, role, address, date_of_birth, profile_image } = req.body;
+    try {
+        const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, profile_image);
+        logger.log("info", `New user created with ID ${newUser.id} by admin user ID ${requestingUserId}`, { function: "create-user" }, logger.getCallerInfo());
+        return res.json({ user: newUser });
+    } catch (error) {
+        logger.log("error", `Error creating user by admin user ID ${requestingUserId}: ${error}`, { function: "create-user" }, logger.getCallerInfo());
+        return res.status(500).json({ error: "Failed to create user" });
+    }
 });
 
 module.exports = router;

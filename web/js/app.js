@@ -21,6 +21,28 @@ if (brandLogo) {
     brandLogo.style.cursor = "pointer";
 }
 
+const profileNameSpan = document.querySelector("[data-profile-name]");
+if (profileNameSpan) {
+    const username = localStorage.getItem("username") || "User";
+    profileNameSpan.textContent = "Profile: " + username;
+}
+
+const userIconImg = document.querySelector("[data-user-icon]");
+if (userIconImg) {
+    // Use fetch with auth headers to get the user icon
+    fetchWithAuth("/images/user-icon.png").then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        throw new Error("Failed to load user icon");
+    }).then(blob => {
+        const objectURL = URL.createObjectURL(blob);
+        userIconImg.src = objectURL;
+    }).catch(error => {
+        console.error("Error loading user icon:", error);
+    });
+}
+
 function getRouteFromHash() {
     const hash = window.location.hash.replace(/^#\/?/, "");
     const routeKey = hash.split("?")[0].split("/")[0];
@@ -29,7 +51,7 @@ function getRouteFromHash() {
 
 function setActiveNav(routeKey) {
     navLinks.forEach((link) => {
-        const isActive = link.dataset.route === routeKey;
+        const isActive = link.dataset.route === routeKey || link.dataset.route2 === routeKey;
         link.classList.toggle("is-active", isActive);
         if (isActive) {
             link.setAttribute("aria-current", "page");
@@ -39,14 +61,24 @@ function setActiveNav(routeKey) {
     });
 }
 
-async function fetchPageMarkup(pageName) {
-    const response = await fetch(`${pageName}.html`,{
-        credentials: "include",
-        headers: {
-            "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}`,
-            'User_id': `${localStorage.getItem("user_id") || ""}`
-        }
+function fetchWithAuth(url, options = {}) {
+    const authToken = localStorage.getItem("auth_token") || "";
+    const userId = localStorage.getItem("user_id") || "";
+    const mergedHeaders = {
+        Authorization: `Bearer ${authToken}`,
+        User_id: `${userId}`,
+        ...(options.headers || {})
+    };
+
+    return fetch(url, {
+        ...options,
+        credentials: options.credentials || "include",
+        headers: mergedHeaders
     });
+}
+
+async function fetchPageMarkup(pageName) {
+    const response = await fetchWithAuth(`${pageName}.html`);
     if (response.ok) return response.text();
     console.log("Fetch page markup failed:", response.status);
     if (response.status === 401) {
@@ -69,19 +101,12 @@ async function fetchPageMarkup(pageName) {
 }
 
 async function loadModule(moduleName) {
-    // TODO: Rewrite this so that it sends auth headers when it loads the module from the server.
-    // Will have to modify it to use fetch() instead of dynamic import().
     if (!moduleName) {
         return;
     }
 
     try {
-        const response = await fetch(`./${moduleName}.js`, {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem("auth_token")}`,
-                'User_id': `${localStorage.getItem("user_id") || ""}`
-            }
-        });
+        const response = await fetchWithAuth(`./${moduleName}.js`);
         if(!response.ok) {
             if(response.status === 401) {
                 window.location.hash = "#/login";

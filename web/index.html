@@ -6,14 +6,14 @@
         <title>FinLedger</title>
         <link rel="stylesheet" href="css/base.css" />
         <link rel="stylesheet" href="css/layout.css" />
-        <link rel="icon" type="image/x-icon" href="/images/FL-logo.ico">
+        <link rel="icon" type="image/x-icon" href="/public_images/FL-logo.ico">
     </head>
     <body>
         <div class="app-shell">
             <header class="app-header">
                 <div class="brand" data-brand-logo>
                     <div class="brand-mark">
-                        <img src="images/FL-logo.png" alt="FinLedger logo" />
+                        <img src="public_images/FL-logo.png" alt="FinLedger logo" />
                     </div>
                     <div>
                         <div class="brand-name">FinLedger</div>
@@ -25,12 +25,12 @@
                     <a href="#/transactions" data-route="transactions">Transactions</a>
                     <a href="#/reports" data-route="reports">Reports</a>
                     <a href="#/help" data-route="help">Help</a>
-                    <a href="#/login" data-route="login" data-login-button>Login</a>
+                    <a href="#/login" data-route="login" data-route2="logout" data-login-button>Login</a>
                 </nav>
                 <div class="user-profile-button-container">
                     <button id="user_profile_button" aria-label="User Profile" data-user-profile-button>
-                        <span>Profile</span>
-                        <img src="images/user-icon.png" alt="User Profile" />
+                        <span data-profile-name></span>
+                        <img alt="User Profile" data-user-icon/>
                     </button>
                 </div>
             </header>
