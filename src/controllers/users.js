@@ -50,8 +50,18 @@ const listUsers = async () => {
 };
 
 const listLoggedInUsers = async () => {
-    const loggedInUsersResult = await db.query("SELECT id, user_id, login_at FROM logged_in_users ORDER BY id ASC");
-    return loggedInUsersResult.rows;
+    const loggedInUsersResult = await db.query("SELECT id, user_id, login_at, logout_at FROM logged_in_users ORDER BY id ASC");
+    const uniqueLoggedInUsersMap = new Map();
+    for (const row of loggedInUsersResult.rows) {
+        if (row.logout_at < new Date()) {
+            continue; // skip logged out users
+        }
+        if (!uniqueLoggedInUsersMap.has(row.user_id) || uniqueLoggedInUsersMap.get(row.user_id).login_at < row.login_at) {
+            uniqueLoggedInUsersMap.set(row.user_id, row);
+        }
+    }
+    const loggedInUsers = Array.from(uniqueLoggedInUsersMap.values());
+    return loggedInUsers;
 };
 
 module.exports = {
