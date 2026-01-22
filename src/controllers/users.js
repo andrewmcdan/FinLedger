@@ -64,10 +64,15 @@ const listLoggedInUsers = async () => {
     return loggedInUsers;
 };
 
+const approveUser = async (userId) => {
+    await db.query("UPDATE users SET status = 'active' WHERE id = $1", [userId]);
+};
+
 module.exports = {
     getUserLoggedInStatus,
     isAdmin,
     getUserById,
     listUsers,
     listLoggedInUsers,
+    approveUser
 };
