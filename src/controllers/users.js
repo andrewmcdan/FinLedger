@@ -104,7 +104,8 @@ const changePassword = async (userId, newPassword) => {
         }
     }
     logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
-    await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false WHERE id = $2", [newPassword, userId]);
+    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
+    await savePasswordToHistory(userId, result.rows[0].password_hash);
 };
 
 /**
@@ -139,7 +140,8 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, user_icon_path, username", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
+    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, user_icon_path, username, password_hash", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
+    await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
     // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
     const userIconPath = result.rows[0].user_icon_path;
     if (profileImage && userIconPath) {
@@ -155,6 +157,10 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
     }
     return result.rows[0];
+};
+
+const savePasswordToHistory = async (userId, passwordHash) => {
+    await db.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
 };
 
 module.exports = {

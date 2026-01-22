@@ -9,6 +9,7 @@
         <link rel="icon" type="image/x-icon" href="/public_images/FL-logo.ico">
     </head>
     <body>
+        <canvas id="money-canvas" aria-hidden="true"></canvas>
         <div class="app-shell">
             <header class="app-header">
                 <div class="brand" data-brand-logo>
@@ -36,6 +37,7 @@
             </header>
             <main id="app" class="app-main" aria-live="polite"></main>
         </div>
+        <script type="module" src="js/background.js"></script>
         <script type="module" src="js/app.js"></script>
     </body>
 </html>

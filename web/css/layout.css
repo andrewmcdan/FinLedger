@@ -4,6 +4,8 @@
     padding: 0;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 1;
 }
 
 .app-header {
@@ -79,6 +81,8 @@
 
 #user_profile_button img{
     width: 30px;
+    height: 30px;
+    border-radius: 999px;
 }
 
 .app-nav a {

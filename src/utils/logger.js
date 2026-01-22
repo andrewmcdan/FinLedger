@@ -18,8 +18,10 @@ const log = async (level, message, context = null, source = "", user_id = null) 
     const levelValue = levels[level] !== undefined ? levels[level] : levels.info;
 
     // Log to console
-    if (LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL]) {
+    if (LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL] && source != "") {
         console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context===null ? "" : context, `${source.file}:${source.line}:${source.column}`);
+    } else if (LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL]) {
+        console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context===null ? "" : context);
     }
 
     // Log to database
