@@ -35,23 +35,45 @@
                 <% } %>
                 <% users.filter(user => user.status === 'pending').forEach(user => { %>
                 <article class="data-row" data-user_id-<%= user.id %>>
-                    <p class="value"><%= user.username %> <button onclick="(async()=>{
-                        let response = await fetch('/api/users/approve-user/' + <%= user.id %>, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': 'Bearer ' + localStorage.getItem('auth_token'),
-                                'User_id': localStorage.getItem('user_id')
-                            }
-                        });
-                        if (response.ok) {
-                            alert('User approved successfully');
-                            // remove the user row from the DOM
-                            document.querySelector('[data-user_id-<%= user.id %>]').remove();
-                        } else {
-                            alert('Error approving user');
-                        }
-                    })()" class="button-small">Approve</button></p>
+                    <p class="value">
+                        <span class="approval-name"><%= user.username %></span>
+                        <span class="approval-actions">
+                            <button onclick="(async()=>{
+                                let response = await fetch('/api/users/approve-user/' + <%= user.id %>, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': 'Bearer ' + localStorage.getItem('auth_token'),
+                                        'User_id': localStorage.getItem('user_id')
+                                    }
+                                });
+                                if (response.ok) {
+                                    alert('User approved successfully');
+                                    // remove the user row from the DOM
+                                    document.querySelector('[data-user_id-<%= user.id %>]').remove();
+                                } else {
+                                    alert('Error approving user');
+                                }
+                            })()" class="button-small">Approve</button>
+                            <button onclick="(async()=>{
+                                let response = await fetch('/api/users/reject-user/' + <%= user.id %>, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': 'Bearer ' + localStorage.getItem('auth_token'),
+                                        'User_id': localStorage.getItem('user_id')
+                                    }
+                                });
+                                if (response.ok) {
+                                    alert('User rejected successfully');
+                                    // remove the user row from the DOM
+                                    document.querySelector('[data-user_id-<%= user.id %>]').remove();
+                                } else {
+                                    alert('Error rejecting user');
+                                }
+                            })()" class="button-small">Reject</button>
+                        </span>
+                    </p>
                     <p class="meta">Pending since <%= user.created_at %></p>
                 </article>
                 <% }); %>

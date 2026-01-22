@@ -4,7 +4,7 @@
 
 const express = require("express");
 const router = express.Router();
-const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser } = require("../controllers/users.js");
+const { isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 
@@ -66,6 +66,26 @@ router.get("/approve-user/:userId", async (req, res) => {
     }
     await approveUser(userIdToApprove);
     return res.json({ message: "User approved successfully" });
+});
+
+router.get("/reject-user/:userId", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const userIdToReject = req.params.userId;
+    const userData = await getUserById(userIdToReject);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    if (userData.status !== "pending") {
+        return res.status(400).json({ error: "User is not pending approval" });
+    }
+    rejectUser(userIdToReject);
+    return res.json({ message: "User rejected successfully" });
 });
 
 router.post("/create-user", async (req, res) => {

@@ -183,6 +183,17 @@
     font-size: 1.05rem;
 }
 
+.approval-name {
+    flex: 1;
+    min-width: 0;
+}
+
+.approval-actions {
+    display: inline-flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
 .data-row .meta {
     margin: 0;
     font-size: 0.8rem;
