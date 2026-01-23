@@ -7,14 +7,12 @@ const fs = require("fs");
 const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
-const {sendEmail} = require("./../services/email");
+const { sendEmail } = require("./../services/email");
 
 function checkPasswordComplexity(password) {
-    // Length check
     if (password.length < 8) {
         return false;
     }
-    // Uppercase, lowercase, digit, special character check
     const uppercaseRegex = /[A-Z]/;
     const lowercaseRegex = /[a-z]/;
     const digitRegex = /[0-9]/;
@@ -30,20 +28,22 @@ const getUserLoggedInStatus = async (user_id, token) => {
     if (result.rowCount === 0) {
         return false;
     }
-
     if (result.rows[0].logout_at < new Date()) {
         return false;
     }
-
-    // update logout_at to extend session
     await db.query("UPDATE logged_in_users SET logout_at = now() + INTERVAL '1 hour' WHERE user_id = $1 AND token = $2", [user_id, token]);
-
-    // return true if logged in
-    return true; // placeholder
+    return true;
 };
 
-const isAdmin = async (userId) => {
+const isAdmin = async (userId, token) => {
     logger.log("trace", `Checking if user ${userId} is an administrator`, { function: "isAdmin" }, utilities.getCallerInfo());
+    if (!token) {
+        return false;
+    }
+    const loggedIn = await getUserLoggedInStatus(userId, token);
+    if (!loggedIn) {
+        return false;
+    }
     return db.query("SELECT role FROM users WHERE id = $1", [userId]).then((result) => {
         if (result.rowCount === 0) {
             return false;
@@ -66,7 +66,7 @@ const getUserByEmail = async (email) => {
         return null;
     }
     return userResult.rows[0];
-}
+};
 
 const getUserByResetToken = async (resetToken) => {
     const userResult = await db.query("SELECT id, username, email, first_name, last_name FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()", [resetToken]);
@@ -77,7 +77,7 @@ const getUserByResetToken = async (resetToken) => {
 };
 
 const listUsers = async () => {
-    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at FROM users ORDER BY id ASC");
+    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at FROM users ORDER BY id ASC");
     return usersResult.rows;
 };
 
@@ -86,7 +86,7 @@ const listLoggedInUsers = async () => {
     const uniqueLoggedInUsersMap = new Map();
     for (const row of loggedInUsersResult.rows) {
         if (row.logout_at < new Date()) {
-            continue; // skip logged out users
+            continue;
         }
         if (!uniqueLoggedInUsersMap.has(row.user_id) || uniqueLoggedInUsersMap.get(row.user_id).login_at < row.login_at) {
             uniqueLoggedInUsersMap.set(row.user_id, row);
@@ -106,24 +106,23 @@ const rejectUser = async (userId) => {
     await db.query("UPDATE users SET status = 'rejected' WHERE id = $1", [userId]);
 };
 
-const suspendUser = async (userId, startDate, durationDays) => {
-    logger.log("info", `Suspending user with ID ${userId} from ${startDate} for ${durationDays} days`, { function: "suspendUser" }, utilities.getCallerInfo());
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + durationDays);
-    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [startDate, endDate, userId]);
+const suspendUser = async (userId, suspensionStart, suspensionEnd) => {
+    logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo());
+    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [suspensionStart, suspensionEnd, userId]);
+};
+
+const reinstateUser = async (userId) => {
+    logger.log("info", `Reinstating user with ID ${userId}`, { function: "reinstateUser" }, utilities.getCallerInfo());
+    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL WHERE id = $1", [userId]);
 };
 
 const changePassword = async (userId, newPassword) => {
-    // Check that password is not url encoded
     if (decodeURIComponent(newPassword) !== newPassword) {
-        // Password is url encoded. Decode it first.
         newPassword = decodeURIComponent(newPassword);
     }
-    // First thing to do is check the password complexity
     if (!checkPasswordComplexity(newPassword)) {
         throw new Error("Password does not meet complexity requirements");
     }
-    // Next we check the password_history table to ensure the new password is not the same as any of the user's past passwords
     const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
     for (const row of pastPasswordsResult.rows) {
         const matchResult = await db.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
@@ -132,7 +131,7 @@ const changePassword = async (userId, newPassword) => {
         }
     }
     logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
-    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
+    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days' WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
     await savePasswordToHistory(userId, result.rows[0].password_hash);
 };
 
@@ -156,7 +155,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("Invalid role specified");
     }
     let tempPasswordFlag = false;
-    if(!password || password.length === 0){
+    if (!password || password.length === 0) {
         // Generate a random temporary password using lastname, dob, and a random number
         const randomNum = Math.floor(1000 + Math.random() * 9000); // 4 digit random number
         const dobPart = new Date(dateOfBirth).toISOString().slice(5, 7) + new Date(dateOfBirth).toISOString().slice(2, 4);
@@ -168,7 +167,17 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, user_icon_path, username, password_hash", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
+    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days') RETURNING id, user_icon_path, username, password_hash", [
+        username,
+        email,
+        password,
+        firstName,
+        lastName,
+        role,
+        address,
+        dateOfBirth,
+        tempPasswordFlag,
+    ]);
     await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
     // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
     const userIconPath = result.rows[0].user_icon_path;
@@ -197,16 +206,8 @@ const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
     if (questionsAndAnswers.length !== 3) {
         throw new Error("Exactly three security questions and answers must be provided");
     }
-    const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')) WHERE id = $7"; 
-    const values = [
-        questionsAndAnswers[0].question,
-        questionsAndAnswers[0].answer,
-        questionsAndAnswers[1].question,
-        questionsAndAnswers[1].answer,
-        questionsAndAnswers[2].question,
-        questionsAndAnswers[2].answer,
-        userId
-    ];
+    const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')) WHERE id = $7";
+    const values = [questionsAndAnswers[0].question, questionsAndAnswers[0].answer, questionsAndAnswers[1].question, questionsAndAnswers[1].answer, questionsAndAnswers[2].question, questionsAndAnswers[2].answer, userId];
     await db.query(query, values);
     logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo());
 };
@@ -219,7 +220,7 @@ const getSecurityQuestionsForUser = async (userId) => {
     return {
         security_question_1: result.rows[0].security_question_1,
         security_question_2: result.rows[0].security_question_2,
-        security_question_3: result.rows[0].security_question_3
+        security_question_3: result.rows[0].security_question_3,
     };
 };
 
@@ -229,14 +230,60 @@ const verifySecurityAnswers = async (userId, answers) => {
         throw new Error("Exactly three answers must be provided");
     }
     const query = "SELECT 1 FROM users WHERE id = $1 AND security_answer_hash_1 = crypt($2, security_answer_hash_1) AND security_answer_hash_2 = crypt($3, security_answer_hash_2) AND security_answer_hash_3 = crypt($4, security_answer_hash_3)";
-    const values = [
-        userId,
-        answers[0],
-        answers[1],
-        answers[2]
-    ];
+    const values = [userId, answers[0], answers[1], answers[2]];
     const result = await db.query(query, values);
     return result.rowCount > 0;
+};
+
+const logoutInactiveUsers = async () => {
+    const result = await db.query("DELETE FROM logged_in_users WHERE logout_at < now()");
+    logger.log("info", "Logged out inactive users: " + result.rowCount, { function: "logoutInactiveUsers" }, utilities.getCallerInfo());
+};
+
+const unsuspendExpiredSuspensions = async () => {
+    const result = await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL WHERE suspension_end_at < now() AND status = 'suspended'");
+    logger.log("info", "Unsuspended users with expired suspensions: " + result.rowCount, { function: "unsuspendExpiredSuspensions" }, utilities.getCallerInfo());
+};
+
+const sendPasswordExpiryWarnings = async () => {
+    const warningThresholdDays = 3;
+    const result = await db.query("SELECT id, email, first_name, last_name, password_expires_at FROM users WHERE password_expires_at IS NOT NULL AND password_expires_at <= now() + ($1 * interval '1 day') AND password_expires_at > now()", [warningThresholdDays]);
+    const trackingResult = await db.query("SELECT pet.user_id, pet.password_expires_at, pet.email_sent_at FROM password_expiry_email_tracking pet JOIN users u ON u.id = pet.user_id WHERE u.password_expires_at IS NOT NULL AND u.password_expires_at <= now() + ($1 * interval '1 day') AND u.password_expires_at > now()", [warningThresholdDays]);
+    const warnedWithin24Hours = new Set();
+    const cutoffTime = Date.now() - 24 * 60 * 60 * 1000;
+    for (const row of trackingResult.rows) {
+        if (row.email_sent_at && row.email_sent_at.getTime() >= cutoffTime) {
+            warnedWithin24Hours.add(row.user_id);
+        }
+    }
+
+    const pendingWarnings = result.rows.filter((row) => !warnedWithin24Hours.has(row.id));
+
+    for (const row of pendingWarnings) {
+        const trackResult = await db.query("INSERT INTO password_expiry_email_tracking (user_id, password_expires_at) VALUES ($1, $2) ON CONFLICT (user_id, password_expires_at, email_sent_date) DO NOTHING RETURNING id", [row.id, row.password_expires_at]);
+        if (trackResult.rowCount === 0) {
+            continue;
+        }
+        const daysLeft = Math.ceil((row.password_expires_at - new Date()) / (1000 * 60 * 60 * 24));
+        const emailSubject = "Password Expiration Warning";
+        const emailBody = `Dear ${row.first_name} ${row.last_name},\n\nThis is a reminder that your password will expire in ${daysLeft} day(s) on ${row.password_expires_at.toDateString()}.\n\nPlease log in and change your password to avoid any disruption to your account access.\n\nBest regards,\nFinLedger Team`;
+        let emailResult = await sendEmail(row.email, emailSubject, emailBody);
+        logger.log("info", `Sent password expiration warning email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "sendPasswordExpiryWarnings" }, utilities.getCallerInfo());
+    }
+};
+
+const suspendUsersWithExpiredPasswords = async () => {
+    const result = await db.query("UPDATE users SET status = 'suspended', suspension_start_at = now(), suspension_end_at = NULL WHERE password_expires_at <= now() AND status != 'suspended' RETURNING id, email, first_name, last_name");
+    for (const row of result.rows) {
+        const emailSubject = "Account Suspended Due to Expired Password";
+        const emailBody = `Dear ${row.first_name} ${row.last_name},\n\nYour account has been suspended because your password has expired. Please contact the system administrator to reinstate your account and set a new password.\n\nBest regards,\nFinLedger Team`;
+        let emailResult = await sendEmail(row.email, emailSubject, emailBody);
+        // update password_expiry_email_tracking to log this suspension email
+        const passwordExpiresAtResult = await db.query("SELECT password_expires_at FROM users WHERE id = $1", [row.id]);
+        await db.query("INSERT INTO password_expiry_email_tracking (user_id, password_expires_at) VALUES ($1, $2)", [row.id, passwordExpiresAtResult.rows[0].password_expires_at]);
+        logger.log("info", `Sent account suspension email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo());
+    }
+    logger.log("info", "Suspended users with expired passwords: " + result.rowCount, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo());
 };
 
 module.exports = {
@@ -249,10 +296,15 @@ module.exports = {
     createUser,
     rejectUser,
     suspendUser,
+    reinstateUser,
     changePassword,
     getUserByEmail,
     updateSecurityQuestions,
     getSecurityQuestionsForUser,
     verifySecurityAnswers,
-    getUserByResetToken
+    getUserByResetToken,
+    logoutInactiveUsers,
+    unsuspendExpiredSuspensions,
+    sendPasswordExpiryWarnings,
+    suspendUsersWithExpiredPasswords,
 };

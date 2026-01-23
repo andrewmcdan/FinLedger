@@ -15,12 +15,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
-// wire in static files found in ../public/
 app.engine("html", ejs.renderFile);
 app.set("view engine", "html");
 app.set("views", path.join(__dirname, "..", "web", "pages"));
-
-// Mount auth routes at /api/auth (public)
 app.use("/api/auth", authRoutes);
 
 app.use(authMiddleware);
@@ -28,11 +25,11 @@ app.use(authMiddleware);
 app.get("/pages/dashboard.html", async (req, res, next) => {
     try {
         const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
-        // If no user found, role is 'none'
         const role = result.rows[0]?.role || "none";
         const loggedInUsers = await usersController.listLoggedInUsers();
         const users = await usersController.listUsers();
-        res.render("dashboard", { role, loggedInUsers, users });
+        const currentUserId = Number(req.user.id);
+        res.render("dashboard", { role, loggedInUsers, users, currentUserId });
     } catch (error) {
         next(error);
     }
@@ -41,6 +38,24 @@ app.use(express.static("web"));
 app.use("/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/images", imageRoutes);
+
+setInterval(async () => {
+    try {
+        await usersController.logoutInactiveUsers();
+        await usersController.unsuspendExpiredSuspensions();
+    } catch (error) {
+        logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
+    }
+}, 10 * 60 * 1000); // every 10 minutes
+
+setInterval(async () => {
+    try {
+        await usersController.sendPasswordExpiryWarnings();
+        await usersController.suspendUsersWithExpiredPasswords();
+    } catch (error) {
+        logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
+    }
+}, 60 * 60 * 1000); // every hour
 
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.

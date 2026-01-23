@@ -1,10 +1,6 @@
-/**
- * This file provides routes to get info about users (other than the current logged-in user).
- */
-
 const express = require("express");
 const router = express.Router();
-const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, changePassword, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
+const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const { sendEmail } = require("../services/email.js");
@@ -15,7 +11,7 @@ router.get("/get-user/:userId", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const userIdToGet = req.params.userId;
@@ -31,7 +27,7 @@ router.get("/list-users", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const users = await listUsers();
@@ -43,7 +39,7 @@ router.get("/get-logged-in-users", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const loggedInUsers = await listLoggedInUsers();
@@ -55,7 +51,7 @@ router.get("/approve-user/:userId", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const userIdToApprove = req.params.userId;
@@ -80,7 +76,7 @@ router.get("/reject-user/:userId", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const userIdToReject = req.params.userId;
@@ -101,7 +97,7 @@ router.post("/create-user", async (req, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
     logger.log("info", `User ID ${requestingUserId} is attempting to create a new user`, { function: "create-user" }, utilities.getCallerInfo());
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         logger.log("warn", `Access denied for user ID ${requestingUserId} to create a new user. Administrator role required.`, { function: "create-user" }, utilities.getCallerInfo());
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
@@ -176,7 +172,7 @@ router.get("/reset-password/:userId", async (req, res) => {
     }
     // Send an email with a password reset link
     const resetToken = utilities.generateRandomToken(128);
-    const resetLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3000";
+    const resetLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
     const resetLink = `${resetLinkUrlBase}/#/login?userId=${userIdNumeric}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
@@ -190,12 +186,10 @@ router.get("/reset-password/:userId", async (req, res) => {
 
 router.get("/security-questions/:resetToken", async (req, res) => {
     const resetToken = req.params.resetToken;
-    // Look up user by reset token
     const userData = await getUserByResetToken(resetToken);
     if (!userData) {
         return res.status(404).json({ error: "Invalid or expired reset token" });
     }
-    // Get security questions for the user
     const securityQuestions = await getSecurityQuestionsForUser(userData.id);
     return res.json({ security_questions: securityQuestions });
 });
@@ -203,7 +197,6 @@ router.get("/security-questions/:resetToken", async (req, res) => {
 router.post("/verify-security-answers/:resetToken", async (req, res) => {
     const resetToken = req.params.resetToken;
     const { securityAnswers, newPassword } = req.body;
-    // Look up user by reset token
     const userData = await getUserByResetToken(resetToken);
     if (!userData) {
         return res.status(404).json({ error: "Invalid or expired reset token" });
@@ -215,13 +208,54 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     }
     try {
         await changePassword(userData.id, newPassword);
-        // Clear the reset token
         await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL WHERE id = $1", [userData.id]);
         return res.json({ message: "Password reset successfully" });
     } catch (error) {
         logger.log("error", `Error resetting password for user ID ${userData.id}: ${error}`, { function: "verify-security-answers" }, utilities.getCallerInfo());
         return res.status(500).json({ error: "Failed to reset password" });
     }
+});
+
+router.post("/suspend-user", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const { userIdToSuspend, suspensionStart, suspensionEnd } = req.body;
+    const userData = await getUserById(userIdToSuspend);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    if (userData.status !== "active") {
+        return res.status(400).json({ error: "Only active users can be suspended" });
+    }
+    await suspendUser(userIdToSuspend, suspensionStart, suspensionEnd);;
+    logger.log("info", `User ID ${userIdToSuspend} suspended by admin user ID ${requestingUserId}`, { function: "suspend-user" }, utilities.getCallerInfo());
+    return res.json({ message: "User suspended successfully" });
+});
+
+router.get("/reinstate-user/:userId", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const userIdToReinstate = req.params.userId;
+    const userData = await getUserById(userIdToReinstate);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    if (userData.status !== "suspended") {
+        return res.status(400).json({ error: "Only suspended users can be reinstated" });
+    }
+    await reinstateUser(userIdToReinstate);
+    logger.log("info", `User ID ${userIdToReinstate} reinstated by admin user ID ${requestingUserId}`, { function: "reinstate-user" }, utilities.getCallerInfo());
+    return res.json({ message: "User reinstated successfully" });
 });
 
 module.exports = router;
