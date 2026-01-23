@@ -28,8 +28,19 @@
                     <a href="#/help" data-route="help">Help</a>
                     <a href="#/login" data-route="login" data-route2="logout" data-login-button>Login</a>
                 </nav>
-                <div class="user-profile-button-container">
-                    <button id="user_profile_button" aria-label="User Profile" data-user-profile-button>
+                <div class="user-profile-button-container" data-profile-menu>
+                    <div class="profile-menu" data-profile-menu-panel aria-hidden="true">
+                        <div class="profile-menu-card">
+                            <div class="profile-menu-avatar">
+                                <img alt="User profile" data-user-icon-menu />
+                            </div>
+                            <div class="profile-menu-actions">
+                                <button type="button" class="button-small" data-profile-action="profile">Go to profile</button>
+                                <button type="button" class="button-small" data-profile-action="logout">Logout</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="user_profile_button" aria-label="User Profile" aria-expanded="false" data-user-profile-button>
                         <span data-profile-name></span>
                         <img alt="User Profile" data-user-icon/>
                     </button>

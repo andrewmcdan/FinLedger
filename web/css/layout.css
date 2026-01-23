@@ -70,6 +70,7 @@
 
 .user-profile-button-container {
     justify-self: end;
+    position: relative;
 }
 
 #user_profile_button {
@@ -77,12 +78,69 @@
     align-items: center;
     gap: 0.5rem;
     white-space: nowrap;
+    position: relative;
+    z-index: 2;
 }
 
 #user_profile_button img{
     width: 30px;
     height: 30px;
     border-radius: 999px;
+}
+
+.profile-menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding-top: 3.25rem;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-6px);
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease;
+    z-index: 1;
+}
+
+.user-profile-button-container.is-open .profile-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.profile-menu-card {
+    min-width: 220px;
+    padding: 0.9rem;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface-strong);
+    box-shadow: 0 18px 28px rgba(21, 31, 40, 0.16);
+    display: grid;
+    gap: 0.75rem;
+}
+
+.profile-menu-avatar {
+    display: flex;
+    justify-content: center;
+}
+
+.profile-menu-avatar img {
+    width: 128px;
+    height: 128px;
+    border-radius: 16px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    background: #ffffff;
+}
+
+.profile-menu-actions {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.profile-menu-actions button {
+    width: 100%;
+    justify-content: center;
 }
 
 .app-nav a {
