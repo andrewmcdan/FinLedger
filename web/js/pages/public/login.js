@@ -118,7 +118,42 @@ let newUserLogic = async function () {
     if (form) {
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            // TODO: Handle registration logic
+            const formData = new FormData(form);
+            const first_name = formData.get("first_name");
+            const last_name = formData.get("last_name");
+            const email = formData.get("email");
+            const password = formData.get("password");
+            const address = formData.get("address");
+            const date_of_birth = formData.get("date_of_birth");
+            const role = formData.get("role");
+            fetch("/api/users/register_new_user", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ first_name, last_name, email, password, address, date_of_birth, role }),
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    // clear the form
+                    form.reset();
+                    if (data.user) {
+                        alert("Registration successful! Check your email for further instructions. Redirecting to login page...");
+                        setTimeout(async() => {
+                            // After a short delay, go back to login page
+                            await replacePageContent("public/login");
+                            initLogin();
+                            history.pushState({ page: "login" }, "");
+                        }, 3000);
+                    } else {
+                        setMessage("Registration failed: " + (data.error || "Unknown error"));
+                    }
+                })
+                .catch((error) => {
+                    form.reset();
+                    setMessage("An error occurred: " + error.message);
+                });
+
         });
     }
 };
