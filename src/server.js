@@ -43,6 +43,26 @@ app.use("/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/images", imageRoutes);
 
+setInterval(async () => {
+    try {
+        // TODO: (every 10 minutes):
+        // - Expire stale logged_in_users rows (cleanup beyond logoutInactiveUsers).
+        // - Auto-unsuspend users whose suspension_end_at has passed.
+    } catch (error) {
+        logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
+    }
+}, 10 * 60 * 1000); // every 10 minutes
+
+setInterval(async () => {
+    try {
+        // TODO: (every hour):
+        // - Send password-expiration warning emails (e.g., within 3 days).
+        // - Suspend users with expired passwords (based on password_expires_at).
+    } catch (error) {
+        logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
+    }
+}, 60 * 60 * 1000); // every hour
+
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.
 if (require.main === module) {
