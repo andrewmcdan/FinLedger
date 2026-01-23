@@ -45,9 +45,8 @@ app.use("/images", imageRoutes);
 
 setInterval(async () => {
     try {
-        // TODO: (every 10 minutes):
-        // - Expire stale logged_in_users rows (cleanup beyond logoutInactiveUsers).
-        // - Auto-unsuspend users whose suspension_end_at has passed.
+        await usersController.logoutInactiveUsers();
+        await usersController.unsuspendExpiredSuspensions();
     } catch (error) {
         logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
     }
@@ -55,9 +54,8 @@ setInterval(async () => {
 
 setInterval(async () => {
     try {
-        // TODO: (every hour):
-        // - Send password-expiration warning emails (e.g., within 3 days).
-        // - Suspend users with expired passwords (based on password_expires_at).
+        await usersController.sendPasswordExpiryWarnings();
+        await usersController.suspendUsersWithExpiredPasswords();
     } catch (error) {
         logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
     }
