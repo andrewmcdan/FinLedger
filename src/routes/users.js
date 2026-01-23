@@ -4,7 +4,7 @@
 
 const express = require("express");
 const router = express.Router();
-const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, changePassword, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
+const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const { sendEmail } = require("../services/email.js");
@@ -15,7 +15,7 @@ router.get("/get-user/:userId", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const userIdToGet = req.params.userId;
@@ -31,7 +31,7 @@ router.get("/list-users", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const users = await listUsers();
@@ -43,7 +43,7 @@ router.get("/get-logged-in-users", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const loggedInUsers = await listLoggedInUsers();
@@ -55,7 +55,7 @@ router.get("/approve-user/:userId", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const userIdToApprove = req.params.userId;
@@ -80,7 +80,7 @@ router.get("/reject-user/:userId", async (req, res) => {
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const userIdToReject = req.params.userId;
@@ -101,7 +101,7 @@ router.post("/create-user", async (req, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
     logger.log("info", `User ID ${requestingUserId} is attempting to create a new user`, { function: "create-user" }, utilities.getCallerInfo());
-    if (!(await isAdmin(requestingUserId))) {
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
         logger.log("warn", `Access denied for user ID ${requestingUserId} to create a new user. Administrator role required.`, { function: "create-user" }, utilities.getCallerInfo());
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
@@ -222,6 +222,48 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
         logger.log("error", `Error resetting password for user ID ${userData.id}: ${error}`, { function: "verify-security-answers" }, utilities.getCallerInfo());
         return res.status(500).json({ error: "Failed to reset password" });
     }
+});
+
+router.post("/suspend-user", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const { userIdToSuspend, suspensionStart, suspensionEnd } = req.body;
+    const userData = await getUserById(userIdToSuspend);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    if (userData.status !== "active") {
+        return res.status(400).json({ error: "Only active users can be suspended" });
+    }
+    await suspendUser(userIdToSuspend, suspensionStart, suspensionEnd);;
+    logger.log("info", `User ID ${userIdToSuspend} suspended by admin user ID ${requestingUserId}`, { function: "suspend-user" }, utilities.getCallerInfo());
+    return res.json({ message: "User suspended successfully" });
+});
+
+router.get("/reinstate-user/:userId", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const userIdToReinstate = req.params.userId;
+    const userData = await getUserById(userIdToReinstate);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    if (userData.status !== "suspended") {
+        return res.status(400).json({ error: "Only suspended users can be reinstated" });
+    }
+    await reinstateUser(userIdToReinstate);
+    logger.log("info", `User ID ${userIdToReinstate} reinstated by admin user ID ${requestingUserId}`, { function: "reinstate-user" }, utilities.getCallerInfo());
+    return res.json({ message: "User reinstated successfully" });
 });
 
 module.exports = router;

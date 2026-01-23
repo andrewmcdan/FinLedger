@@ -42,8 +42,15 @@ const getUserLoggedInStatus = async (user_id, token) => {
     return true; // placeholder
 };
 
-const isAdmin = async (userId) => {
+const isAdmin = async (userId, token) => {
     logger.log("trace", `Checking if user ${userId} is an administrator`, { function: "isAdmin" }, utilities.getCallerInfo());
+    if (!token) {
+        return false;
+    }
+    const loggedIn = await getUserLoggedInStatus(userId, token);
+    if (!loggedIn) {
+        return false;
+    }
     return db.query("SELECT role FROM users WHERE id = $1", [userId]).then((result) => {
         if (result.rowCount === 0) {
             return false;
@@ -77,7 +84,7 @@ const getUserByResetToken = async (resetToken) => {
 };
 
 const listUsers = async () => {
-    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at FROM users ORDER BY id ASC");
+    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at FROM users ORDER BY id ASC");
     return usersResult.rows;
 };
 
@@ -106,11 +113,14 @@ const rejectUser = async (userId) => {
     await db.query("UPDATE users SET status = 'rejected' WHERE id = $1", [userId]);
 };
 
-const suspendUser = async (userId, startDate, durationDays) => {
-    logger.log("info", `Suspending user with ID ${userId} from ${startDate} for ${durationDays} days`, { function: "suspendUser" }, utilities.getCallerInfo());
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + durationDays);
-    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [startDate, endDate, userId]);
+const suspendUser = async (userId, suspensionStart, suspensionEnd) => {
+    logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo());
+    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [suspensionStart, suspensionEnd, userId]);
+};
+
+const reinstateUser = async (userId) => {
+    logger.log("info", `Reinstating user with ID ${userId}`, { function: "reinstateUser" }, utilities.getCallerInfo());
+    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL WHERE id = $1", [userId]);
 };
 
 const changePassword = async (userId, newPassword) => {
@@ -132,7 +142,7 @@ const changePassword = async (userId, newPassword) => {
         }
     }
     logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
-    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
+    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days' WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
     await savePasswordToHistory(userId, result.rows[0].password_hash);
 };
 
@@ -168,7 +178,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now()) RETURNING id, user_icon_path, username, password_hash", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
+    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days') RETURNING id, user_icon_path, username, password_hash", [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag]);
     await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
     // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
     const userIconPath = result.rows[0].user_icon_path;
@@ -249,6 +259,7 @@ module.exports = {
     createUser,
     rejectUser,
     suspendUser,
+    reinstateUser,
     changePassword,
     getUserByEmail,
     updateSecurityQuestions,

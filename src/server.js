@@ -32,7 +32,8 @@ app.get("/pages/dashboard.html", async (req, res, next) => {
         const role = result.rows[0]?.role || "none";
         const loggedInUsers = await usersController.listLoggedInUsers();
         const users = await usersController.listUsers();
-        res.render("dashboard", { role, loggedInUsers, users });
+        const currentUserId = Number(req.user.id);
+        res.render("dashboard", { role, loggedInUsers, users, currentUserId });
     } catch (error) {
         next(error);
     }
