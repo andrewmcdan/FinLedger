@@ -291,6 +291,68 @@ let newPasswordLogic = async function (resetToken) {
     setMessage();
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
+        const passwordInput = document.getElementById("password");
+        const confirmPasswordInput = document.getElementById("password_confirmation");
+        const passwordRequirementsContainer = document.querySelector("[data-password-requirements]");
+        const passwordMatchContainer = document.querySelector("[data-password-match]");
+        const requirementItems = {
+            length: document.getElementById("length"),
+            uppercase: document.getElementById("uppercase"),
+            lowercase: document.getElementById("lowercase"),
+            number: document.getElementById("number"),
+            special: document.getElementById("special"),
+        };
+
+        const setRequirementState = (key, met) => {
+            const item = requirementItems[key];
+            if (!item) {
+                return;
+            }
+            item.classList.toggle("valid", met);
+            item.classList.toggle("invalid", !met);
+        };
+
+        const validatePasswords = () => {
+            if (!passwordInput) {
+                return;
+            }
+            const password = passwordInput.value;
+            const lengthMet = password.length >= 8;
+            const uppercaseMet = /[A-Z]/.test(password);
+            const lowercaseMet = /[a-z]/.test(password);
+            const numberMet = /[0-9]/.test(password);
+            const specialMet = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/.test(password);
+            const requirementsMet = lengthMet && uppercaseMet && lowercaseMet && numberMet && specialMet;
+
+            setRequirementState("length", lengthMet);
+            setRequirementState("uppercase", uppercaseMet);
+            setRequirementState("lowercase", lowercaseMet);
+            setRequirementState("number", numberMet);
+            setRequirementState("special", specialMet);
+
+            if (passwordRequirementsContainer && requirementsMet) {
+                passwordRequirementsContainer.classList.add("hidden");
+            } else if (passwordRequirementsContainer) {
+                passwordRequirementsContainer.classList.remove("hidden");
+            }
+        };
+
+        const validatePasswordMatch = () => {
+            if (!passwordInput || !confirmPasswordInput) {
+                return;
+            }
+            const password = passwordInput.value;
+            const confirmPassword = confirmPasswordInput.value;
+            if (passwordMatchContainer && password === confirmPassword) {
+                passwordMatchContainer.classList.add("hidden");
+            } else if (passwordMatchContainer) {
+                passwordMatchContainer.classList.remove("hidden");
+            }
+        };
+
+        passwordInput?.addEventListener("input", validatePasswords);
+        confirmPasswordInput?.addEventListener("input", validatePasswordMatch);
+
         const questionLabels = [1, 2, 3].map((i) => document.getElementById(`security_question_${i}`));
         const hasQuestions = questionLabels.every((label) => label && label.textContent && label.textContent.trim().length > 0);
         if (!hasQuestions) {

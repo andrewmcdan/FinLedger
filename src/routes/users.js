@@ -251,7 +251,13 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
         return res.json({ message: "Password reset successfully" });
     } catch (error) {
         logger.log("error", `Error resetting password for user ID ${userData.id}: ${error}`, { function: "verify-security-answers" }, utilities.getCallerInfo());
-        return res.status(500).json({ error: "Failed to reset password" });
+        const userErrorMessages = new Set([
+            "Password does not meet complexity requirements",
+            "New password cannot be the same as any past passwords",
+        ]);
+        const errorMessage = userErrorMessages.has(error?.message) ? error.message : "Failed to reset password";
+        const statusCode = errorMessage === "Failed to reset password" ? 500 : 400;
+        return res.status(statusCode).json({ error: errorMessage });
     }
 });
 
