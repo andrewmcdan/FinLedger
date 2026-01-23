@@ -43,6 +43,7 @@ jobs:
           sed -i 's/^POSTGRES_TEST_DB=.*/POSTGRES_TEST_DB=finledger_test/' .env.test
           sed -i 's/^POSTGRES_TEST_PORT=.*/POSTGRES_TEST_PORT=5432/' .env.test
           echo "DB_TESTING_ENABLED=true" >> .env.test
+          mkdir -p ./logs
 
       - name: Initialize test database
         run: npm run db-init:test
