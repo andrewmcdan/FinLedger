@@ -130,10 +130,11 @@
                 <% } %>
                 <% loggedInUsers.forEach(user => { %>
                 <article class="data-row">
-                    <p class="value"><%
-                        let matchedUser = users.find(u => u.id === user.user_id);
-                        if (matchedUser) {
-                            %><%= matchedUser.username %><%
+                    <%let matchedUser = users.find(u => u.id === user.user_id);
+                    if (matchedUser) { %>
+                    <p class="value"><%= matchedUser.last_name %>, <%= matchedUser.first_name %></p>
+                    <p class="meta">Username:
+                        <%= matchedUser.username %><%
                         } else {
                             %>Unknown User<%
                         }
