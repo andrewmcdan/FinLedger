@@ -114,7 +114,7 @@ let newUserLogic = async function () {
         initLogin();
     };
 
-    const SECURITY_QUESTION_GROUPS = {
+    const SECURITY_QUESTIONS = {
         1: [
             { value: "sq_mother_maiden_name", label: "What is your mother's maiden name?" },
             { value: "sq_first_pet", label: "What was the name of your first pet?" },
@@ -155,7 +155,7 @@ let newUserLogic = async function () {
     const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
     selectEls.forEach((selectEl, index) => {
         if (selectEl) {
-            const group = SECURITY_QUESTION_GROUPS[index + 1];
+            const group = SECURITY_QUESTIONS[index + 1];
             group.forEach((question) => {
                 const option = document.createElement("option");
                 option.value = question.value;
@@ -192,12 +192,10 @@ let newUserLogic = async function () {
             })
                 .then((response) => response.json())
                 .then((data) => {
-                    // clear the form
                     form.reset();
                     if (data.user) {
                         alert("Registration successful! Check your email for further instructions. Redirecting to login page...");
                         setTimeout(async () => {
-                            // After a short delay, go back to login page
                             await replacePageContent("public/login");
                             initLogin();
                             history.pushState({ page: "login" }, "");
@@ -316,7 +314,6 @@ let newPasswordLogic = async function (resetToken) {
     console.log(resetToken);
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        // load security question via /api/users/security-questions/:resetToken API
         const response = await fetch("/api/users/security-questions/" + encodeURIComponent(resetToken), {
             method: "GET",
             headers: {

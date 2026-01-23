@@ -15,12 +15,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
-// wire in static files found in ../public/
 app.engine("html", ejs.renderFile);
 app.set("view engine", "html");
 app.set("views", path.join(__dirname, "..", "web", "pages"));
-
-// Mount auth routes at /api/auth (public)
 app.use("/api/auth", authRoutes);
 
 app.use(authMiddleware);
@@ -28,7 +25,6 @@ app.use(authMiddleware);
 app.get("/pages/dashboard.html", async (req, res, next) => {
     try {
         const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
-        // If no user found, role is 'none'
         const role = result.rows[0]?.role || "none";
         const loggedInUsers = await usersController.listLoggedInUsers();
         const users = await usersController.listUsers();

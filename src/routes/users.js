@@ -1,7 +1,3 @@
-/**
- * This file provides routes to get info about users (other than the current logged-in user).
- */
-
 const express = require("express");
 const router = express.Router();
 const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
@@ -176,7 +172,7 @@ router.get("/reset-password/:userId", async (req, res) => {
     }
     // Send an email with a password reset link
     const resetToken = utilities.generateRandomToken(128);
-    const resetLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3000";
+    const resetLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
     const resetLink = `${resetLinkUrlBase}/#/login?userId=${userIdNumeric}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
@@ -190,12 +186,10 @@ router.get("/reset-password/:userId", async (req, res) => {
 
 router.get("/security-questions/:resetToken", async (req, res) => {
     const resetToken = req.params.resetToken;
-    // Look up user by reset token
     const userData = await getUserByResetToken(resetToken);
     if (!userData) {
         return res.status(404).json({ error: "Invalid or expired reset token" });
     }
-    // Get security questions for the user
     const securityQuestions = await getSecurityQuestionsForUser(userData.id);
     return res.json({ security_questions: securityQuestions });
 });
@@ -203,7 +197,6 @@ router.get("/security-questions/:resetToken", async (req, res) => {
 router.post("/verify-security-answers/:resetToken", async (req, res) => {
     const resetToken = req.params.resetToken;
     const { securityAnswers, newPassword } = req.body;
-    // Look up user by reset token
     const userData = await getUserByResetToken(resetToken);
     if (!userData) {
         return res.status(404).json({ error: "Invalid or expired reset token" });
@@ -215,7 +208,6 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     }
     try {
         await changePassword(userData.id, newPassword);
-        // Clear the reset token
         await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL WHERE id = $1", [userData.id]);
         return res.json({ message: "Password reset successfully" });
     } catch (error) {

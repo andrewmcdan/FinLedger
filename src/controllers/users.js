@@ -10,11 +10,9 @@ const utilities = require("./../utils/utilities");
 const { sendEmail } = require("./../services/email");
 
 function checkPasswordComplexity(password) {
-    // Length check
     if (password.length < 8) {
         return false;
     }
-    // Uppercase, lowercase, digit, special character check
     const uppercaseRegex = /[A-Z]/;
     const lowercaseRegex = /[a-z]/;
     const digitRegex = /[0-9]/;
@@ -30,16 +28,11 @@ const getUserLoggedInStatus = async (user_id, token) => {
     if (result.rowCount === 0) {
         return false;
     }
-
     if (result.rows[0].logout_at < new Date()) {
         return false;
     }
-
-    // update logout_at to extend session
     await db.query("UPDATE logged_in_users SET logout_at = now() + INTERVAL '1 hour' WHERE user_id = $1 AND token = $2", [user_id, token]);
-
-    // return true if logged in
-    return true; // placeholder
+    return true;
 };
 
 const isAdmin = async (userId, token) => {
@@ -93,7 +86,7 @@ const listLoggedInUsers = async () => {
     const uniqueLoggedInUsersMap = new Map();
     for (const row of loggedInUsersResult.rows) {
         if (row.logout_at < new Date()) {
-            continue; // skip logged out users
+            continue;
         }
         if (!uniqueLoggedInUsersMap.has(row.user_id) || uniqueLoggedInUsersMap.get(row.user_id).login_at < row.login_at) {
             uniqueLoggedInUsersMap.set(row.user_id, row);
@@ -124,16 +117,12 @@ const reinstateUser = async (userId) => {
 };
 
 const changePassword = async (userId, newPassword) => {
-    // Check that password is not url encoded
     if (decodeURIComponent(newPassword) !== newPassword) {
-        // Password is url encoded. Decode it first.
         newPassword = decodeURIComponent(newPassword);
     }
-    // First thing to do is check the password complexity
     if (!checkPasswordComplexity(newPassword)) {
         throw new Error("Password does not meet complexity requirements");
     }
-    // Next we check the password_history table to ensure the new password is not the same as any of the user's past passwords
     const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
     for (const row of pastPasswordsResult.rows) {
         const matchResult = await db.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
