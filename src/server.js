@@ -10,6 +10,7 @@ const logger = require("./utils/logger");
 const { getCallerInfo } = require("./utils/utilities");
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
+const { SECURITY_QUESTIONS } = require("./data/security_questions");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +33,43 @@ app.get("/pages/dashboard.html", async (req, res, next) => {
         res.render("dashboard", { role, loggedInUsers, users, currentUserId });
     } catch (error) {
         next(error);
+    }
+});
+app.get("/pages/public/forgot-password_submit.html", async (req, res, next) => {
+    const emptyQuestions = {
+        security_question_1: "",
+        security_question_2: "",
+        security_question_3: "",
+    };
+    const questionLabelMap = Object.values(SECURITY_QUESTIONS)
+        .flat()
+        .reduce((map, item) => {
+            map[item.value] = item.label;
+            return map;
+        }, {});
+    try {
+        const resetToken = req.query.reset_token;
+        if (!resetToken) {
+            return res.render("public/forgot-password_submit", { security_questions: emptyQuestions, reset_token: "" });
+        }
+        const userData = await usersController.getUserByResetToken(resetToken);
+        if (!userData) {
+            return res.render("public/forgot-password_submit", { security_questions: emptyQuestions, reset_token: "" });
+        }
+        const securityQuestions = await usersController.getSecurityQuestionsForUser(userData.id);
+        const resolvedQuestions = securityQuestions
+            ? {
+                security_question_1: questionLabelMap[securityQuestions.security_question_1] || securityQuestions.security_question_1 || "",
+                security_question_2: questionLabelMap[securityQuestions.security_question_2] || securityQuestions.security_question_2 || "",
+                security_question_3: questionLabelMap[securityQuestions.security_question_3] || securityQuestions.security_question_3 || "",
+            }
+            : emptyQuestions;
+        return res.render("public/forgot-password_submit", {
+            security_questions: resolvedQuestions,
+            reset_token: resetToken,
+        });
+    } catch (error) {
+        return next(error);
     }
 });
 app.use(express.static("web"));

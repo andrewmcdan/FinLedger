@@ -9,6 +9,7 @@ const routes = {
     not_found: { title: "Page Not Found", page: "pages/public/not_found", module: null },
     not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null },
     profile: { title: "Profile", page: "pages/profile", module: "js/pages/profile" },
+    force_password_change: { title: "Change Password", page: "pages/force_password_change", module: "js/pages/force_password_change" },
 };
 
 const DEFAULT_ROUTE = "dashboard";
@@ -130,6 +131,22 @@ async function fetchPageMarkup(pageName) {
         window.location.hash = "#/login";
         return;
     }
+    if (response.status === 403) {
+        let resJson = null;
+        try {
+            resJson = await response.clone().json();
+        } catch (error) {
+            resJson = null;
+        }
+        if (resJson?.error === "TEMP_PASSWORD_CHANGE_REQUIRED") {
+            window.location.hash = "#/force_password_change";
+            return;
+        }
+        if (resJson?.error === "Role not permitted") {
+            window.location.hash = "#/not_authorized";
+            return;
+        }
+    }
     throw new Error(`Unable to load ${pageName}`);
 }
 
@@ -143,6 +160,18 @@ async function loadModule(moduleName) {
         if (!response.ok) {
             if (response.status === 401) {
                 return;
+            }
+            if (response.status === 403) {
+                let resJson = null;
+                try {
+                    resJson = await response.clone().json();
+                } catch (error) {
+                    resJson = null;
+                }
+                if (resJson?.error === "TEMP_PASSWORD_REQUIRED") {
+                    window.location.hash = "#/force_password_change";
+                    return;
+                }
             }
             throw new Error(`Unable to load module ${moduleName}: ${response.status}`);
         }
@@ -182,6 +211,9 @@ async function renderRoute() {
 
     try {
         const markup = await fetchPageMarkup(pageName);
+        if (markup == null) {
+            return;
+        }
         view.innerHTML = markup;
     } catch (error) {
         try {

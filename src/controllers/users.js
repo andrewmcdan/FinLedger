@@ -181,7 +181,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
     // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
     const userIconPath = result.rows[0].user_icon_path;
-    if (profileImage && userIconPath) {
+    if (profileImage && (profileImage != null) && (profileImage !== "") && (profileImage !== "null") && userIconPath) {
         console.log("Moving profile image to permanent location:", profileImage, " to ", userIconPath);
         const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
         const destPath = path.join(__dirname, "../../user-icons/", userIconPath);

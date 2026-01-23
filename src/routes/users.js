@@ -1,10 +1,15 @@
 const express = require("express");
 const router = express.Router();
 const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
+const { SECURITY_QUESTIONS } = require("../data/security_questions");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const { sendEmail } = require("../services/email.js");
 const db = require("../db/db.js");
+
+router.get("/security-questions-list", async (req, res) => {
+    return res.json({ security_questions: SECURITY_QUESTIONS });
+});
 
 router.get("/get-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
@@ -128,6 +133,40 @@ router.post("/changePassword", async (req, res) => {
         return res.json({ message: "Password changed successfully" });
     } catch (error) {
         logger.log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
+        return res.status(500).json({ error: "Failed to change password" });
+    }
+});
+
+router.post("/change-temp-password", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    const { newPassword, securityQuestions } = req.body;
+    if (!newPassword) {
+        return res.status(400).json({ error: "New password is required" });
+    }
+    if (!Array.isArray(securityQuestions) || securityQuestions.length !== 3) {
+        return res.status(400).json({ error: "Exactly three security questions and answers are required" });
+    }
+    for (const entry of securityQuestions) {
+        if (!entry || !entry.question || !entry.answer) {
+            return res.status(400).json({ error: "All security questions and answers are required" });
+        }
+    }
+    const tempResult = await db.query("SELECT temp_password FROM users WHERE id = $1", [requestingUserId]);
+    if (tempResult.rowCount === 0) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    if (!tempResult.rows[0].temp_password) {
+        return res.status(400).json({ error: "Temporary password not required" });
+    }
+    try {
+        await updateSecurityQuestions(requestingUserId, securityQuestions);
+        await changePassword(requestingUserId, newPassword);
+        return res.json({ message: "Password changed successfully" });
+    } catch (error) {
+        logger.log("error", `Error changing temp password for user ID ${requestingUserId}: ${error}`, { function: "change-temp-password" }, utilities.getCallerInfo());
         return res.status(500).json({ error: "Failed to change password" });
     }
 });

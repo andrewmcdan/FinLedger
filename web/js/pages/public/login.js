@@ -1,9 +1,10 @@
-async function replacePageContent(pageName) {
+async function replacePageContent(pageName, query = "") {
     const container = document.querySelector("[data-login-container]");
     if (!container) {
         return;
     }
-    const response = await fetch(`pages/${pageName}.html`);
+    const suffix = query ? (query.startsWith("?") ? query : `?${query}`) : "";
+    const response = await fetch(`pages/${pageName}.html${suffix}`);
     if (!response.ok) {
         throw new Error(`Unable to load ${pageName}`);
     }
@@ -67,6 +68,13 @@ export default function initLogin() {
                     localStorage.setItem("user_id", data.user_id);
                     localStorage.setItem("auth_token", data.token);
                     localStorage.setItem("username", data.username);
+                    const mustChangePassword = data.must_change_password === true;
+                    if (mustChangePassword) {
+                        localStorage.setItem("must_change_password", "true");
+                        window.location.href = "/#/force_password_change";
+                        return;
+                    }
+                    localStorage.removeItem("must_change_password");
                     // Redirect to the main app page or refresh
                     window.location.href = "/#/dashboard";
                 } else {
@@ -93,7 +101,7 @@ export default function initLogin() {
         .then((getUrlParam) => {
             const resetToken = getUrlParam("reset_token");
             if (resetToken) {
-                replacePageContent("public/forgot-password_submit").then(async () => {
+                replacePageContent("public/forgot-password_submit", `reset_token=${encodeURIComponent(resetToken)}`).then(async () => {
                     await newPasswordLogic(resetToken);
                 });
             }
@@ -114,56 +122,26 @@ let newUserLogic = async function () {
         initLogin();
     };
 
-    const SECURITY_QUESTIONS = {
-        1: [
-            { value: "sq_mother_maiden_name", label: "What is your mother's maiden name?" },
-            { value: "sq_first_pet", label: "What was the name of your first pet?" },
-            { value: "sq_first_car", label: "What was the make and model of your first car?" },
-            { value: "sq_birth_city", label: "In which city were you born?" },
-            { value: "sq_elementary_school", label: "What was the name of your elementary school?" },
-            { value: "sq_favorite_teacher", label: "Who was your favorite teacher?" },
-            { value: "sq_childhood_nickname", label: "What was your childhood nickname?" },
-            { value: "sq_first_job", label: "What was your first job?" },
-            { value: "sq_street_grew_up_on", label: "What street did you grow up on?" },
-            { value: "sq_favorite_food", label: "What is your favorite food?" },
-        ],
-        2: [
-            { value: "sq_best_childhood_friend", label: "What is the name of your best childhood friend?" },
-            { value: "sq_childhood_dream_job", label: "What was your childhood dream job?" },
-            { value: "sq_favorite_vacation_spot", label: "Where was your favorite vacation destination?" },
-            { value: "sq_first_concert", label: "What was the first concert you attended?" },
-            { value: "sq_first_sports_team", label: "What was the first sports team you played on?" },
-            { value: "sq_favorite_book", label: "What is the title of your favorite book?" },
-            { value: "sq_favorite_movie", label: "What is your favorite movie?" },
-            { value: "sq_favorite_character", label: "Who was your favorite fictional character as a kid?" },
-            { value: "sq_first_phone_model", label: "What was the model of your first phone?" },
-            { value: "sq_first_video_game", label: "What was the first video game you owned?" },
-        ],
-        3: [
-            { value: "sq_high_school_mascot", label: "What was your high school mascot?" },
-            { value: "sq_high_school_name", label: "What was the name of your high school?" },
-            { value: "sq_first_album", label: "What was the first album you owned?" },
-            { value: "sq_first_instrument", label: "What was the first musical instrument you learned?" },
-            { value: "sq_first_plane_trip", label: "Where did you travel on your first airplane trip?" },
-            { value: "sq_favorite_hobby", label: "What is your favorite hobby?" },
-            { value: "sq_favorite_restaurant", label: "What is the name of your favorite restaurant?" },
-            { value: "sq_favorite_holiday", label: "What is your favorite holiday?" },
-            { value: "sq_first_best_gift", label: "What was the best gift you received as a child?" },
-            { value: "sq_childhood_hero", label: "Who was your childhood hero?" },
-        ],
-    };
     const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
-    selectEls.forEach((selectEl, index) => {
-        if (selectEl) {
-            const group = SECURITY_QUESTIONS[index + 1];
+    try {
+        const response = await fetch("/api/users/security-questions-list");
+        const data = await response.json();
+        const questionGroups = data.security_questions || {};
+        selectEls.forEach((selectEl, index) => {
+            if (!selectEl) {
+                return;
+            }
+            const group = questionGroups[index + 1] || [];
             group.forEach((question) => {
                 const option = document.createElement("option");
                 option.value = question.value;
                 option.textContent = question.label;
                 selectEl.appendChild(option);
             });
-        }
-    });
+        });
+    } catch (error) {
+        console.error("Failed to load security question list:", error);
+    }
 
     const form = document.querySelector("[data-register]");
     if (form) {
@@ -311,36 +289,70 @@ let forgotPasswordLogic = async function () {
 
 let newPasswordLogic = async function (resetToken) {
     setMessage();
-    console.log(resetToken);
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        const response = await fetch("/api/users/security-questions/" + encodeURIComponent(resetToken), {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-            },
-        });
-        const data = await response.json();
-        if (data.error) {
-            setMessage("Failed to load security questions: " + data.error);
-            return;
-        }
+        const questionLabels = [1, 2, 3].map((i) => document.getElementById(`security_question_${i}`));
+        const hasQuestions = questionLabels.every((label) => label && label.textContent && label.textContent.trim().length > 0);
+        if (!hasQuestions) {
+            const response = await fetch("/api/users/security-questions/" + encodeURIComponent(resetToken), {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+            const data = await response.json();
+            if (data.error) {
+                setMessage("Failed to load security questions: " + data.error);
+                return;
+            }
 
-        console.log(data);
-
-        for (var i = 1; i <= 3; i++) {
-            const questionLabel = document.getElementById(`security_question_${i}`);
-            if (questionLabel) {
-                questionLabel.textContent = data.questions[i - 1] || `Question ${i}?`; // Use fetched question or placeholder
+            for (let i = 1; i <= 3; i++) {
+                const questionLabel = document.getElementById(`security_question_${i}`);
+                if (questionLabel) {
+                    const key = `security_question_${i}`;
+                    questionLabel.textContent = data.security_questions?.[key] || `Question ${i}?`;
+                }
             }
         }
 
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            // TODO: Handle password reset submission logic
-            // This should validate the reset token, security question answers, and set the new password.
-            // If successful, show a success message.
-            setMessage("Password has been reset. You can now log in with your new password.");
+            const formData = new FormData(form);
+            const securityAnswers = [
+                formData.get("security_answer_1"),
+                formData.get("security_answer_2"),
+                formData.get("security_answer_3"),
+            ];
+            const newPassword = formData.get("password");
+            const confirmPassword = formData.get("password_confirmation");
+
+            if (newPassword !== confirmPassword) {
+                setMessage("Passwords do not match.");
+                return;
+            }
+
+            fetch("/api/users/verify-security-answers/" + encodeURIComponent(resetToken), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ securityAnswers, newPassword }),
+            })
+                .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok) {
+                        setMessage(data.error || "Password reset failed.");
+                        return;
+                    }
+                    setMessage("Password has been reset. You can now log in with your new password.");
+                    setTimeout(async () => {
+                        const loginUrl = `${window.location.pathname}?reload=${Date.now()}#/login`;
+                        window.location.href = loginUrl;
+                    }, 1500);
+                })
+                .catch((error) => {
+                    setMessage("An error occurred: " + error.message);
+                });
         });
     }
 };

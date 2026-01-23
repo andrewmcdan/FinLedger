@@ -24,6 +24,7 @@ export default function initLogout() {
                     localStorage.removeItem("user_id");
                     localStorage.removeItem("auth_token");
                     localStorage.removeItem("username");
+                    localStorage.removeItem("must_change_password");
                     // Redirect to the login page
                     window.location.href = "/#/login";
                 }
