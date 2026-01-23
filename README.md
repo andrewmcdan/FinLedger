@@ -19,6 +19,7 @@ Make sure PostgreSQL is running with credentials matching `.env`, then:
 
 ```bash
 npm install
+npm run db-init
 npm run dev
 ```
 
@@ -46,6 +47,8 @@ Tests live in `tests/`. Add new test files there as the project grows.
 To run the app in development mode with auto-reloading:
 
 ```bash
+npm install
+npm run db-init
 npm run dev
 ```
 

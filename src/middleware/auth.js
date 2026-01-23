@@ -2,8 +2,8 @@ const { getUserLoggedInStatus } = require("../controllers/users.js");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 
-const non_auth_paths_begin = ["/api/auth/status", "/api/auth/logout", "/public_images", "/js/utils", "/js/app.js", "/js/background", "/css/", "/pages/public", "/js/pages/public"];
-const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html"];
+const non_auth_paths_begin = ["/api/auth/status", "/api/auth/logout", "/public_images", "/js/utils", "/js/app.js", "/js/background", "/css/", "/pages/public", "/js/pages/public", "/api/users/reset-password", "/api/users/security-questions", "/api/users/verify-security-answers"];
+const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html", "/api/users/register_new_user"];
 
 const authMiddleware = async (req, res, next) => {
     // If req is for a public route, skip authentication

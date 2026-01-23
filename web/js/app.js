@@ -8,6 +8,7 @@ const routes = {
     not_logged_in: { title: "Not Logged In", page: "pages/public/not_logged_in", module: null },
     not_found: { title: "Page Not Found", page: "pages/public/not_found", module: null },
     not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null },
+    profile: { title: "Profile", page: "pages/profile", module: "js/pages/profile" },
 };
 
 const DEFAULT_ROUTE = "dashboard";
@@ -19,6 +20,60 @@ if (brandLogo) {
         window.location.hash = `#/${DEFAULT_ROUTE}`;
     });
     brandLogo.style.cursor = "pointer";
+}
+
+function setupProfileMenu() {
+    const menuWrapper = document.querySelector("[data-profile-menu]");
+    if (!menuWrapper) {
+        return;
+    }
+
+    const menuPanel = menuWrapper.querySelector("[data-profile-menu-panel]");
+    const profileButton = menuWrapper.querySelector("[data-user-profile-button]");
+    const profileAction = menuWrapper.querySelector('[data-profile-action="profile"]');
+    const logoutAction = menuWrapper.querySelector('[data-profile-action="logout"]');
+
+    if (!menuPanel || !profileButton) {
+        return;
+    }
+
+    const openMenu = () => {
+        menuWrapper.classList.add("is-open");
+        profileButton.setAttribute("aria-expanded", "true");
+        menuPanel.setAttribute("aria-hidden", "false");
+    };
+
+    const closeMenu = () => {
+        menuWrapper.classList.remove("is-open");
+        profileButton.setAttribute("aria-expanded", "false");
+        menuPanel.setAttribute("aria-hidden", "true");
+    };
+
+    menuWrapper.addEventListener("mouseenter", openMenu);
+    menuWrapper.addEventListener("mouseleave", closeMenu);
+    menuWrapper.addEventListener("focusin", openMenu);
+    menuWrapper.addEventListener("focusout", (event) => {
+        if (!menuWrapper.contains(event.relatedTarget)) {
+            closeMenu();
+        }
+    });
+
+    profileAction?.addEventListener("click", () => {
+        window.location.hash = "#/profile";
+        closeMenu();
+    });
+
+    logoutAction?.addEventListener("click", () => {
+        window.location.hash = "#/logout";
+        closeMenu();
+    });
+
+    window.addEventListener("hashchange", closeMenu);
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeMenu();
+        }
+    });
 }
 
 function getRouteFromHash() {
@@ -87,7 +142,6 @@ async function loadModule(moduleName) {
         const response = await fetchWithAuth(`./${moduleName}.js`);
         if (!response.ok) {
             if (response.status === 401) {
-                window.location.hash = "#/login";
                 return;
             }
             throw new Error(`Unable to load module ${moduleName}: ${response.status}`);
@@ -142,10 +196,22 @@ async function renderRoute() {
     if (profileNameSpan) {
         const username = localStorage.getItem("username") || "None";
         profileNameSpan.textContent = "Profile: " + username;
+        if(username == "None") {
+            // disable the profile hover activation
+            const menuWrapper = document.querySelector("[data-profile-menu]");
+            if (menuWrapper) {
+                menuWrapper.style.pointerEvents = "none";
+            }
+        }else{
+            const menuWrapper = document.querySelector("[data-profile-menu]");
+            if (menuWrapper) {
+                menuWrapper.style.pointerEvents = "auto";
+            }
+        }
     }
 
-    const userIconImg = document.querySelector("[data-user-icon]");
-    if (userIconImg) {
+    const userIconTargets = Array.from(document.querySelectorAll("[data-user-icon], [data-user-icon-menu]"));
+    if (userIconTargets.length) {
         // Use fetch with auth headers to get the user icon
         fetchWithAuth("/images/user-icon.png")
             .then((response) => {
@@ -165,7 +231,9 @@ async function renderRoute() {
             })
             .then((blob) => {
                 const objectURL = URL.createObjectURL(blob);
-                userIconImg.src = objectURL;
+                userIconTargets.forEach((img) => {
+                    img.src = objectURL;
+                });
             })
             .catch((error) => {
                 console.error("Error loading user icon:", error);
@@ -180,6 +248,7 @@ async function renderRoute() {
 
 window.addEventListener("hashchange", renderRoute);
 window.addEventListener("DOMContentLoaded", renderRoute);
+window.addEventListener("DOMContentLoaded", setupProfileMenu);
 
 import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 

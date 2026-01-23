@@ -9,6 +9,22 @@ const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
 const {sendEmail} = require("./../services/email");
 
+function checkPasswordComplexity(password) {
+    // Length check
+    if (password.length < 8) {
+        return false;
+    }
+    // Uppercase, lowercase, digit, special character check
+    const uppercaseRegex = /[A-Z]/;
+    const lowercaseRegex = /[a-z]/;
+    const digitRegex = /[0-9]/;
+    const specialCharRegex = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/;
+    if (!uppercaseRegex.test(password) || !lowercaseRegex.test(password) || !digitRegex.test(password) || !specialCharRegex.test(password)) {
+        return false;
+    }
+    return true;
+}
+
 const getUserLoggedInStatus = async (user_id, token) => {
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
     if (result.rowCount === 0) {
@@ -38,6 +54,22 @@ const isAdmin = async (userId) => {
 
 const getUserById = async (userId) => {
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
+    if (userResult.rowCount === 0) {
+        return null;
+    }
+    return userResult.rows[0];
+};
+
+const getUserByEmail = async (email) => {
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE email = $1", [email]);
+    if (userResult.rowCount === 0) {
+        return null;
+    }
+    return userResult.rows[0];
+}
+
+const getUserByResetToken = async (resetToken) => {
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()", [resetToken]);
     if (userResult.rowCount === 0) {
         return null;
     }
@@ -82,18 +114,14 @@ const suspendUser = async (userId, startDate, durationDays) => {
 };
 
 const changePassword = async (userId, newPassword) => {
-    // First thing to do is check the password complexity
-    // Length check
-    if (newPassword.length < 8) {
-        throw new Error("Password must be at least 8 characters long");
+    // Check that password is not url encoded
+    if (decodeURIComponent(newPassword) !== newPassword) {
+        // Password is url encoded. Decode it first.
+        newPassword = decodeURIComponent(newPassword);
     }
-    // Uppercase, lowercase, digit, special character check
-    const uppercaseRegex = /[A-Z]/;
-    const lowercaseRegex = /[a-z]/;
-    const digitRegex = /[0-9]/;
-    const specialCharRegex = /[!@#$%^&*(),.?":{}|<>]/;
-    if (!uppercaseRegex.test(newPassword) || !lowercaseRegex.test(newPassword) || !digitRegex.test(newPassword) || !specialCharRegex.test(newPassword)) {
-        throw new Error("Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
+    // First thing to do is check the password complexity
+    if (!checkPasswordComplexity(newPassword)) {
+        throw new Error("Password does not meet complexity requirements");
     }
     // Next we check the password_history table to ensure the new password is not the same as any of the user's past passwords
     const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
@@ -163,6 +191,54 @@ const savePasswordToHistory = async (userId, passwordHash) => {
     await db.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
 };
 
+const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
+    // questionsAndAnswers should be an array of objects with 'question' and 'answer' properties
+    // The table has rows like this:   security_question_1 TEXT, security_answer_hash_1 TEXT, security_question_2 TEXT, security_answer_hash_2 TEXT, security_question_3 TEXT, security_answer_hash_3 TEXT,
+    if (questionsAndAnswers.length !== 3) {
+        throw new Error("Exactly three security questions and answers must be provided");
+    }
+    const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')) WHERE id = $7"; 
+    const values = [
+        questionsAndAnswers[0].question,
+        questionsAndAnswers[0].answer,
+        questionsAndAnswers[1].question,
+        questionsAndAnswers[1].answer,
+        questionsAndAnswers[2].question,
+        questionsAndAnswers[2].answer,
+        userId
+    ];
+    await db.query(query, values);
+    logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo());
+};
+
+const getSecurityQuestionsForUser = async (userId) => {
+    const result = await db.query("SELECT security_question_1, security_question_2, security_question_3 FROM users WHERE id = $1", [userId]);
+    if (result.rowCount === 0) {
+        return null;
+    }
+    return {
+        security_question_1: result.rows[0].security_question_1,
+        security_question_2: result.rows[0].security_question_2,
+        security_question_3: result.rows[0].security_question_3
+    };
+};
+
+const verifySecurityAnswers = async (userId, answers) => {
+    // answers should be an array of strings with the answers to the security questions in order
+    if (answers.length !== 3) {
+        throw new Error("Exactly three answers must be provided");
+    }
+    const query = "SELECT 1 FROM users WHERE id = $1 AND security_answer_hash_1 = crypt($2, security_answer_hash_1) AND security_answer_hash_2 = crypt($3, security_answer_hash_2) AND security_answer_hash_3 = crypt($4, security_answer_hash_3)";
+    const values = [
+        userId,
+        answers[0],
+        answers[1],
+        answers[2]
+    ];
+    const result = await db.query(query, values);
+    return result.rowCount > 0;
+};
+
 module.exports = {
     getUserLoggedInStatus,
     isAdmin,
@@ -174,4 +250,9 @@ module.exports = {
     rejectUser,
     suspendUser,
     changePassword,
+    getUserByEmail,
+    updateSecurityQuestions,
+    getSecurityQuestionsForUser,
+    verifySecurityAnswers,
+    getUserByResetToken
 };
