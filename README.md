@@ -8,10 +8,11 @@ FinLedger is a web-based accounting and financial management system with role-ba
 - PostgreSQL (or Docker)
 
 ## Environment
-Copy `.env.example` to `.env` and adjust values as needed.
+Copy `.env.example` to `.env` and `.env.test`, then adjust values as needed. Use `.env` for local/dev and `.env.test` for the test database.
 
 ```bash
 cp .env.example .env
+cp .env.example .env.test
 ```
 
 ## Run locally (without Docker)
@@ -42,6 +43,13 @@ npm test
 ```
 
 Tests live in `tests/`. Add new test files there as the project grows.
+The `test` script uses `.env.test` (which enables the test DB via `DB_TESTING_ENABLED=true`).
+
+To initialize the test database:
+
+```bash
+npm run db-init:test
+```
 
 ## Development
 To run the app in development mode with auto-reloading:

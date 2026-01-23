@@ -66,9 +66,26 @@ function applyTemplate(sql) {
 
 // Create a new Postgres client using environment variables. Sane defaults are provided.
 function getClient() {
-    if (process.env.DATABASE_URL) {
+    const argv = new Set(process.argv);
+    const useTestDb = argv.has("--db-test") || argv.has("--test-db") || process.env.DB_TESTING_ENABLED === "true";
+    if (useTestDb && process.env.DATABASE_URL_TEST) {
+        logInfo("Using DATABASE_URL_TEST for Postgres connection (test DB).");
+        return new Client({ connectionString: process.env.DATABASE_URL_TEST });
+    }
+    if (!useTestDb && process.env.DATABASE_URL) {
         logInfo("Using DATABASE_URL for Postgres connection.");
         return new Client({ connectionString: process.env.DATABASE_URL });
+    }
+
+    if (useTestDb) {
+        logInfo("Using POSTGRES_TEST_* environment variables for Postgres connection (test DB).");
+        return new Client({
+            host: process.env.POSTGRES_TEST_HOST || "localhost",
+            port: Number(process.env.POSTGRES_TEST_PORT || 5433),
+            user: process.env.POSTGRES_TEST_USER || "finledger_test",
+            password: process.env.POSTGRES_TEST_PASSWORD || "finledger_test",
+            database: process.env.POSTGRES_TEST_DB || "finledger_test",
+        });
     }
 
     logInfo("Using POSTGRES_* environment variables for Postgres connection.");
@@ -79,6 +96,53 @@ function getClient() {
         password: process.env.POSTGRES_PASSWORD || "finledger",
         database: process.env.POSTGRES_DB || "finledger",
     });
+}
+
+function getAdminClient() {
+    const argv = new Set(process.argv);
+    const useTestDb = argv.has("--db-test") || argv.has("--test-db") || process.env.DB_TESTING_ENABLED === "true";
+    if (useTestDb) {
+        return new Client({
+            host: process.env.POSTGRES_TEST_HOST || "localhost",
+            port: Number(process.env.POSTGRES_TEST_PORT || 5433),
+            user: process.env.POSTGRES_TEST_USER || "finledger_test",
+            password: process.env.POSTGRES_TEST_PASSWORD || "finledger_test",
+            database: process.env.POSTGRES_TEST_ADMIN_DB || "postgres",
+        });
+    }
+    return new Client({
+        host: process.env.POSTGRES_HOST || "localhost",
+        port: Number(process.env.POSTGRES_PORT || 5432),
+        user: process.env.POSTGRES_USER || "finledger",
+        password: process.env.POSTGRES_PASSWORD || "finledger",
+        database: process.env.POSTGRES_ADMIN_DB || "postgres",
+    });
+}
+
+function getTargetDbName() {
+    const argv = new Set(process.argv);
+    const useTestDb = argv.has("--db-test") || argv.has("--test-db") || process.env.DB_TESTING_ENABLED === "true";
+    if (useTestDb) {
+        return process.env.POSTGRES_TEST_DB || "finledger_test";
+    }
+    return process.env.POSTGRES_DB || "finledger";
+}
+
+async function ensureDatabaseExists() {
+    const targetDb = getTargetDbName();
+    const adminClient = getAdminClient();
+    try {
+        await adminClient.connect();
+        const result = await adminClient.query("SELECT 1 FROM pg_database WHERE datname = $1", [targetDb]);
+        if (result.rowCount === 0) {
+            logInfo(`Database ${targetDb} not found. Creating...`);
+            await adminClient.query(`CREATE DATABASE "${targetDb}"`);
+        } else {
+            logInfo(`Database ${targetDb} already exists.`);
+        }
+    } finally {
+        await adminClient.end();
+    }
 }
 
 async function dirExists(dir) {
@@ -166,6 +230,7 @@ async function run() {
         logInfo(`Base SQL files: ${sqlFiles.join(", ")}`);
     }
 
+    await ensureDatabaseExists();
     const client = getClient();
     try {
         await client.connect();

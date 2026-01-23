@@ -39,24 +39,6 @@ app.use("/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/images", imageRoutes);
 
-setInterval(async () => {
-    try {
-        await usersController.logoutInactiveUsers();
-        await usersController.unsuspendExpiredSuspensions();
-    } catch (error) {
-        logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
-    }
-}, 10 * 60 * 1000); // every 10 minutes
-
-setInterval(async () => {
-    try {
-        await usersController.sendPasswordExpiryWarnings();
-        await usersController.suspendUsersWithExpiredPasswords();
-    } catch (error) {
-        logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
-    }
-}, 60 * 60 * 1000); // every hour
-
 // This if statement ensures the server only starts if this file is run directly.
 // This allows the server to be imported without starting it, which is useful for testing.
 if (require.main === module) {
@@ -64,6 +46,30 @@ if (require.main === module) {
         logger.log("info", `Server listening on port ${PORT}`, { express: "listening" }, getCallerInfo());
         logger.log("info", `Visit http://localhost:${PORT}`, { express: "listening" }, getCallerInfo());
     });
+
+    setInterval(
+        async () => {
+            try {
+                await usersController.logoutInactiveUsers();
+                await usersController.unsuspendExpiredSuspensions();
+            } catch (error) {
+                logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
+            }
+        },
+        10 * 60 * 1000,
+    ); // every 10 minutes
+
+    setInterval(
+        async () => {
+            try {
+                await usersController.sendPasswordExpiryWarnings();
+                await usersController.suspendUsersWithExpiredPasswords();
+            } catch (error) {
+                logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
+            }
+        },
+        60 * 60 * 1000,
+    ); // every hour
 }
 
 // Export the app for testing purposes
