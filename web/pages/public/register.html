@@ -8,13 +8,26 @@
             <label for="email">Email</label>
             <input id="email" name="email" type="email" autocomplete="email" required />
         </div>
-        <div class="field">
+        <div class="field password-field">
             <label for="password">Password</label>
             <input id="password" name="password" type="password" autocomplete="current-password" required />
+            <div class="password_validation_popup" data-password-requirements>
+                <h2>Password Requirements</h2>
+                <ul>
+                    <li id="length" class="invalid">At least 8 characters</li>
+                    <li id="uppercase" class="invalid">At least one uppercase letter (A-Z)</li>
+                    <li id="lowercase" class="invalid">At least one lowercase letter (a-z)</li>
+                    <li id="number" class="invalid">At least one number (0-9)</li>
+                    <li id="special" class="invalid">At least one special character</li>
+                </ul>
+            </div>
         </div>
-        <div class="field">
+        <div class="field password-field">
             <label for="password_confirmation">Confirm Password</label>
             <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="current-password" required />
+            <div class="password_validation_popup hidden" data-password-match>
+                <h2>Passwords do not match</h2>
+            </div>
         </div>
         <div class="field">
             <label for="first_name">First Name</label>
@@ -47,24 +60,20 @@
                 <option value="" disabled selected>Select a security question</option>
             </select>
         </div>
-
         <div class="field">
             <label for="security_answer_1">Security Answer 1</label>
             <input id="security_answer_1" name="security_answer_1" type="text" required />
         </div>
-
         <div class="field">
             <label for="security_question_2">Security Question 2</label>
             <select id="security_question_2" name="security_question_2" required>
                 <option value="" disabled selected>Select a security question</option>
             </select>
         </div>
-
         <div class="field">
             <label for="security_answer_2">Security Answer 2</label>
             <input id="security_answer_2" name="security_answer_2" type="text" required />
         </div>
-
         <div class="field">
             <label for="security_question_3">Security Question 3</label>
             <select id="security_question_3" name="security_question_3" required>

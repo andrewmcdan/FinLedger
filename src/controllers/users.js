@@ -8,7 +8,22 @@ const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
 const {sendEmail} = require("./../services/email");
-const { updateLoginLogoutButton } = require("../../web/js/utils/login_logout_button");
+
+function checkPasswordComplexity(password) {
+    // Length check
+    if (password.length < 8) {
+        return false;
+    }
+    // Uppercase, lowercase, digit, special character check
+    const uppercaseRegex = /[A-Z]/;
+    const lowercaseRegex = /[a-z]/;
+    const digitRegex = /[0-9]/;
+    const specialCharRegex = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/;
+    if (!uppercaseRegex.test(password) || !lowercaseRegex.test(password) || !digitRegex.test(password) || !specialCharRegex.test(password)) {
+        return false;
+    }
+    return true;
+}
 
 const getUserLoggedInStatus = async (user_id, token) => {
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
@@ -99,18 +114,14 @@ const suspendUser = async (userId, startDate, durationDays) => {
 };
 
 const changePassword = async (userId, newPassword) => {
-    // First thing to do is check the password complexity
-    // Length check
-    if (newPassword.length < 8) {
-        throw new Error("Password must be at least 8 characters long");
+    // Check that password is not url encoded
+    if (decodeURIComponent(newPassword) !== newPassword) {
+        // Password is url encoded. Decode it first.
+        newPassword = decodeURIComponent(newPassword);
     }
-    // Uppercase, lowercase, digit, special character check
-    const uppercaseRegex = /[A-Z]/;
-    const lowercaseRegex = /[a-z]/;
-    const digitRegex = /[0-9]/;
-    const specialCharRegex = /[!@#$%^&*(),.?":{}|<>]/;
-    if (!uppercaseRegex.test(newPassword) || !lowercaseRegex.test(newPassword) || !digitRegex.test(newPassword) || !specialCharRegex.test(newPassword)) {
-        throw new Error("Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
+    // First thing to do is check the password complexity
+    if (!checkPasswordComplexity(newPassword)) {
+        throw new Error("Password does not meet complexity requirements");
     }
     // Next we check the password_history table to ensure the new password is not the same as any of the user's past passwords
     const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);

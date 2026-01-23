@@ -68,7 +68,7 @@ router.get("/approve-user/:userId", async (req, res) => {
     }
     await approveUser(userIdToApprove);
     logger.log("info", `User ID ${userIdToApprove} approved by admin user ID ${requestingUserId}`, { function: "approve-user" }, utilities.getCallerInfo());
-    const emailResult = await sendEmail(userData.email, "Your FinLedger Account Has Been Approved", `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by our administration team. You can now log in and start using our services.\n\nBest regards,\nThe FinLedger Team\n\n`);
+    const emailResult = await sendEmail(userData.email, "Your FinLedger Account Has Been Approved", `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by our administration team. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nBest regards,\nThe FinLedger Team\n\n`);
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
         logger.log("warn", `Failed to send approval email to ${userData.email} for user ID ${userIdToApprove}`, { function: "approve-user" }, utilities.getCallerInfo());
     }
