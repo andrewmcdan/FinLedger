@@ -114,6 +114,57 @@ let newUserLogic = async function () {
         initLogin();
     };
 
+    const SECURITY_QUESTION_GROUPS = {
+        1: [
+            { value: "sq_mother_maiden_name", label: "What is your mother's maiden name?" },
+            { value: "sq_first_pet", label: "What was the name of your first pet?" },
+            { value: "sq_first_car", label: "What was the make and model of your first car?" },
+            { value: "sq_birth_city", label: "In which city were you born?" },
+            { value: "sq_elementary_school", label: "What was the name of your elementary school?" },
+            { value: "sq_favorite_teacher", label: "Who was your favorite teacher?" },
+            { value: "sq_childhood_nickname", label: "What was your childhood nickname?" },
+            { value: "sq_first_job", label: "What was your first job?" },
+            { value: "sq_street_grew_up_on", label: "What street did you grow up on?" },
+            { value: "sq_favorite_food", label: "What is your favorite food?" },
+        ],
+        2: [
+            { value: "sq_best_childhood_friend", label: "What is the name of your best childhood friend?" },
+            { value: "sq_childhood_dream_job", label: "What was your childhood dream job?" },
+            { value: "sq_favorite_vacation_spot", label: "Where was your favorite vacation destination?" },
+            { value: "sq_first_concert", label: "What was the first concert you attended?" },
+            { value: "sq_first_sports_team", label: "What was the first sports team you played on?" },
+            { value: "sq_favorite_book", label: "What is the title of your favorite book?" },
+            { value: "sq_favorite_movie", label: "What is your favorite movie?" },
+            { value: "sq_favorite_character", label: "Who was your favorite fictional character as a kid?" },
+            { value: "sq_first_phone_model", label: "What was the model of your first phone?" },
+            { value: "sq_first_video_game", label: "What was the first video game you owned?" },
+        ],
+        3: [
+            { value: "sq_high_school_mascot", label: "What was your high school mascot?" },
+            { value: "sq_high_school_name", label: "What was the name of your high school?" },
+            { value: "sq_first_album", label: "What was the first album you owned?" },
+            { value: "sq_first_instrument", label: "What was the first musical instrument you learned?" },
+            { value: "sq_first_plane_trip", label: "Where did you travel on your first airplane trip?" },
+            { value: "sq_favorite_hobby", label: "What is your favorite hobby?" },
+            { value: "sq_favorite_restaurant", label: "What is the name of your favorite restaurant?" },
+            { value: "sq_favorite_holiday", label: "What is your favorite holiday?" },
+            { value: "sq_first_best_gift", label: "What was the best gift you received as a child?" },
+            { value: "sq_childhood_hero", label: "Who was your childhood hero?" },
+        ],
+    };
+    const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
+    selectEls.forEach((selectEl, index) => {
+        if (selectEl) {
+            const group = SECURITY_QUESTION_GROUPS[index + 1];
+            group.forEach((question) => {
+                const option = document.createElement("option");
+                option.value = question.value;
+                option.textContent = question.label;
+                selectEl.appendChild(option);
+            });
+        }
+    });
+
     const form = document.querySelector("[data-register]");
     if (form) {
         form.addEventListener("submit", (event) => {
@@ -126,12 +177,18 @@ let newUserLogic = async function () {
             const address = formData.get("address");
             const date_of_birth = formData.get("date_of_birth");
             const role = formData.get("role");
+            const security_question_1 = formData.get("security_question_1");
+            const security_answer_1 = formData.get("security_answer_1");
+            const security_question_2 = formData.get("security_question_2");
+            const security_answer_2 = formData.get("security_answer_2");
+            const security_question_3 = formData.get("security_question_3");
+            const security_answer_3 = formData.get("security_answer_3");
             fetch("/api/users/register_new_user", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ first_name, last_name, email, password, address, date_of_birth, role }),
+                body: JSON.stringify({ first_name, last_name, email, password, address, date_of_birth, role, security_question_1, security_answer_1, security_question_2, security_answer_2, security_question_3, security_answer_3 }),
             })
                 .then((response) => response.json())
                 .then((data) => {
@@ -139,7 +196,7 @@ let newUserLogic = async function () {
                     form.reset();
                     if (data.user) {
                         alert("Registration successful! Check your email for further instructions. Redirecting to login page...");
-                        setTimeout(async() => {
+                        setTimeout(async () => {
                             // After a short delay, go back to login page
                             await replacePageContent("public/login");
                             initLogin();
@@ -153,7 +210,6 @@ let newUserLogic = async function () {
                     form.reset();
                     setMessage("An error occurred: " + error.message);
                 });
-
         });
     }
 };
@@ -173,10 +229,25 @@ let forgotPasswordLogic = async function () {
     if (form) {
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            // TODO: Handle password reset logic
-            // This should check that the email or user ID exists and then send a reset token via email.
-            // If the operation is not successful, display an error message.
-            setMessage("Email or User ID submitted. Check your email for further instructions.");
+            const formData = new FormData(form);
+            const email_or_user_id = formData.get("email_or_user_id");
+            fetch("/api/users/reset-password/" + encodeURIComponent(email_or_user_id), {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.message) {
+                        setMessage(data.message);
+                    } else {
+                        setMessage("Password reset request failed: " + (data.error || "Unknown error"));
+                    }
+                })
+                .catch((error) => {
+                    setMessage("An error occurred: " + error.message);
+                });
         });
     }
 };
@@ -186,13 +257,25 @@ let newPasswordLogic = async function (resetToken) {
     console.log(resetToken);
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        // load security question via API using the reset token. This should fail if the reset token is invalid or expired.
-        // In the case of failure, show an error message and do not allow submission.
-        // For now, we'll use a placeholder
+        // load security question via /api/users/security-questions/:resetToken API
+        const response = await fetch("/api/users/security-questions/" + encodeURIComponent(resetToken), {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+            },
+        });
+        const data = await response.json();
+        if (data.error) {
+            setMessage("Failed to load security questions: " + data.error);
+            return;
+        }
+
+        console.log(data);
+
         for (var i = 1; i <= 3; i++) {
             const questionLabel = document.getElementById(`security_question_${i}`);
             if (questionLabel) {
-                questionLabel.textContent = `Question ${i}?`; // Placeholder question
+                questionLabel.textContent = data.questions[i - 1] || `Question ${i}?`; // Use fetched question or placeholder
             }
         }
 

@@ -8,6 +8,7 @@ const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
 const {sendEmail} = require("./../services/email");
+const { updateLoginLogoutButton } = require("../../web/js/utils/login_logout_button");
 
 const getUserLoggedInStatus = async (user_id, token) => {
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
@@ -38,6 +39,22 @@ const isAdmin = async (userId) => {
 
 const getUserById = async (userId) => {
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
+    if (userResult.rowCount === 0) {
+        return null;
+    }
+    return userResult.rows[0];
+};
+
+const getUserByEmail = async (email) => {
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE email = $1", [email]);
+    if (userResult.rowCount === 0) {
+        return null;
+    }
+    return userResult.rows[0];
+}
+
+const getUserByResetToken = async (resetToken) => {
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()", [resetToken]);
     if (userResult.rowCount === 0) {
         return null;
     }
@@ -163,6 +180,54 @@ const savePasswordToHistory = async (userId, passwordHash) => {
     await db.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
 };
 
+const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
+    // questionsAndAnswers should be an array of objects with 'question' and 'answer' properties
+    // The table has rows like this:   security_question_1 TEXT, security_answer_hash_1 TEXT, security_question_2 TEXT, security_answer_hash_2 TEXT, security_question_3 TEXT, security_answer_hash_3 TEXT,
+    if (questionsAndAnswers.length !== 3) {
+        throw new Error("Exactly three security questions and answers must be provided");
+    }
+    const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')) WHERE id = $7"; 
+    const values = [
+        questionsAndAnswers[0].question,
+        questionsAndAnswers[0].answer,
+        questionsAndAnswers[1].question,
+        questionsAndAnswers[1].answer,
+        questionsAndAnswers[2].question,
+        questionsAndAnswers[2].answer,
+        userId
+    ];
+    await db.query(query, values);
+    logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo());
+};
+
+const getSecurityQuestionsForUser = async (userId) => {
+    const result = await db.query("SELECT security_question_1, security_question_2, security_question_3 FROM users WHERE id = $1", [userId]);
+    if (result.rowCount === 0) {
+        return null;
+    }
+    return {
+        security_question_1: result.rows[0].security_question_1,
+        security_question_2: result.rows[0].security_question_2,
+        security_question_3: result.rows[0].security_question_3
+    };
+};
+
+const verifySecurityAnswers = async (userId, answers) => {
+    // answers should be an array of strings with the answers to the security questions in order
+    if (answers.length !== 3) {
+        throw new Error("Exactly three answers must be provided");
+    }
+    const query = "SELECT 1 FROM users WHERE id = $1 AND security_answer_hash_1 = crypt($2, security_answer_hash_1) AND security_answer_hash_2 = crypt($3, security_answer_hash_2) AND security_answer_hash_3 = crypt($4, security_answer_hash_3)";
+    const values = [
+        userId,
+        answers[0],
+        answers[1],
+        answers[2]
+    ];
+    const result = await db.query(query, values);
+    return result.rowCount > 0;
+};
+
 module.exports = {
     getUserLoggedInStatus,
     isAdmin,
@@ -174,4 +239,9 @@ module.exports = {
     rejectUser,
     suspendUser,
     changePassword,
+    getUserByEmail,
+    updateSecurityQuestions,
+    getSecurityQuestionsForUser,
+    verifySecurityAnswers,
+    getUserByResetToken
 };
