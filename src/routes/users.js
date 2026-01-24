@@ -128,7 +128,7 @@ router.get("/approve-user/:userId", async (req, res) => {
     logger.log("info", `User ID ${userIdToApprove} approved by admin user ID ${requestingUserId}`, { function: "approve-user" }, utilities.getCallerInfo());
     const loginLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
     const loginLink = `${loginLinkUrlBase}/#/login`;
-    const emailResult = await sendEmail(userData.email, "Your FinLedger Account Has Been Approved", `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by our administration team. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nLogin here: ${loginLink}\n\nBest regards,\nThe FinLedger Team\n\n`);
+    const emailResult = await sendEmail(userData.email, "Your FinLedger Account Has Been Approved", `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by an administrator. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nLogin here: ${loginLink}\n\nBest regards,\nThe FinLedger Team\n\n`);
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
         logger.log("warn", `Failed to send approval email to ${userData.email} for user ID ${userIdToApprove}`, { function: "approve-user" }, utilities.getCallerInfo());
     }
@@ -482,7 +482,6 @@ router.post("/update-user-field", async (req, res) => {
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const { user_id, field, value } = req.body;
-    console.log({user_id, field, value});
     const userId = user_id;
     const fieldName = field;
     const newValue = value;
@@ -490,7 +489,7 @@ router.post("/update-user-field", async (req, res) => {
     if (!userData) {
         return res.status(404).json({ error: "User not found" });
     }
-    const allowedFields = new Set(["fullname", "first_name", "last_name", "email", "role", "address", "date_of_birth", "last_login_at", "password_expires_at", "suspension_start_at", "suspension_end_at", "temp_password"]);
+    const allowedFields = new Set(["fullname", "first_name", "last_name", "email", "role", "status", "address", "date_of_birth", "last_login_at", "password_expires_at", "suspension_start_at", "suspension_end_at", "temp_password"]);
     if (!allowedFields.has(fieldName)) {
         return res.status(400).json({ error: "Field cannot be updated" });
     }

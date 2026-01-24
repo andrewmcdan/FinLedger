@@ -167,12 +167,17 @@ const updateUserProfile = async (userId, profileUpdates) => {
         email: profileUpdates.email,
         address: profileUpdates.address,
         user_icon_path: profileUpdates.user_icon_path,
+        role: profileUpdates.role,
+        status: profileUpdates.status,
+        suspension_start_at: profileUpdates.suspension_start_at,
+        suspension_end_at: profileUpdates.suspension_end_at,
     };
 
     const updates = [];
     const values = [];
     Object.entries(fields).forEach(([key, value]) => {
         if (value === undefined) {
+            logger.log("debug", `Skipping undefined profile field ${key} for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo());
             return;
         }
         updates.push(`${key} = $${values.length + 1}`);
@@ -180,6 +185,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
     });
 
     if (!updates.length) {
+        logger.log("info", `No profile updates provided for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo());
         return null;
     }
 
@@ -187,7 +193,12 @@ const updateUserProfile = async (userId, profileUpdates) => {
     updates.push(`updated_at = now()`);
     const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, email, first_name, last_name, address, user_icon_path`;
     const result = await db.query(query, values);
-    return result.rows[0] || null;
+    if( result.rowCount === 0) {
+        logger.log("warn", `No user found with ID ${userId} to update profile`, { function: "updateUserProfile" }, utilities.getCallerInfo());
+        return null;
+    }
+    logger.log("info", `Updated profile for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo());
+    return result.rows[0];
 };
 
 /**

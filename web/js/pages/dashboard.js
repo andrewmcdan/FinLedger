@@ -67,24 +67,18 @@ export default function initDashboard() {
         const selector = `[data-${column}-${user.id}]`;
         const cell = document.querySelector(selector);
         if (cell) {
-            // if col is fullname, construct from first and last name
             let value = column === "fullname" ? `${user.first_name} ${user.last_name}` : user[column];
-            console.log("value", column, value);
-
             const handleClick = () => {
-                cell.removeEventListener("click", () => {});
-                // if date column, replace with date input
+                cell.removeEventListener("click", handleClick);
                 if (isDate) {
                     cell.innerHTML = `<input type="datetime-local" value="${value ? new Date(value).toISOString().slice(0, 16) : ""}" data-input-${column}-${user.id} />`;
                 } else if (column === "role") {
-                    // if role, replace with select
                     cell.innerHTML = `<select data-input-${column}-${user.id}>
                                 <option value="administrator" ${value === "administrator" ? "selected" : ""}>Administrator</option>
                                 <option value="manager" ${value === "manager" ? "selected" : ""}>Manager</option>
                                 <option value="accountant" ${value === "accountant" ? "selected" : ""}>Accountant</option>
                             </select>`;
                 } else if (column === "status") {
-                    // if status, replace with select: 'pending', 'active', 'suspended', 'deactivated', 'rejected'
                     cell.innerHTML = `<select data-input-${column}-${user.id}>
                                 <option value="active" ${value === "active" ? "selected" : ""}>Active</option>
                                 <option value="pending" ${value === "pending" ? "selected" : ""}>Pending</option>
@@ -93,7 +87,6 @@ export default function initDashboard() {
                                 <option value="rejected" ${value === "rejected" ? "selected" : ""}>Rejected</option>
                             </select>`;
                 } else {
-                    // else replace with text input
                     cell.innerHTML = `<input type="text" value="${value || ""}" data-input-${column}-${user.id} />`;
                 }
                 const inputEl = document.querySelector(`[data-input-${column}-${user.id}]`);
@@ -131,8 +124,8 @@ export default function initDashboard() {
                         inputEl.blur();
                     }
                 });
-                inputEl.addEventListener("click", (e) => {
-                    e.stopPropagation();
+                inputEl.addEventListener("click", (event) => {
+                    event.stopPropagation();
                 });
             };
             cell.addEventListener("click", handleClick);
