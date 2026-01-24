@@ -1,6 +1,7 @@
 :root {
     --bg: #063b12;
     --bg-deep: #04280c;
+    --surface-soft: rgba(255, 255, 255, 0.253);
     --surface: rgba(255, 255, 255, 0.536);
     --surface-strong: #ffffff;
     --ink: #084e17;

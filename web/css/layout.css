@@ -189,6 +189,11 @@
     margin: 0;
     font-size: 1.8rem;
 }
+.page-header {
+    background: var(--surface-soft);
+    padding: 1.25rem 1.5rem;
+    border-radius: 14px;
+}
 
 .page-header p {
     margin: 0.25rem 0 0;
