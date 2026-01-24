@@ -78,6 +78,36 @@ router.get("/get-logged-in-users", async (req, res) => {
     return res.json({ logged_in_users: loggedInUsers });
 });
 
+router.post("/email-user", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const { username, subject, message } = req.body || {};
+    if (!username || !subject || !message) {
+        return res.status(400).json({ error: "Username, subject, and message are required" });
+    }
+    try {
+        const userResult = await db.query("SELECT email, first_name FROM users WHERE username = $1", [username]);
+        if (userResult.rowCount === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        const user = userResult.rows[0];
+        const emailBody = `Dear ${user.first_name || username},\n\n${message}\n\nBest regards,\nFinLedger Team`;
+        const emailResult = await sendEmail(user.email, subject, emailBody);
+        if (!emailResult.accepted || emailResult.accepted.length === 0) {
+            logger.log("warn", `Failed to send email to ${user.email} for username ${username}`, { function: "email-user" }, utilities.getCallerInfo());
+        }
+        return res.json({ message: "Email sent successfully" });
+    } catch (error) {
+        logger.log("error", `Error sending email to username ${username}: ${error}`, { function: "email-user" }, utilities.getCallerInfo());
+        return res.status(500).json({ error: "Failed to send email" });
+    }
+});
+
 router.get("/approve-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
