@@ -8,6 +8,13 @@ This page displays the user's profile information and allows them to update thei
     </header>
     <div class="grid">
         <div class="card stack">
+            <h2>Profile Image</h2>
+            <div class="profile-image-container">
+                <img data-profile-user-icon alt="Profile image" />
+            </div>
+            <p class="meta">Use the "Personal Information" form to change your profile image.</p>
+        </div>
+        <div class="card stack">
             <h2>Personal Information</h2>
             <p class="meta">Your role: <strong><%= user.role %></strong></p>
             <form id="profile-form" class="stack">

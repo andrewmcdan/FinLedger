@@ -6,6 +6,31 @@ export default function initProfile() {
         User_id: `${localStorage.getItem("user_id") || ""}`,
     });
 
+    const profileImage = document.querySelector("[data-profile-user-icon]");
+    if (profileImage) {
+        fetch("/images/user-icon.png", { headers: authHeaders() })
+            .then((response) => {
+                if (response.ok) {
+                    return response.blob();
+                }
+                if (response.status === 401) {
+                    return fetch("/public_images/default.png").then((res) => {
+                        if (res.ok) {
+                            return res.blob();
+                        }
+                        throw new Error("Failed to load default user icon");
+                    });
+                }
+                throw new Error("Failed to load user icon");
+            })
+            .then((blob) => {
+                profileImage.src = URL.createObjectURL(blob);
+            })
+            .catch((error) => {
+                console.error("Error loading user icon:", error);
+            });
+    }
+
     if (selectEls.some(Boolean)) {
         fetch("/api/users/security-questions-list", { headers: authHeaders() })
             .then((response) => response.json())

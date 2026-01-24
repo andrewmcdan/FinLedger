@@ -348,8 +348,13 @@
                 <h2>Email User</h2>
                 <form id="email-user-form" class="stack">
                     <div class="field">
-                        <label for="username">Username</label>
-                        <input type="text" id="username" name="username" required>
+                        <label for="email_username">To</label>
+                        <select id="email_username" name="username" required>
+                            <option value="" disabled selected>Select a user</option>
+                            <% users.forEach(user => { %>
+                            <option value="<%= user.username %>"><%= user.username %></option>
+                            <% }); %>
+                        </select>
                     </div>
                     <div class="field">
                         <label for="subject">Subject</label>
