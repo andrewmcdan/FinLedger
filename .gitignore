@@ -144,3 +144,4 @@ user-icons/*
 user-docs/*
 
 logs/
+.VSCodeCounter/
