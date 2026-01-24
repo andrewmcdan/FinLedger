@@ -98,22 +98,22 @@ const listLoggedInUsers = async () => {
 
 const approveUser = async (userId) => {
     logger.log("info", `Approving user with ID ${userId}`, { function: "approveUser" }, utilities.getCallerInfo());
-    await db.query("UPDATE users SET status = 'active' WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'active', updated_at = now() WHERE id = $1", [userId]);
 };
 
 const rejectUser = async (userId) => {
     logger.log("info", `Rejecting user with ID ${userId}`, { function: "rejectUser" }, utilities.getCallerInfo());
-    await db.query("UPDATE users SET status = 'rejected' WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'rejected', updated_at = now() WHERE id = $1", [userId]);
 };
 
 const suspendUser = async (userId, suspensionStart, suspensionEnd) => {
     logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo());
-    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended' WHERE id = $3", [suspensionStart, suspensionEnd, userId]);
+    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended', updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId]);
 };
 
 const reinstateUser = async (userId) => {
     logger.log("info", `Reinstating user with ID ${userId}`, { function: "reinstateUser" }, utilities.getCallerInfo());
-    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE id = $1", [userId]);
 };
 
 const changePassword = async (userId, newPassword) => {
@@ -131,8 +131,63 @@ const changePassword = async (userId, newPassword) => {
         }
     }
     logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
-    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days' WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
+    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
     await savePasswordToHistory(userId, result.rows[0].password_hash);
+};
+
+const verifyCurrentPassword = async (userId, currentPassword) => {
+    const result = await db.query("SELECT 1 FROM users WHERE id = $1 AND password_hash = crypt($2, password_hash)", [userId, currentPassword]);
+    return result.rowCount > 0;
+};
+
+const changePasswordWithCurrentPassword = async (userId, currentPassword, newPassword) => {
+    const verified = await verifyCurrentPassword(userId, currentPassword);
+    if (!verified) {
+        const error = new Error("Current password is incorrect");
+        error.code = "INVALID_CURRENT_PASSWORD";
+        throw error;
+    }
+    await changePassword(userId, newPassword);
+};
+
+const updateSecurityQuestionsWithCurrentPassword = async (userId, currentPassword, securityQuestions) => {
+    const verified = await verifyCurrentPassword(userId, currentPassword);
+    if (!verified) {
+        const error = new Error("Current password is incorrect");
+        error.code = "INVALID_CURRENT_PASSWORD";
+        throw error;
+    }
+    await updateSecurityQuestions(userId, securityQuestions);
+};
+
+const updateUserProfile = async (userId, profileUpdates) => {
+    const fields = {
+        first_name: profileUpdates.first_name,
+        last_name: profileUpdates.last_name,
+        email: profileUpdates.email,
+        address: profileUpdates.address,
+        user_icon_path: profileUpdates.user_icon_path,
+    };
+
+    const updates = [];
+    const values = [];
+    Object.entries(fields).forEach(([key, value]) => {
+        if (value === undefined) {
+            return;
+        }
+        updates.push(`${key} = $${values.length + 1}`);
+        values.push(value);
+    });
+
+    if (!updates.length) {
+        return null;
+    }
+
+    values.push(userId);
+    updates.push(`updated_at = now()`);
+    const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, email, first_name, last_name, address, user_icon_path`;
+    const result = await db.query(query, values);
+    return result.rows[0] || null;
 };
 
 /**
@@ -181,7 +236,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
     // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
     const userIconPath = result.rows[0].user_icon_path;
-    if (profileImage && userIconPath) {
+    if (profileImage && (profileImage != null) && (profileImage !== "") && (profileImage !== "null") && userIconPath) {
         console.log("Moving profile image to permanent location:", profileImage, " to ", userIconPath);
         const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
         const destPath = path.join(__dirname, "../../user-icons/", userIconPath);
@@ -206,7 +261,7 @@ const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
     if (questionsAndAnswers.length !== 3) {
         throw new Error("Exactly three security questions and answers must be provided");
     }
-    const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')) WHERE id = $7";
+    const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')), updated_at = now() WHERE id = $7";
     const values = [questionsAndAnswers[0].question, questionsAndAnswers[0].answer, questionsAndAnswers[1].question, questionsAndAnswers[1].answer, questionsAndAnswers[2].question, questionsAndAnswers[2].answer, userId];
     await db.query(query, values);
     logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo());
@@ -241,7 +296,7 @@ const logoutInactiveUsers = async () => {
 };
 
 const unsuspendExpiredSuspensions = async () => {
-    const result = await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL WHERE suspension_end_at < now() AND status = 'suspended'");
+    const result = await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE suspension_end_at < now() AND status = 'suspended'");
     logger.log("info", "Unsuspended users with expired suspensions: " + result.rowCount, { function: "unsuspendExpiredSuspensions" }, utilities.getCallerInfo());
 };
 
@@ -273,7 +328,7 @@ const sendPasswordExpiryWarnings = async () => {
 };
 
 const suspendUsersWithExpiredPasswords = async () => {
-    const result = await db.query("UPDATE users SET status = 'suspended', suspension_start_at = now(), suspension_end_at = NULL WHERE password_expires_at <= now() AND status != 'suspended' RETURNING id, email, first_name, last_name");
+    const result = await db.query("UPDATE users SET status = 'suspended', suspension_start_at = now(), suspension_end_at = NULL, updated_at = now() WHERE password_expires_at <= now() AND status != 'suspended' RETURNING id, email, first_name, last_name");
     for (const row of result.rows) {
         const emailSubject = "Account Suspended Due to Expired Password";
         const emailBody = `Dear ${row.first_name} ${row.last_name},\n\nYour account has been suspended because your password has expired. Please contact the system administrator to reinstate your account and set a new password.\n\nBest regards,\nFinLedger Team`;
@@ -298,6 +353,9 @@ module.exports = {
     suspendUser,
     reinstateUser,
     changePassword,
+    changePasswordWithCurrentPassword,
+    updateSecurityQuestionsWithCurrentPassword,
+    updateUserProfile,
     getUserByEmail,
     updateSecurityQuestions,
     getSecurityQuestionsForUser,

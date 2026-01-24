@@ -1,0 +1,40 @@
+const SECURITY_QUESTIONS = {
+    1: [
+        { value: "sq_mother_maiden_name", label: "What is your mother's maiden name?" },
+        { value: "sq_first_pet", label: "What was the name of your first pet?" },
+        { value: "sq_first_car", label: "What was the make and model of your first car?" },
+        { value: "sq_birth_city", label: "In which city were you born?" },
+        { value: "sq_elementary_school", label: "What was the name of your elementary school?" },
+        { value: "sq_favorite_teacher", label: "Who was your favorite teacher?" },
+        { value: "sq_childhood_nickname", label: "What was your childhood nickname?" },
+        { value: "sq_first_job", label: "What was your first job?" },
+        { value: "sq_street_grew_up_on", label: "What street did you grow up on?" },
+        { value: "sq_favorite_food", label: "What is your favorite food?" },
+    ],
+    2: [
+        { value: "sq_best_childhood_friend", label: "What is the name of your best childhood friend?" },
+        { value: "sq_childhood_dream_job", label: "What was your childhood dream job?" },
+        { value: "sq_favorite_vacation_spot", label: "Where was your favorite vacation destination?" },
+        { value: "sq_first_concert", label: "What was the first concert you attended?" },
+        { value: "sq_first_sports_team", label: "What was the first sports team you played on?" },
+        { value: "sq_favorite_book", label: "What is the title of your favorite book?" },
+        { value: "sq_favorite_movie", label: "What is your favorite movie?" },
+        { value: "sq_favorite_character", label: "Who was your favorite fictional character as a kid?" },
+        { value: "sq_first_phone_model", label: "What was the model of your first phone?" },
+        { value: "sq_first_video_game", label: "What was the first video game you owned?" },
+    ],
+    3: [
+        { value: "sq_high_school_mascot", label: "What was your high school mascot?" },
+        { value: "sq_high_school_name", label: "What was the name of your high school?" },
+        { value: "sq_first_album", label: "What was the first album you owned?" },
+        { value: "sq_first_instrument", label: "What was the first musical instrument you learned?" },
+        { value: "sq_first_plane_trip", label: "Where did you travel on your first airplane trip?" },
+        { value: "sq_favorite_hobby", label: "What is your favorite hobby?" },
+        { value: "sq_favorite_restaurant", label: "What is the name of your favorite restaurant?" },
+        { value: "sq_favorite_holiday", label: "What is your favorite holiday?" },
+        { value: "sq_first_best_gift", label: "What was the best gift you received as a child?" },
+        { value: "sq_childhood_hero", label: "Who was your childhood hero?" },
+    ],
+};
+
+module.exports = { SECURITY_QUESTIONS };

@@ -1,7 +1,8 @@
 :root {
     --bg: #063b12;
     --bg-deep: #04280c;
-    --surface: rgba(255, 255, 255, 0.72);
+    --surface-soft: rgba(255, 255, 255, 0.253);
+    --surface: rgba(255, 255, 255, 0.536);
     --surface-strong: #ffffff;
     --ink: #084e17;
     --muted: #4f5d6b;
@@ -29,7 +30,7 @@ body {
     min-height: 100vh;
     font-family: var(--font-sans);
     color: var(--ink);
-    background: radial-gradient(circle at 14% 16%, rgba(14, 118, 62, 0.35), transparent 40%), radial-gradient(circle at 86% 8%, rgba(6, 88, 47, 0.28), transparent 55%), linear-gradient(135deg, var(--bg), var(--bg-deep));
+    background: radial-gradient(circle at 14% 16%, rgba(11, 89, 47, 0.221), transparent 40%), radial-gradient(circle at 86% 8%, rgba(4, 62, 33, 0.197), transparent 55%), linear-gradient(135deg, var(--bg), var(--bg-deep));
 }
 
 #money-canvas {
