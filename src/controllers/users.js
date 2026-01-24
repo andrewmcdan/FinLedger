@@ -77,7 +77,7 @@ const getUserByResetToken = async (resetToken) => {
 };
 
 const listUsers = async () => {
-    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at FROM users ORDER BY id ASC");
+    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at, address, user_icon_path, temp_password FROM users ORDER BY id ASC");
     return usersResult.rows;
 };
 

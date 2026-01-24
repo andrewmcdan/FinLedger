@@ -30,6 +30,9 @@
         <header class="page-header">
             <h1>User Management</h1>
         </header>
+        <div>
+            <button type="button" data-refresh>Refresh data</button>
+        </div>
         <div class="grid">
             <article class="card">
                 <h2>User Approvals</h2>
@@ -148,11 +151,47 @@
         <div class="grid">
             <article class="card">
                 <h2>All Users</h2>
-                <% users.forEach(user => { %>
-                <article class="data-row">
-                    <p class="value"><%= user.username %></p>
-                </article>
-                <% }); %>
+                <p class="meta">Click data to edit</p>
+                <div class="table-scroll">
+                    <table class="table table--wide">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Full Name</th>
+                                <th>Status</th>
+                                <th>Role</th>
+                                <th>Created At</th>
+                                <th>Last Login</th>
+                                <th>Password Expires At</th>
+                                <th>Suspension Starts At</th>
+                                <th>Suspension Ends At</th>
+                                <th>Email</th>
+                                <th>Date of Birth</th>
+                                <th>Address</th>
+                                <th>Temp Password</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% users.forEach(user => { %>
+                            <tr>
+                                <td data-username-<%=user.id%>> <%=user.username%></td>
+                                <td data-fullname-<%= user.id %>> <%= user.first_name %> <%= user.last_name %></td>
+                                <td data-status-<%= user.id %>> <%= user.status %></td>
+                                <td data-role-<%= user.id %>> <%= user.role %></td>
+                                <td data-created-at-<%= user.id %>> <%= user.created_at %></td>
+                                <td data-last_login_at-<%= user.id %>> <%= user.last_login_at %></td>
+                                <td data-password_expires_at-<%= user.id %>> <%= user.password_expires_at ? user.password_expires_at : 'N/A' %></td>
+                                <td data-suspension_start_at-<%= user.id %>> <%= user.suspension_start_at ? user.suspension_start_at : 'N/A' %></td>
+                                <td data-suspension_end_at-<%= user.id %>> <%= user.suspension_end_at ? user.suspension_end_at : 'N/A' %></td>
+                                <td data-email-<%= user.id %>> <%= user.email %></td>
+                                <td data-date_of_birth-<%= user.id %>> <%= user.date_of_birth %></td>
+                                <td data-address-<%= user.id %>> <%= user.address %></td>
+                                <td data-temp_password-<%= user.id %>> <%= user.temp_password  ? 'True' : 'False' %></td>
+                            </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
             </article>
         </div>
         <div class="grid">
@@ -380,3 +419,6 @@
     </section>
     <% } %>
 </section>
+<script id="users-data" type="application/json">
+  <%- JSON.stringify({ users, currentUserId }).replaceAll("</", "<\\/") %>
+</script>

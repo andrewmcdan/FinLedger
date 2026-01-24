@@ -473,4 +473,39 @@ router.get("/reinstate-user/:userId", async (req, res) => {
     return res.json({ message: "User reinstated successfully" });
 });
 
+router.post("/update-user-field", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const { user_id, field, value } = req.body;
+    console.log({user_id, field, value});
+    const userId = user_id;
+    const fieldName = field;
+    const newValue = value;
+    const userData = await getUserById(userId);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    const allowedFields = new Set(["fullname", "first_name", "last_name", "email", "role", "address", "date_of_birth", "last_login_at", "password_expires_at", "suspension_start_at", "suspension_end_at", "temp_password"]);
+    if (!allowedFields.has(fieldName)) {
+        return res.status(400).json({ error: "Field cannot be updated" });
+    }
+    if(fieldName ==="fullname") {
+        const nameParts = newValue.trim().split(" ");
+        const firstName = nameParts.shift();
+        const lastName = nameParts.join(" ");
+        await updateUserProfile(userId, { first_name: firstName, last_name: lastName });
+    } else {
+        const updateData = {};
+        updateData[fieldName] = newValue;
+        await updateUserProfile(userId, updateData);
+    }
+    logger.log("info", `User ID ${userId} field ${fieldName} updated by admin user ID ${requestingUserId}`, { function: "update-user-field" }, utilities.getCallerInfo());
+    return res.json({ message: "User field updated successfully" });
+});
+
 module.exports = router;

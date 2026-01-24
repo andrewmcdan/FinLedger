@@ -74,7 +74,7 @@ app.get("/pages/public/forgot-password_submit.html", async (req, res, next) => {
 });
 app.get("/pages/profile.html", async (req, res, next) => {
     try {
-        const result = await db.query("SELECT id, role, first_name, last_name, email, address, password_expires_at, suspension_start_at, suspension_end_at, security_question_1, security_question_2, security_question_3 FROM users WHERE id = $1", [req.user.id]);
+        const result = await db.query("SELECT id, role, first_name, last_name, email, address, password_expires_at, suspension_start_at, suspension_end_at, security_question_1, security_question_2, security_question_3, temp_password FROM users WHERE id = $1", [req.user.id]);
         const user = result.rows[0] || {};
         res.render("profile", { user: user });
     } catch (error) {
