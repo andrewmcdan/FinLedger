@@ -42,7 +42,7 @@ const storage = multer.diskStorage({
     }
 });
 
-const allowed = new Set([".png", ".jpg", ".jpeg", ".gif"]);
+const allowed = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
 
 const upload = multer({
     storage,

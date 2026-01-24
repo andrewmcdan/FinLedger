@@ -1,6 +1,33 @@
 const express = require("express");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const uploadNone = multer();
+const userIconRoot = path.resolve(__dirname, "./../../user-icons/");
+const allowedImageExts = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+
+fs.mkdirSync(userIconRoot, { recursive: true });
+
+const profileStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, userIconRoot),
+    filename: (req, file, cb) => {
+        cb(null, path.basename(file.originalname));
+    },
+});
+
+const uploadProfile = multer({
+    storage: profileStorage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (!allowedImageExts.has(ext)) {
+            return cb(new Error("Invalid file type"));
+        }
+        return cb(null, true);
+    },
+});
 const router = express.Router();
-const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
+const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, changePasswordWithCurrentPassword, updateSecurityQuestionsWithCurrentPassword, updateUserProfile, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
 const { SECURITY_QUESTIONS } = require("../data/security_questions");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
@@ -69,7 +96,9 @@ router.get("/approve-user/:userId", async (req, res) => {
     }
     await approveUser(userIdToApprove);
     logger.log("info", `User ID ${userIdToApprove} approved by admin user ID ${requestingUserId}`, { function: "approve-user" }, utilities.getCallerInfo());
-    const emailResult = await sendEmail(userData.email, "Your FinLedger Account Has Been Approved", `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by our administration team. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nBest regards,\nThe FinLedger Team\n\n`);
+    const loginLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
+    const loginLink = `${loginLinkUrlBase}/#/login`;
+    const emailResult = await sendEmail(userData.email, "Your FinLedger Account Has Been Approved", `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by our administration team. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nLogin here: ${loginLink}\n\nBest regards,\nThe FinLedger Team\n\n`);
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
         logger.log("warn", `Failed to send approval email to ${userData.email} for user ID ${userIdToApprove}`, { function: "approve-user" }, utilities.getCallerInfo());
     }
@@ -134,6 +163,117 @@ router.post("/changePassword", async (req, res) => {
     } catch (error) {
         logger.log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
         return res.status(500).json({ error: "Failed to change password" });
+    }
+});
+
+router.post("/change-password", uploadNone.none(), async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    const currentPassword = req.body.current_password || req.body.currentPassword;
+    const newPassword = req.body.new_password || req.body.newPassword;
+    const confirmPassword = req.body.confirm_new_password || req.body.confirmPassword;
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: "Current password and new password are required" });
+    }
+    if (confirmPassword && newPassword !== confirmPassword) {
+        return res.status(400).json({ error: "Passwords do not match" });
+    }
+    try {
+        await changePasswordWithCurrentPassword(requestingUserId, currentPassword, newPassword);
+        return res.json({ message: "Password changed successfully" });
+    } catch (error) {
+        if (error?.code === "INVALID_CURRENT_PASSWORD" || error?.message === "Current password is incorrect") {
+            return res.status(403).json({ error: "Current password is incorrect" });
+        }
+        const userErrorMessages = new Set([
+            "Password does not meet complexity requirements",
+            "New password cannot be the same as any past passwords",
+        ]);
+        const errorMessage = userErrorMessages.has(error?.message) ? error.message : "Failed to change password";
+        const statusCode = errorMessage === "Failed to change password" ? 500 : 400;
+        return res.status(statusCode).json({ error: errorMessage });
+    }
+});
+
+router.post("/update-security-questions", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    const currentPassword = req.body.current_password || req.body.currentPassword;
+    if (!currentPassword) {
+        return res.status(400).json({ error: "Current password is required" });
+    }
+    const securityQuestions = [
+        {
+            question: req.body.security_question_1,
+            answer: req.body.security_answer_1,
+        },
+        {
+            question: req.body.security_question_2,
+            answer: req.body.security_answer_2,
+        },
+        {
+            question: req.body.security_question_3,
+            answer: req.body.security_answer_3,
+        },
+    ];
+    const missingEntry = securityQuestions.find((entry) => !entry.question || !entry.answer);
+    if (missingEntry) {
+        return res.status(400).json({ error: "All security questions and answers are required" });
+    }
+    try {
+        await updateSecurityQuestionsWithCurrentPassword(requestingUserId, currentPassword, securityQuestions);
+        return res.json({ message: "Security questions updated successfully" });
+    } catch (error) {
+        if (error?.code === "INVALID_CURRENT_PASSWORD" || error?.message === "Current password is incorrect") {
+            return res.status(403).json({ error: "Current password is incorrect" });
+        }
+        return res.status(500).json({ error: "Failed to update security questions" });
+    }
+});
+
+router.post("/update-profile", uploadProfile.single("profile_image"), async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    const userData = await getUserById(requestingUserId);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    const profileUpdates = {
+        first_name: req.body.first_name,
+        last_name: req.body.last_name,
+        email: req.body.email,
+        address: req.body.address,
+    };
+    if (req.file?.path) {
+        const targetFileName = path.basename(userData.user_icon_path || "");
+        if (!targetFileName) {
+            return res.status(400).json({ error: "User profile image path is not set" });
+        }
+        const targetPath = path.join(userIconRoot, targetFileName);
+        try {
+            if (fs.existsSync(targetPath) && targetPath !== req.file.path) {
+                fs.unlinkSync(targetPath);
+            }
+            if (targetPath !== req.file.path) {
+                fs.renameSync(req.file.path, targetPath);
+            }
+        } catch (error) {
+            logger.log("error", `Error updating profile image for user ID ${requestingUserId}: ${error}`, { function: "update-profile" }, utilities.getCallerInfo());
+            return res.status(500).json({ error: "Failed to update profile image" });
+        }
+    }
+    try {
+        const updatedUser = await updateUserProfile(requestingUserId, profileUpdates);
+        return res.json({ message: "Profile updated successfully", user: updatedUser });
+    } catch (error) {
+        logger.log("error", `Error updating profile for user ID ${requestingUserId}: ${error}`, { function: "update-profile" }, utilities.getCallerInfo());
+        return res.status(500).json({ error: "Failed to update profile" });
     }
 });
 
@@ -215,7 +355,7 @@ router.get("/reset-password/:userId", async (req, res) => {
     const resetLink = `${resetLinkUrlBase}/#/login?userId=${userIdNumeric}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
-    await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2 WHERE id = $3", [resetToken, tokenExpiry, userIdNumeric]);
+    await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2, updated_at = now() WHERE id = $3", [resetToken, tokenExpiry, userIdNumeric]);
     const emailResult = await sendEmail(userData.email, "FinLedger Password Reset Request", `Dear ${userData.first_name},\n\nWe received a request to reset your FinLedger account password. Please use the link below to reset your password. This link will expire in 1 hour.\n\nPassword Reset Link: ${resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nBest regards,\nThe FinLedger Team\n\n`);
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
         logger.log("warn", `Failed to send password reset email to ${userData.email} for user ID ${userIdNumeric}`, { function: "reset-password" }, utilities.getCallerInfo());
@@ -247,7 +387,7 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     }
     try {
         await changePassword(userData.id, newPassword);
-        await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL WHERE id = $1", [userData.id]);
+        await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, updated_at = now() WHERE id = $1", [userData.id]);
         return res.json({ message: "Password reset successfully" });
     } catch (error) {
         logger.log("error", `Error resetting password for user ID ${userData.id}: ${error}`, { function: "verify-security-answers" }, utilities.getCallerInfo());
