@@ -14,7 +14,7 @@ function fetchWithAuth(url, options = {}) {
     });
 }
 
-export default function initDashboard() {
+export default function initDashboard({showLoadingOverlay, hideLoadingOverlay}) {
     const stamp = document.querySelector("[data-last-updated]");
     if (stamp) {
         stamp.textContent = new Date().toLocaleString();
@@ -24,6 +24,7 @@ export default function initDashboard() {
     if (emailForm) {
         emailForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            showLoadingOverlay();
             const formData = new FormData(emailForm);
             const payload = {
                 username: formData.get("username"),
@@ -43,9 +44,11 @@ export default function initDashboard() {
             if (response.ok) {
                 alert("Email sent successfully");
                 emailForm.reset();
+                hideLoadingOverlay();
                 return;
             }
             alert(data.error || "Failed to send email");
+            hideLoadingOverlay();
         });
     }
 
@@ -85,6 +88,7 @@ export default function initDashboard() {
         };
         actionButtons.forEach((button) => {
             button.addEventListener("click", async () => {
+                showLoadingOverlay();
                 const action = button.dataset.userAction;
                 const userId = button.dataset.userId;
                 const config = actionConfig[action];
@@ -106,6 +110,7 @@ export default function initDashboard() {
                 } else {
                     alert(config.error);
                 }
+                hideLoadingOverlay();
             });
         });
     }
@@ -198,6 +203,7 @@ export default function initDashboard() {
     if (createUserForm) {
         createUserForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            showLoadingOverlay();
             const formData = new FormData(createUserForm);
             const response = await fetchWithAuth("/api/users/create-user", {
                 method: "POST",
@@ -210,6 +216,7 @@ export default function initDashboard() {
                 const errorData = await response.json();
                 alert(`Error creating user: ${errorData.message}`);
             }
+            hideLoadingOverlay();
         });
     }
 
@@ -217,6 +224,7 @@ export default function initDashboard() {
     if (suspendUserForm) {
         suspendUserForm.addEventListener("submit", (event) => {
             event.preventDefault();
+            showLoadingOverlay();
             const formData = new FormData(suspendUserForm);
             const usernameToSuspend = formData.get("suspend_username");
             let userIdToSuspend = null;
@@ -226,22 +234,26 @@ export default function initDashboard() {
             }
             if (userIdToSuspend === null) {
                 alert("Invalid username selected");
+                hideLoadingOverlay();
                 return;
             }
             const suspensionStartRaw = formData.get("suspension_start_date");
             const suspensionEndRaw = formData.get("suspension_end_date");
             if (!userIdToSuspend || !suspensionStartRaw || !suspensionEndRaw) {
                 alert("Please fill in all fields");
+                hideLoadingOverlay();
                 return;
             }
             const suspensionStartDate = new Date(suspensionStartRaw);
             const suspensionEndDate = new Date(suspensionEndRaw);
             if (Number.isNaN(suspensionStartDate.getTime()) || Number.isNaN(suspensionEndDate.getTime())) {
                 alert("Please provide valid suspension dates");
+                hideLoadingOverlay();
                 return;
             }
             if (suspensionEndDate <= suspensionStartDate) {
                 alert("Suspension end date must be after start date");
+                hideLoadingOverlay();
                 return;
             }
             const suspensionData = {
@@ -263,14 +275,18 @@ export default function initDashboard() {
                     } else {
                         response.json().then((errorData) => {
                             alert(`Error suspending user: ${errorData.message}`);
+                            hideLoadingOverlay();
                         });
                     }
+                    hideLoadingOverlay();
                 })
                 .finally(() => {
                     suspendUserForm.reset();
+                    hideLoadingOverlay();
                 })
                 .catch((error) => {
                     alert(`Error suspending user: ${error.message}`);
+                    hideLoadingOverlay();
                 });
         });
     }
@@ -279,23 +295,28 @@ export default function initDashboard() {
     if (deleteUserForm) {
         deleteUserForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            showLoadingOverlay();
             const formData = new FormData(deleteUserForm);
             const usernameToDelete = formData.get("username");
             if (!usernameToDelete) {
                 alert("Please enter a username to delete");
+                hideLoadingOverlay();
                 return;
             }
             const userToDelete = usersData.find((user) => user.username === usernameToDelete);
             if (!userToDelete) {
                 alert("User not found");
+                hideLoadingOverlay();
                 return;
             }
             if (userToDelete.id === currentUserId) {
                 alert("You cannot delete your own account");
+                hideLoadingOverlay();
                 return;
             }
             const confirmDelete = confirm(`Are you sure you want to delete user "${usernameToDelete}"? This action cannot be undone.`);
             if (!confirmDelete) {
+                hideLoadingOverlay();
                 return;
             }
             try {
@@ -310,12 +331,15 @@ export default function initDashboard() {
                 if (response.ok) {
                     alert("User deleted successfully");
                     deleteUserForm.reset();
+                    hideLoadingOverlay();
                     location.reload();
                     return;
                 }
                 alert(data.error || "Failed to delete user");
+                hideLoadingOverlay();
             } catch (error) {
                 alert("Error deleting user");
+                hideLoadingOverlay();
             }
         });
     }
@@ -324,16 +348,19 @@ export default function initDashboard() {
     if (resetPasswordForm) {
         resetPasswordForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            showLoadingOverlay();
             const formData = new FormData(resetPasswordForm);
             const username = formData.get("username");
             if (!username) {
                 alert("Please enter a username to reset password");
+                hideLoadingOverlay();
                 return;
             }
             // Find user by username
             const user = usersData.find((u) => u.username === username);
             if (!user) {
                 alert("User not found");
+                hideLoadingOverlay();
                 return;
             }
             const userId = user.id;
@@ -345,11 +372,14 @@ export default function initDashboard() {
                 if (response.ok) {
                     alert("Password reset successfully. An email has been sent to the user with the new password.");
                     resetPasswordForm.reset();
+                    hideLoadingOverlay();
                     return;
                 }
                 alert(data.error || "Failed to reset password");
+                hideLoadingOverlay();
             } catch (error) {
                 alert("Error resetting password");
+                hideLoadingOverlay();
             }
         });
     }
