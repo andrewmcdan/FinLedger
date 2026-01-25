@@ -8,6 +8,7 @@ const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
 const { sendEmail } = require("./../services/email");
+const { setuid } = require("process");
 
 function checkPasswordComplexity(password) {
     if (password.length < 8) {
@@ -233,7 +234,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days') RETURNING id, user_icon_path, username, password_hash", [
+    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path", [
         username,
         email,
         password,
@@ -242,13 +243,12 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         role,
         address,
         dateOfBirth,
-        tempPasswordFlag,
+        tempPasswordFlag
     ]);
-    await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
-    // Move temp profile image to permanent location in ./../../user-icons/ using the filename returned from the INSERT query
     const userIconPath = result.rows[0].user_icon_path;
+    await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
     if (profileImage && (profileImage != null) && (profileImage !== "") && (profileImage !== "null") && userIconPath) {
-        console.log("Moving profile image to permanent location:", profileImage, " to ", userIconPath);
+        logger.log("info", `Moving profile image for new user with ID ${result.rows[0].id}`, { function: "createUser" }, utilities.getCallerInfo());
         const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
         const destPath = path.join(__dirname, "../../user-icons/", userIconPath);
         fs.renameSync(sourcePath, destPath);
@@ -357,6 +357,18 @@ const deleteUserById = async (userId) => {
     await db.query("DELETE FROM users WHERE id = $1", [userId]);
 };
 
+const setUserPassword = async (userId, password, temp = false) => {
+    if (!checkPasswordComplexity(password)) {
+        throw new Error("Password does not meet complexity requirements");
+    }
+    const result = await db.query("SELECT crypt($1, gen_salt('bf')) AS password_hash", [password]);
+    const passwordHash = result.rows[0].password_hash;
+    const result2 = await db.query("UPDATE users SET password_hash = $1, temp_password = $2, password_changed_at = now(), password_expires_at = now() + ($3 * interval '15 minutes'), updated_at = now() WHERE id = $4", [passwordHash, temp, temp ? 1 : 90 * 24 * 60, userId]);
+    await savePasswordToHistory(userId, passwordHash);
+    return result2.rowCount > 0;
+}
+    
+
 module.exports = {
     getUserLoggedInStatus,
     isAdmin,
@@ -382,4 +394,5 @@ module.exports = {
     sendPasswordExpiryWarnings,
     suspendUsersWithExpiredPasswords,
     deleteUserById,
+    setUserPassword
 };

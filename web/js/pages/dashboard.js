@@ -190,4 +190,38 @@ export default function initDashboard() {
             }
         });
     }
+
+    const resetPasswordForm = document.getElementById("reset-password-form");
+    if (resetPasswordForm) {
+        resetPasswordForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const formData = new FormData(resetPasswordForm);
+            const username = formData.get("username");
+            if (!username) {
+                alert("Please enter a username to reset password");
+                return;
+            }
+            // Find user by username
+            const user = usersData.find((u) => u.username === username);
+            if (!user) {
+                alert("User not found");
+                return;
+            }
+            const userId = user.id;
+            try {
+                const response = await fetchWithAuth(`/api/users/reset-user-password/${userId}`, {
+                    method: "GET",
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    alert("Password reset successfully. An email has been sent to the user with the new password.");
+                    resetPasswordForm.reset();
+                    return;
+                }
+                alert(data.error || "Failed to reset password");
+            } catch (error) {
+                alert("Error resetting password");
+            }
+        });
+    }
 }
