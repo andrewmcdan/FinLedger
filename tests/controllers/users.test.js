@@ -406,4 +406,3 @@ test.todo("deleteUserById removes user record");
 test.todo("setUserPassword updates password hash and temp flag");
 test.todo("setUserPassword rejects passwords that fail complexity checks");
 test.todo("getUserByUsername returns user and null for missing");
-src/controllers/users.js
