@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS accounts (
   id BIGSERIAL PRIMARY KEY,
-  account_name TEXT NOT NULL,
+  account_name TEXT NOT NULL UNIQUE,
   account_number BIGINT NOT NULL UNIQUE,
   account_description TEXT,
   normal_side TEXT NOT NULL CHECK (normal_side IN ('debit', 'credit')),
