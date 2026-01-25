@@ -265,8 +265,9 @@ let forgotPasswordLogic = async function () {
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             const formData = new FormData(form);
-            const email_or_user_id = formData.get("email_or_user_id");
-            fetch("/api/users/reset-password/" + encodeURIComponent(email_or_user_id), {
+            const email = formData.get("email");
+            const user_id = formData.get("user_id");
+            fetch("/api/users/reset-password/" + encodeURIComponent(email) + "/" + encodeURIComponent(user_id), {
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",

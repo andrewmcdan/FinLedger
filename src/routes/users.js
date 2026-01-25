@@ -27,7 +27,7 @@ const uploadProfile = multer({
     },
 });
 const router = express.Router();
-const { getUserLoggedInStatus, setUserPassword, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, changePasswordWithCurrentPassword, updateSecurityQuestionsWithCurrentPassword, updateUserProfile, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken, deleteUserById } = require("../controllers/users.js");
+const { getUserLoggedInStatus, getUserByUsername, setUserPassword, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, changePasswordWithCurrentPassword, updateSecurityQuestionsWithCurrentPassword, updateUserProfile, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken, deleteUserById } = require("../controllers/users.js");
 const { SECURITY_QUESTIONS } = require("../data/security_questions");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
@@ -366,31 +366,31 @@ router.post("/register_new_user", async (req, res) => {
     }
 });
 
-router.get("/reset-password/:userId", async (req, res) => {
-    const userIdToReset = req.params.userId;
+router.get("/reset-password/:email/:userName", async (req, res) => {
+    const userNameToReset = req.params.userName;
+    const emailToReset = req.params.email;
     // If userId is an email, look up the user ID
-    let userIdNumeric = userIdToReset;
-    if (isNaN(userIdToReset)) {
-        const userData = await getUserByEmail(userIdToReset);
-        if (!userData) {
+        const userData1 = await getUserByEmail(emailToReset);
+        if (!userData1) {
             return res.status(404).json({ error: "User not found" });
         }
-        userIdNumeric = userData.id;
-    }
-    const userData = await getUserById(userIdNumeric);
-    if (!userData) {
+    const userData2 = await getUserByUsername(userNameToReset);
+    if (!userData2) {
         return res.status(404).json({ error: "User not found" });
+    }
+    if (userData2.email.toLowerCase() !== emailToReset.toLowerCase()) {
+        return res.status(400).json({ error: "Email does not match user ID" });
     }
     // Send an email with a password reset link
     const resetToken = utilities.generateRandomToken(128);
     const resetLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
-    const resetLink = `${resetLinkUrlBase}/#/login?userId=${userIdNumeric}&reset_token=${resetToken}`;
+    const resetLink = `${resetLinkUrlBase}/#/login?userId=${userData2.id}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
-    await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2, updated_at = now() WHERE id = $3", [resetToken, tokenExpiry, userIdNumeric]);
-    const emailResult = await sendEmail(userData.email, "FinLedger Password Reset Request", `Dear ${userData.first_name},\n\nWe received a request to reset your FinLedger account password. Please use the link below to reset your password. This link will expire in 1 hour.\n\nPassword Reset Link: ${resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nBest regards,\nThe FinLedger Team\n\n`);
+    await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2, updated_at = now() WHERE id = $3", [resetToken, tokenExpiry, userData2.id]);
+    const emailResult = await sendEmail(userData2.email, "FinLedger Password Reset Request", `Dear ${userData2.first_name},\n\nWe received a request to reset your FinLedger account password. Please use the link below to reset your password. This link will expire in 1 hour.\n\nPassword Reset Link: ${resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nBest regards,\nThe FinLedger Team\n\n`);
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
-        logger.log("warn", `Failed to send password reset email to ${userData.email} for user ID ${userIdNumeric}`, { function: "reset-password" }, utilities.getCallerInfo());
+        logger.log("warn", `Failed to send password reset email to ${userData2.email} for user ID ${userData2.id}`, { function: "reset-password" }, utilities.getCallerInfo());
     }
     return res.json({ message: "Password reset email sent successfully" });
 });
