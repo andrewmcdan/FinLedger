@@ -61,8 +61,8 @@ export default function initDashboard() {
         usersData = [];
         console.error("Failed to parse users data", error);
     }
-    const tableColumns = ["fullname", "email", "role", "status", "created_at", "last_login_at", "suspension_start_at", "suspension_end_at", "address"];
-    const dateColumns = ["last_login_at", "suspension_start_at", "suspension_end_at", "created_at"];
+    const tableColumns = ["fullname", "email", "role", "status", "created_at", "last_login_at", "suspension_start_at", "suspension_end_at", "address", "password_expires_at"];
+    const dateColumns = ["last_login_at", "suspension_start_at", "suspension_end_at", "created_at", "password_expires_at"];
     const modifyTableCell = (user, column, value, isDate = false) => {
         const selector = `[data-${column}-${user.id}]`;
         const cell = document.querySelector(selector);

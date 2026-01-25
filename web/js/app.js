@@ -127,6 +127,10 @@ async function fetchPageMarkup(pageName) {
             window.location.hash = "#/not_authorized";
             return;
         }
+        if(resJson?.error === "NOT_LOGGED_IN") {
+            window.location.hash = "#/not_logged_in";
+            return;
+        }
         console.log("Unauthorized access, redirecting to login");
         window.location.hash = "#/login";
         return;

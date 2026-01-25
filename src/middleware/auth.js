@@ -28,7 +28,7 @@ const authMiddleware = async (req, res, next) => {
     if (!loggedIn) {
         if(req.path.startsWith("/pages/")) {
             logger.log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: user_id }, utilities.getCallerInfo());
-            return res.redirect("/pages/public/login.html");
+            return res.status(401).json({ error: "NOT_LOGGED_IN" });
         }
         return res.status(401).json({ error: "Invalid or expired token" });
     }

@@ -42,7 +42,7 @@
                 <% users.filter(user => user.status === 'pending').forEach(user => { %>
                 <article class="data-row" data-user_id-<%= user.id %>>
                     <p class="value">
-                        <span class="approval-name"><%= user.username %></span>
+                        <span class="approval-name"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
                         <span class="approval-actions">
                             <button onclick="(async()=>{
                                 let response = await fetch('/api/users/approve-user/' + <%= user.id %>, {
@@ -89,7 +89,7 @@
                 <% } %>
                 <% for (let user of users.filter(user => user.password_expires_at < new Date())) { %>
                 <article class="data-row">
-                    <p class="value"><%= user.username %> <button class="button-small">Suspend User</button></p>
+                    <p class="value"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span><button class="button-small">Suspend User</button></p>
                     <p class="meta">Password Expired on <%= user.password_expires_at %></p>
                 </article>
                 <% } %>
@@ -104,7 +104,7 @@
                 <% users.filter(user => user.status === 'suspended').forEach(user => { %>
                 <article class="data-row" data-suspended_user_id-<%= user.id %>>
                     <p class="value">
-                        <span class="approval-name"><%= user.username %></span>
+                        <span class="approval-name"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
                         <span class="approval-actions">
                             <button onclick="(async()=>{
                                 let response = await fetch('/api/users/reinstate-user/' + <%= user.id %>, {
