@@ -198,6 +198,8 @@
 .page-header p {
     margin: 0.25rem 0 0;
     color: var(--muted);
+    text-shadow: 0 1px 15px rgba(255, 255, 255, 01.0);
+
 }
 
 .grid {
@@ -235,6 +237,54 @@
     display: grid;
     gap: 0.35rem;
     padding: 0.65rem 0;
+}
+
+.data-row--columns {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(16rem, max-content);
+    gap: 0;
+    align-items: stretch;
+    width: max-content;
+    min-width: 100%;
+}
+
+.data-row-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.25rem;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+}
+
+.data-row--columns .data-column {
+    min-width: 0;
+    padding: 0 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
+.data-row--columns .data-column > .value {
+    display: block;
+}
+
+.data-row--columns p,
+.data-row--columns a {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.data-row--columns .data-column:first-child {
+    padding-left: 0;
+}
+
+.data-row--columns .data-column:last-child {
+    padding-right: 0;
+}
+
+.data-row--columns .data-column + .data-column {
+    border-left: 1px solid var(--border);
 }
 
 .data-row + .data-row {
@@ -385,6 +435,24 @@ button.button-small,
 
 .table tr:last-child td {
     border-bottom: none;
+}
+
+.table-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.25rem;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table--wide {
+    width: max-content;
+    min-width: 100%;
+}
+
+.table--wide th,
+.table--wide td {
+    white-space: nowrap;
 }
 
 .inline-status {
