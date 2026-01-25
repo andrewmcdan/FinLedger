@@ -75,7 +75,7 @@ Then ensure your `.env` file points to the Docker container's database settings.
 
 Other package licenses can be found in [attribution.md](attribution.md). Full license information is in [licenses.txt](licenses.txt).
 
-The attribution.md file is generated using [script/format_license_info.py](script/format_license_info.py). The script depends on the output of nlf (https://www.npmjs.com/package/nlf) which can be installed via npm:
+The attribution.md file is generated using [scripts/format_license_info.py](script/format_license_info.py). The script depends on the output of nlf (https://www.npmjs.com/package/nlf) which can be installed via npm:
 
 ```bash
 npm install -g nlf
