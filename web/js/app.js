@@ -10,6 +10,7 @@ const routes = {
     not_authorized: { title: "Not Authorized", page: "pages/public/not_authorized", module: null },
     profile: { title: "Profile", page: "pages/profile", module: "js/pages/profile" },
     force_password_change: { title: "Change Password", page: "pages/force_password_change", module: "js/pages/force_password_change" },
+    accounts_list: { title: "Accounts List", page: "pages/accounts_list", module: "js/pages/accounts_list" },
 };
 
 const DEFAULT_ROUTE = "dashboard";

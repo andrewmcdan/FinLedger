@@ -52,6 +52,23 @@ const isAdmin = async (userId, token) => {
     });
 };
 
+const isManager = async (userId, token) => {
+    logger.log("trace", `Checking if user ${userId} is a manager`, { function: "isManager" }, utilities.getCallerInfo());
+    if (!token) {
+        return false;
+    }
+    const loggedIn = await getUserLoggedInStatus(userId, token);
+    if (!loggedIn) {
+        return false;
+    }
+    return db.query("SELECT role FROM users WHERE id = $1", [userId]).then((result) => {
+        if (result.rowCount === 0) {
+            return false;
+        }
+        return result.rows[0].role === "manager";
+    });
+};
+
 const getUserById = async (userId) => {
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
     if (userResult.rowCount === 0) {
@@ -379,6 +396,7 @@ const getUserByUsername = async (username) => {
 module.exports = {
     getUserLoggedInStatus,
     isAdmin,
+    isManager,
     getUserById,
     listUsers,
     listLoggedInUsers,
