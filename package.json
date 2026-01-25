@@ -5,6 +5,7 @@
   "description": "Web-based accounting and financial management system",
   "scripts": {
     "start": "node --env-file=.env src/server.js",
+    "predev": "npm run db-init",
     "dev": "nodemon --env-file=.env src/server.js",
     "db-init": "node --env-file=.env scripts/init-db.js",
     "db-init:test": "node --env-file=.env.test scripts/init-db.js",
