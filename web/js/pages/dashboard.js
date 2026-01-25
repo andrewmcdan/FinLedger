@@ -61,6 +61,54 @@ export default function initDashboard() {
         usersData = [];
         console.error("Failed to parse users data", error);
     }
+    const actionButtons = document.querySelectorAll("[data-user-action]");
+    if (actionButtons.length) {
+        const actionConfig = {
+            approve: {
+                url: (id) => `/api/users/approve-user/${id}`,
+                success: "User approved successfully",
+                error: "Error approving user",
+                rowSelector: (id) => `[data-user_id-${id}]`,
+            },
+            reject: {
+                url: (id) => `/api/users/reject-user/${id}`,
+                success: "User rejected successfully",
+                error: "Error rejecting user",
+                rowSelector: (id) => `[data-user_id-${id}]`,
+            },
+            reinstate: {
+                url: (id) => `/api/users/reinstate-user/${id}`,
+                success: "User reinstated successfully",
+                error: "Error reinstating user",
+                rowSelector: (id) => `[data-suspended_user_id-${id}]`,
+            },
+        };
+        actionButtons.forEach((button) => {
+            button.addEventListener("click", async () => {
+                const action = button.dataset.userAction;
+                const userId = button.dataset.userId;
+                const config = actionConfig[action];
+                if (!config || !userId) {
+                    return;
+                }
+                const response = await fetchWithAuth(config.url(userId), {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                });
+                if (response.ok) {
+                    alert(config.success);
+                    const row = document.querySelector(config.rowSelector(userId));
+                    if (row) {
+                        row.remove();
+                    }
+                } else {
+                    alert(config.error);
+                }
+            });
+        });
+    }
     const tableColumns = ["fullname", "email", "role", "status", "created_at", "last_login_at", "suspension_start_at", "suspension_end_at", "address", "password_expires_at"];
     const dateColumns = ["last_login_at", "suspension_start_at", "suspension_end_at", "created_at", "password_expires_at"];
     const modifyTableCell = (user, column, value, isDate = false) => {
@@ -143,6 +191,87 @@ export default function initDashboard() {
     if (refreshButton) {
         refreshButton.addEventListener("click", () => {
             location.reload();
+        });
+    }
+
+    const createUserForm = document.getElementById("create-user-form");
+    if (createUserForm) {
+        createUserForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const formData = new FormData(createUserForm);
+            const response = await fetchWithAuth("/api/users/create-user", {
+                method: "POST",
+                body: formData,
+            });
+            if (response.ok) {
+                alert("User created successfully");
+                createUserForm.reset();
+            } else {
+                const errorData = await response.json();
+                alert(`Error creating user: ${errorData.message}`);
+            }
+        });
+    }
+
+    const suspendUserForm = document.getElementById("suspend-user-form");
+    if (suspendUserForm) {
+        suspendUserForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const formData = new FormData(suspendUserForm);
+            const usernameToSuspend = formData.get("suspend_username");
+            let userIdToSuspend = null;
+            const matchedUser = usersData.find((user) => user.username === usernameToSuspend && user.status === "active" && user.id !== currentUserId);
+            if (matchedUser) {
+                userIdToSuspend = matchedUser.id;
+            }
+            if (userIdToSuspend === null) {
+                alert("Invalid username selected");
+                return;
+            }
+            const suspensionStartRaw = formData.get("suspension_start_date");
+            const suspensionEndRaw = formData.get("suspension_end_date");
+            if (!userIdToSuspend || !suspensionStartRaw || !suspensionEndRaw) {
+                alert("Please fill in all fields");
+                return;
+            }
+            const suspensionStartDate = new Date(suspensionStartRaw);
+            const suspensionEndDate = new Date(suspensionEndRaw);
+            if (Number.isNaN(suspensionStartDate.getTime()) || Number.isNaN(suspensionEndDate.getTime())) {
+                alert("Please provide valid suspension dates");
+                return;
+            }
+            if (suspensionEndDate <= suspensionStartDate) {
+                alert("Suspension end date must be after start date");
+                return;
+            }
+            const suspensionData = {
+                userIdToSuspend: userIdToSuspend,
+                suspensionStart: suspensionStartDate.toISOString(),
+                suspensionEnd: suspensionEndDate.toISOString(),
+            };
+            fetchWithAuth("/api/users/suspend-user", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(suspensionData),
+            })
+                .then((response) => {
+                    if (response.ok) {
+                        alert("User suspended successfully");
+                        suspendUserForm.reset();
+                    } else {
+                        response.json().then((errorData) => {
+                            alert(`Error suspending user: ${errorData.message}`);
+                        });
+                    }
+                })
+                .finally(() => {
+                    suspendUserForm.reset();
+                })
+                .catch((error) => {
+                    alert(`Error suspending user: ${error.message}`);
+                });
         });
     }
 
