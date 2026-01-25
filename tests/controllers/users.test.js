@@ -394,3 +394,15 @@ test("suspendUsersWithExpiredPasswords ignores non-expired users", async () => {
     assert.equal(result.rows[0].status, "active");
     assert.equal(emailCalls.length, 0);
 });
+
+test.todo("changePasswordWithCurrentPassword updates password when current password matches");
+test.todo("changePasswordWithCurrentPassword rejects invalid current password");
+test.todo("updateSecurityQuestionsWithCurrentPassword updates questions when current password matches");
+test.todo("updateSecurityQuestionsWithCurrentPassword rejects invalid current password");
+test.todo("updateUserProfile updates provided fields and returns updated user");
+test.todo("updateUserProfile returns null when no updates provided");
+test.todo("updateUserProfile returns null when user missing");
+test.todo("deleteUserById removes user record");
+test.todo("setUserPassword updates password hash and temp flag");
+test.todo("setUserPassword rejects passwords that fail complexity checks");
+test.todo("getUserByUsername returns user and null for missing");

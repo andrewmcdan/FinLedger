@@ -15,6 +15,51 @@ const routes = {
 const DEFAULT_ROUTE = "dashboard";
 const view = document.getElementById("app");
 const navLinks = Array.from(document.querySelectorAll(".app-nav [data-route]"));
+const loadingOverlay = document.getElementById("loading_overlay");
+const loadingLabel = loadingOverlay?.querySelector("[data-loading-label]") || loadingOverlay?.querySelector("div:last-child");
+let loadingCount = 0;
+
+function setLoadingOverlayVisible(isVisible) {
+    if (!loadingOverlay) {
+        return;
+    }
+    loadingOverlay.classList.toggle("is-visible", isVisible);
+    loadingOverlay.setAttribute("aria-hidden", isVisible ? "false" : "true");
+}
+
+function showLoadingOverlay(message) {
+    loadingCount += 1;
+    if (loadingLabel && message) {
+        loadingLabel.textContent = message;
+    }
+    setLoadingOverlayVisible(true);
+}
+
+function hideLoadingOverlay() {
+    loadingCount = Math.max(0, loadingCount - 1);
+    if (loadingCount === 0) {
+        setLoadingOverlayVisible(false);
+    }
+}
+
+function withLoadingOverlay(task, message) {
+    showLoadingOverlay(message);
+    try {
+        const result = typeof task === "function" ? task() : task;
+        return Promise.resolve(result).finally(() => {
+            hideLoadingOverlay();
+        });
+    } catch (error) {
+        hideLoadingOverlay();
+        throw error;
+    }
+}
+
+window.FinLedgerLoading = {
+    show: showLoadingOverlay,
+    hide: hideLoadingOverlay,
+    withLoading: withLoadingOverlay,
+};
 const brandLogo = document.querySelector("[data-brand-logo]");
 if (brandLogo) {
     brandLogo.addEventListener("click", () => {
@@ -127,6 +172,10 @@ async function fetchPageMarkup(pageName) {
             window.location.hash = "#/not_authorized";
             return;
         }
+        if(resJson?.error === "NOT_LOGGED_IN") {
+            window.location.hash = "#/not_logged_in";
+            return;
+        }
         console.log("Unauthorized access, redirecting to login");
         window.location.hash = "#/login";
         return;
@@ -181,7 +230,7 @@ async function loadModule(moduleName) {
         const module = await import(moduleUrl);
         URL.revokeObjectURL(moduleUrl);
         if (typeof module.default === "function") {
-            module.default();
+            module.default({showLoadingOverlay, hideLoadingOverlay});
         }
     } catch (error) {
         console.error(`Failed to load module ${moduleName}`, error);
@@ -208,74 +257,85 @@ async function renderRoute() {
     const routeKey = getRouteFromHash();
     const route = routes[routeKey];
     const pageName = route ? route.page : routes.not_found.page;
+    let shouldAnimate = false;
 
+    // showLoadingOverlay();
     try {
-        const markup = await fetchPageMarkup(pageName);
-        if (markup == null) {
-            return;
-        }
-        view.innerHTML = markup;
-    } catch (error) {
         try {
-            const markup = await fetchPageMarkup("pages/public/not_found");
+            const markup = await fetchPageMarkup(pageName);
+            if (markup == null) {
+                return;
+            }
             view.innerHTML = markup;
-        } catch (fallbackError) {
-            view.innerHTML = '<section class="page"><h1>Page not found</h1></section>';
-        }
-    }
-
-    const profileNameSpan = document.querySelector("[data-profile-name]");
-    if (profileNameSpan) {
-        const username = localStorage.getItem("username") || "None";
-        profileNameSpan.textContent = "Profile: " + username;
-        if(username == "None") {
-            // disable the profile hover activation
-            const menuWrapper = document.querySelector("[data-profile-menu]");
-            if (menuWrapper) {
-                menuWrapper.style.pointerEvents = "none";
-            }
-        }else{
-            const menuWrapper = document.querySelector("[data-profile-menu]");
-            if (menuWrapper) {
-                menuWrapper.style.pointerEvents = "auto";
+            shouldAnimate = true;
+        } catch (error) {
+            try {
+                const markup = await fetchPageMarkup("pages/public/not_found");
+                view.innerHTML = markup;
+                shouldAnimate = true;
+            } catch (fallbackError) {
+                view.innerHTML = '<section class="page"><h1>Page not found</h1></section>';
+                shouldAnimate = true;
             }
         }
-    }
 
-    const userIconTargets = Array.from(document.querySelectorAll("[data-user-icon], [data-user-icon-menu]"));
-    if (userIconTargets.length) {
-        // Use fetch with auth headers to get the user icon
-        fetchWithAuth("/images/user-icon.png")
-            .then((response) => {
-                if (response.ok) {
-                    return response.blob();
+        const profileNameSpan = document.querySelector("[data-profile-name]");
+        if (profileNameSpan) {
+            const username = localStorage.getItem("username") || "None";
+            profileNameSpan.textContent = "Profile: " + username;
+            if(username == "None") {
+                // disable the profile hover activation
+                const menuWrapper = document.querySelector("[data-profile-menu]");
+                if (menuWrapper) {
+                    menuWrapper.style.pointerEvents = "none";
                 }
-                // if the response if 401 Unauthorized use the default icon at /public_images/user-icon.png
-                if (response.status === 401) {
-                    return fetch("/public_images/default.png").then((res) => {
-                        if (res.ok) {
-                            return res.blob();
-                        }
-                        throw new Error("Failed to load default user icon");
+            }else{
+                const menuWrapper = document.querySelector("[data-profile-menu]");
+                if (menuWrapper) {
+                    menuWrapper.style.pointerEvents = "auto";
+                }
+            }
+        }
+
+        const userIconTargets = Array.from(document.querySelectorAll("[data-user-icon], [data-user-icon-menu]"));
+        if (userIconTargets.length) {
+            // Use fetch with auth headers to get the user icon
+            fetchWithAuth("/images/user-icon.png")
+                .then((response) => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    // if the response if 401 Unauthorized use the default icon at /public_images/user-icon.png
+                    if (response.status === 401) {
+                        return fetch("/public_images/default.png").then((res) => {
+                            if (res.ok) {
+                                return res.blob();
+                            }
+                            throw new Error("Failed to load default user icon");
+                        });
+                    }
+                    throw new Error("Failed to load user icon");
+                })
+                .then((blob) => {
+                    const objectURL = URL.createObjectURL(blob);
+                    userIconTargets.forEach((img) => {
+                        img.src = objectURL;
                     });
-                }
-                throw new Error("Failed to load user icon");
-            })
-            .then((blob) => {
-                const objectURL = URL.createObjectURL(blob);
-                userIconTargets.forEach((img) => {
-                    img.src = objectURL;
+                })
+                .catch((error) => {
+                    console.error("Error loading user icon:", error);
                 });
-            })
-            .catch((error) => {
-                console.error("Error loading user icon:", error);
-            });
-    }
+        }
 
-    document.title = route ? `FinLedger - ${route.title}` : "FinLedger";
-    setActiveNav(route ? routeKey : null);
-    await loadModule(route ? route.module : null);
-    animateView();
+        document.title = route ? `FinLedger - ${route.title}` : "FinLedger";
+        setActiveNav(route ? routeKey : null);
+        await loadModule(route ? route.module : null);
+    } finally {
+        hideLoadingOverlay();
+    }
+    if (shouldAnimate) {
+        animateView();
+    }
 }
 
 window.addEventListener("hashchange", renderRoute);
