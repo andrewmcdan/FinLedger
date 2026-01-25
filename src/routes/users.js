@@ -27,7 +27,7 @@ const uploadProfile = multer({
     },
 });
 const router = express.Router();
-const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, changePasswordWithCurrentPassword, updateSecurityQuestionsWithCurrentPassword, updateUserProfile, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken } = require("../controllers/users.js");
+const { getUserLoggedInStatus, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, changePasswordWithCurrentPassword, updateSecurityQuestionsWithCurrentPassword, updateUserProfile, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken, deleteUserById } = require("../controllers/users.js");
 const { SECURITY_QUESTIONS } = require("../data/security_questions");
 const logger = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
@@ -176,25 +176,26 @@ router.post("/create-user", async (req, res) => {
     }
 });
 
-router.post("/changePassword", async (req, res) => {
-    const requestingUserId = req.user.id;
-    if (!requestingUserId) {
-        return res.status(401).json({ error: "Unauthorized" });
-    }
-    const { newPassword, securityAnswers } = req.body;
-    const verified = await verifySecurityAnswers(requestingUserId, securityAnswers);
-    if (!verified) {
-        logger.log("warn", `Security answers verification failed for user ID ${requestingUserId} during password change`, { function: "changePassword" }, utilities.getCallerInfo());
-        return res.status(403).json({ error: "Security answers verification failed" });
-    }
-    try {
-        await changePassword(requestingUserId, newPassword);
-        return res.json({ message: "Password changed successfully" });
-    } catch (error) {
-        logger.log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
-        return res.status(500).json({ error: "Failed to change password" });
-    }
-});
+// TODO: Remove maybe?
+// router.post("/changePassword", async (req, res) => {
+//     const requestingUserId = req.user.id;
+//     if (!requestingUserId) {
+//         return res.status(401).json({ error: "Unauthorized" });
+//     }
+//     const { newPassword, securityAnswers } = req.body;
+//     const verified = await verifySecurityAnswers(requestingUserId, securityAnswers);
+//     if (!verified) {
+//         logger.log("warn", `Security answers verification failed for user ID ${requestingUserId} during password change`, { function: "changePassword" }, utilities.getCallerInfo());
+//         return res.status(403).json({ error: "Security answers verification failed" });
+//     }
+//     try {
+//         await changePassword(requestingUserId, newPassword);
+//         return res.json({ message: "Password changed successfully" });
+//     } catch (error) {
+//         logger.log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
+//         return res.status(500).json({ error: "Failed to change password" });
+//     }
+// });
 
 router.post("/change-password", uploadNone.none(), async (req, res) => {
     const requestingUserId = req.user.id;
@@ -505,6 +506,24 @@ router.post("/update-user-field", async (req, res) => {
     }
     logger.log("info", `User ID ${userId} field ${fieldName} updated by admin user ID ${requestingUserId}`, { function: "update-user-field" }, utilities.getCallerInfo());
     return res.json({ message: "User field updated successfully" });
+});
+
+router.post("/delete-user", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(requestingUserId, req.user.token))) {
+        return res.status(403).json({ error: "Access denied. Administrator role required." });
+    }
+    const { userIdToDelete } = req.body;
+    const userData = await getUserById(userIdToDelete);
+    if (!userData) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    await deleteUserById(userIdToDelete);
+    logger.log("info", `User ID ${userIdToDelete} deleted by admin user ID ${requestingUserId}`, { function: "delete-user" }, utilities.getCallerInfo());
+    return res.json({ message: "User deleted successfully" });
 });
 
 module.exports = router;

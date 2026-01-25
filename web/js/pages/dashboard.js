@@ -145,4 +145,49 @@ export default function initDashboard() {
             location.reload();
         });
     }
+
+    const deleteUserForm = document.getElementById("delete-user-form");
+    if (deleteUserForm) {
+        deleteUserForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const formData = new FormData(deleteUserForm);
+            const usernameToDelete = formData.get("username");
+            if (!usernameToDelete) {
+                alert("Please enter a username to delete");
+                return;
+            }
+            const userToDelete = usersData.find((user) => user.username === usernameToDelete);
+            if (!userToDelete) {
+                alert("User not found");
+                return;
+            }
+            if (userToDelete.id === currentUserId) {
+                alert("You cannot delete your own account");
+                return;
+            }
+            const confirmDelete = confirm(`Are you sure you want to delete user "${usernameToDelete}"? This action cannot be undone.`);
+            if (!confirmDelete) {
+                return;
+            }
+            try {
+                const response = await fetchWithAuth("/api/users/delete-user", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ userIdToDelete: userToDelete.id }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    alert("User deleted successfully");
+                    deleteUserForm.reset();
+                    location.reload();
+                    return;
+                }
+                alert(data.error || "Failed to delete user");
+            } catch (error) {
+                alert("Error deleting user");
+            }
+        });
+    }
 }

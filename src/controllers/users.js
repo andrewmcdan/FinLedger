@@ -352,6 +352,11 @@ const suspendUsersWithExpiredPasswords = async () => {
     logger.log("info", "Suspended users with expired passwords: " + result.rowCount, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo());
 };
 
+const deleteUserById = async (userId) => {
+    logger.log("info", `Deleting user with ID ${userId}`, { function: "deleteUserById" }, utilities.getCallerInfo());
+    await db.query("DELETE FROM users WHERE id = $1", [userId]);
+};
+
 module.exports = {
     getUserLoggedInStatus,
     isAdmin,
@@ -376,4 +381,5 @@ module.exports = {
     unsuspendExpiredSuspensions,
     sendPasswordExpiryWarnings,
     suspendUsersWithExpiredPasswords,
+    deleteUserById,
 };
