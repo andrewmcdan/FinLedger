@@ -8,7 +8,6 @@ const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
 const { sendEmail } = require("./../services/email");
-const { setuid } = require("process");
 
 function checkPasswordComplexity(password) {
     if (password.length < 8) {
@@ -367,6 +366,14 @@ const setUserPassword = async (userId, password, temp = false) => {
     await savePasswordToHistory(userId, passwordHash);
     return result2.rowCount > 0;
 }
+
+const getUserByUsername = async (username) => {
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE username = $1", [username]);
+    if (userResult.rowCount === 0) {
+        return null;
+    }
+    return userResult.rows[0];
+};
     
 
 module.exports = {
@@ -394,5 +401,6 @@ module.exports = {
     sendPasswordExpiryWarnings,
     suspendUsersWithExpiredPasswords,
     deleteUserById,
-    setUserPassword
+    setUserPassword,
+    getUserByUsername,
 };
