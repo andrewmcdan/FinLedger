@@ -5,7 +5,7 @@ function fetchWithAuth(url, options = {}) {
     const userId = localStorage.getItem("user_id") || "";
     const mergedHeaders = {
         Authorization: `Bearer ${authToken}`,
-        User_id: `${userId}`,
+        "X-User-Id": `${userId}`,
         ...(options.headers || {}),
     };
 

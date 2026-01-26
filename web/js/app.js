@@ -146,7 +146,7 @@ function fetchWithAuth(url, options = {}) {
     const userId = localStorage.getItem("user_id") || "";
     const mergedHeaders = {
         Authorization: `Bearer ${authToken}`,
-        User_id: `${userId}`,
+        "X-User-Id": `${userId}`,
         ...(options.headers || {}),
     };
 
@@ -165,7 +165,7 @@ async function fetchPageMarkup(pageName) {
         // Unauthorized
         // if the returned content is {"error": "Missing Authorization header"}, then redirect to not_logged_in.html
         let resJson = await response.clone().json();
-        if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing User_ID header" || resJson.error == "Invalid or expired token") {
+        if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing X-User-Id header" || resJson.error == "Invalid or expired token") {
             window.location.hash = "#/not_logged_in";
             return;
         }
@@ -347,3 +347,5 @@ import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 
 window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
 window.addEventListener("hashchange", updateLoginLogoutButton);
+
+

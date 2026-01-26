@@ -5,7 +5,7 @@ async function isLoggedIn() {
             credentials: "include",
             headers: {
                 "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}`,
-                'User_id': `${localStorage.getItem("user_id") || ""}`
+                "X-User-Id": `${localStorage.getItem("user_id") || ""}`
             }
         });
         if (!response.ok) {

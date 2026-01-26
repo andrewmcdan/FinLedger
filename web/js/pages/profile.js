@@ -3,7 +3,7 @@ export default function initProfile() {
 
     const authHeaders = () => ({
         Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
-        User_id: `${localStorage.getItem("user_id") || ""}`,
+        "X-User-Id": `${localStorage.getItem("user_id") || ""}`,
     });
 
     const profileImage = document.querySelector("[data-profile-user-icon]");
@@ -124,3 +124,5 @@ export default function initProfile() {
         });
     }
 }
+
+

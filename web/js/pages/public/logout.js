@@ -13,7 +13,7 @@ export default function initLogout() {
             headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
-                User_id: `${localStorage.getItem("user_id") || ""}`,
+                "X-User-Id": `${localStorage.getItem("user_id") || ""}`,
             },
         })
             .then((response) => {

@@ -24,7 +24,7 @@ export default async function initForcePasswordChange() {
         const response = await fetch("/api/users/security-questions-list", {
             headers: {
                 Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
-                User_id: `${localStorage.getItem("user_id") || ""}`,
+                "X-User-Id": `${localStorage.getItem("user_id") || ""}`,
             },
         });
         const data = await response.json();
@@ -144,7 +144,7 @@ export default async function initForcePasswordChange() {
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
-                    User_id: `${localStorage.getItem("user_id") || ""}`,
+                    "X-User-Id": `${localStorage.getItem("user_id") || ""}`,
                 },
                 body: JSON.stringify({ newPassword, securityQuestions }),
             });
@@ -161,3 +161,5 @@ export default async function initForcePasswordChange() {
         }
     });
 }
+
+

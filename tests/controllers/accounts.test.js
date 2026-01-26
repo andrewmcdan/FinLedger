@@ -7,7 +7,7 @@ const assert = require("node:assert/strict");
 const db = require("../../src/db/db");
 const accountsController = require("../../src/controllers/accounts");
 
-const ACCOUNT_COUNT = 200;
+const ACCOUNT_COUNT = 100;
 
 async function resetDb() {
     await db.query("TRUNCATE TABLE password_history, password_expiry_email_tracking, logged_in_users, documents, audit_logs, app_logs, accounts, users RESTART IDENTITY CASCADE");

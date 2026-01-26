@@ -3,7 +3,7 @@ function fetchWithAuth(url, options = {}) {
     const userId = localStorage.getItem("user_id") || "";
     const mergedHeaders = {
         Authorization: `Bearer ${authToken}`,
-        User_id: `${userId}`,
+        "X-User-Id": `${userId}`,
         ...(options.headers || {}),
     };
 
@@ -59,7 +59,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                     method: "POST",
                     headers: {
                         Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
-                        User_id: `${localStorage.getItem("user_id") || ""}`,
+                        "X-User-Id": `${localStorage.getItem("user_id") || ""}`,
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
@@ -159,3 +159,5 @@ async function loadNumericHelpers() {
     const formatNumberWithCommas = module.formatNumberWithCommas;
     return { formatNumberAsCurrency, formatNumberWithCommas };
 }
+
+

@@ -18,7 +18,7 @@ router.get("/status", async (req, res) => {
     if (scheme !== "Bearer" || !token) {
         return res.json({ ok: false, loggedIn: false });
     }
-    const user_id = req.get("user_id");
+    const user_id = req.get("X-User-Id");
     if (!user_id) {
         return res.json({ ok: false, loggedIn: false });
     }
@@ -105,9 +105,9 @@ router.post("/logout", (req, res) => {
     if (scheme !== "Bearer" || !token) {
         return res.status(401).json({ error: "Invalid Authorization header" });
     }
-    const user_id = req.get("user_id");
+    const user_id = req.get("X-User-Id");
     if (!user_id) {
-        return res.status(401).json({ error: "Missing User_id header" });
+        return res.status(401).json({ error: "Missing X-User-Id header" });
     }
     // Set the logout_at column for user to now()
     db.query("UPDATE logged_in_users SET logout_at = NOW() WHERE user_id = $1 AND token = $2", [user_id, token])
@@ -123,3 +123,5 @@ router.post("/logout", (req, res) => {
 });
 
 module.exports = router;
+
+
