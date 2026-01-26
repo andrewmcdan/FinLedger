@@ -263,8 +263,10 @@ async function renderRoute() {
     const route = routes[routeKey];
     const pageName = route ? route.page : routes.not_found.page;
     let shouldAnimate = false;
+    let overlayActive = false;
 
-    // showLoadingOverlay();
+    showLoadingOverlay("Loading...");
+    overlayActive = true;
     try {
         try {
             const markup = await fetchPageMarkup(pageName);
@@ -273,14 +275,26 @@ async function renderRoute() {
             }
             view.innerHTML = markup;
             shouldAnimate = true;
+            if (overlayActive) {
+                hideLoadingOverlay();
+                overlayActive = false;
+            }
         } catch (error) {
             try {
                 const markup = await fetchPageMarkup("pages/public/not_found");
                 view.innerHTML = markup;
                 shouldAnimate = true;
+                if (overlayActive) {
+                    hideLoadingOverlay();
+                    overlayActive = false;
+                }
             } catch (fallbackError) {
                 view.innerHTML = '<section class="page"><h1>Page not found</h1></section>';
                 shouldAnimate = true;
+                if (overlayActive) {
+                    hideLoadingOverlay();
+                    overlayActive = false;
+                }
             }
         }
 
@@ -334,14 +348,19 @@ async function renderRoute() {
 
         document.title = route ? `FinLedger - ${route.title}` : "FinLedger";
         setActiveNav(route ? routeKey : null);
+        if (shouldAnimate) {
+            animateView();
+        } else {
+            view.classList.remove("page-enter-prep");
+        }
         await loadModule(route ? route.module : null);
     } finally {
-        hideLoadingOverlay();
-    }
-    if (shouldAnimate) {
-        animateView();
-    } else {
-        view.classList.remove("page-enter-prep");
+        if (overlayActive) {
+            hideLoadingOverlay();
+        }
+        if (!shouldAnimate) {
+            view.classList.remove("page-enter-prep");
+        }
     }
 }
 

@@ -1,4 +1,6 @@
-export default function initProfile() {
+export default function initProfile({ showLoadingOverlay, hideLoadingOverlay } = {}) {
+    const showOverlay = typeof showLoadingOverlay === "function" ? showLoadingOverlay : () => {};
+    const hideOverlay = typeof hideLoadingOverlay === "function" ? hideLoadingOverlay : () => {};
     const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
 
     const authHeaders = () => ({
@@ -58,19 +60,24 @@ export default function initProfile() {
     if (changePasswordForm) {
         changePasswordForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            showOverlay();
             const formData = new FormData(changePasswordForm);
-            const response = await fetch("/api/users/change-password", {
-                method: "POST",
-                headers: authHeaders(),
-                body: formData,
-            });
-            const data = await response.json().catch(() => ({}));
-            if (response.ok) {
-                changePasswordForm.reset();
-                alert("Password changed successfully");
-                return;
+            try {
+                const response = await fetch("/api/users/change-password", {
+                    method: "POST",
+                    headers: authHeaders(),
+                    body: formData,
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    changePasswordForm.reset();
+                    alert("Password changed successfully");
+                    return;
+                }
+                alert(data.error || "Error changing password");
+            } finally {
+                hideOverlay();
             }
-            alert(data.error || "Error changing password");
         });
     }
 
@@ -78,6 +85,7 @@ export default function initProfile() {
     if (securityQuestionsForm) {
         securityQuestionsForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            showOverlay();
             const payload = {
                 security_question_1: securityQuestionsForm.querySelector("[name='security_question_1']")?.value || "",
                 security_answer_1: securityQuestionsForm.querySelector("[name='security_answer_1']")?.value || "",
@@ -87,21 +95,25 @@ export default function initProfile() {
                 security_answer_3: securityQuestionsForm.querySelector("[name='security_answer_3']")?.value || "",
                 current_password: securityQuestionsForm.querySelector("[name='current_password']")?.value || "",
             };
-            const response = await fetch("/api/users/update-security-questions", {
-                method: "POST",
-                headers: {
-                    ...authHeaders(),
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(payload),
-            });
-            const data = await response.json().catch(() => ({}));
-            if (response.ok) {
-                securityQuestionsForm.reset();
-                alert("Security questions updated successfully");
-                return;
+            try {
+                const response = await fetch("/api/users/update-security-questions", {
+                    method: "POST",
+                    headers: {
+                        ...authHeaders(),
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    securityQuestionsForm.reset();
+                    alert("Security questions updated successfully");
+                    return;
+                }
+                alert(data.error || "Error updating security questions");
+            } finally {
+                hideOverlay();
             }
-            alert(data.error || "Error updating security questions");
         });
     }
 
@@ -109,18 +121,23 @@ export default function initProfile() {
     if (profileForm) {
         profileForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            showOverlay();
             const formData = new FormData(profileForm);
-            const response = await fetch("/api/users/update-profile", {
-                method: "POST",
-                headers: authHeaders(),
-                body: formData,
-            });
-            const data = await response.json().catch(() => ({}));
-            if (response.ok) {
-                alert("Profile updated successfully");
-                return;
+            try {
+                const response = await fetch("/api/users/update-profile", {
+                    method: "POST",
+                    headers: authHeaders(),
+                    body: formData,
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    alert("Profile updated successfully");
+                    return;
+                }
+                alert(data.error || "Error updating profile");
+            } finally {
+                hideOverlay();
             }
-            alert(data.error || "Error updating profile");
         });
     }
 }
