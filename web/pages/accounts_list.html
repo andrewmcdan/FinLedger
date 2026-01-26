@@ -1,0 +1,120 @@
+<section class="page">
+    <header class="page-header">
+        <h1>Accounts List</h1>
+        <p>Manage your accounts</p>
+    </header>
+    <% if (role === 'administrator') { %>
+    <div class="page-actions">
+        <button type="button" class="button-primary" id="add_account_button">Add New Account</button>
+    </div>
+    <% } %>
+    <div class="stack">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Account Name</th>
+                    <th>Account Type</th>
+                    <th>Balance</th>
+                    <th>Actions</th>
+                </tr>
+                <% accounts.forEach(function(account) { %>
+                <tr>
+                    <td><%= account.account_name %></td>
+                    <td><%= account.normal_side %></td>
+                    <td><%= account.balance %></td>
+                    <td>
+                        <button type="button" class="button-small edit-account-button" data-account-id="<%= account.id %>">Edit</button>
+                        <button type="button" class="button-small delete-account-button" data-account-id="<%= account.id %>">Delete</button>
+                    </td>
+                </tr>
+                <% }); %>
+            </thead>
+            <tbody data-accounts-list>
+                <!-- Accounts will be dynamically populated here -->
+            </tbody>
+        </table>
+    </div>
+</section>
+<% if (role === 'administrator') { %>
+<div id="account_modal" class="modal" aria-hidden="true">
+    <div class="modal-content">
+        <span class="close-button" id="close_account_modal" aria-label="Close">&times;</span>
+        <h2 id="account_modal_title">Add/Edit Account</h2>
+        <form id="account_form">
+            <table>
+                <tr>
+                    <td><label for="account_name">Account Name:</label></td>
+                    <td><input type="text" id="account_name" name="account_name" required /></td>
+                </tr>
+                <tr>
+                    <td><label for="account_description">Description:</label></td>
+                    <td><textarea id="account_description" name="account_description"></textarea></td>
+                </tr>
+                <tr>
+                    <td><label for="account_type">Normal Side:</label></td>
+                    <td>
+                        <select id="account_type" name="account_type" required>
+                            <option value="debit">Debit</option>
+                            <option value="credit">Credit</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td><label for="account_category">Category:</label></td>
+                    <td><input type="text" id="account_category" name="account_category" required /></td>
+                </tr>
+                <tr>
+                    <td><label for="account_subcategory">Subcategory:</label></td>
+                    <td><input type="text" id="account_subcategory" name="account_subcategory" /></td>
+                </tr>
+                <tr>
+                    <td><label for="account_statement_type">Statement Type:</label></td>
+                    <td>
+                        <select id="account_statement_type" name="account_statement_type" required>
+                            <option value="Income Statement">Income Statement</option>
+                            <option value="Balance Sheet">Balance Sheet</option>
+                            <option value="Retained Earnings Statement">Retained Earnings Statement</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td><label for="account_comments">Comments:</label></td>
+                    <td><textarea id="account_comments" name="account_comments"></textarea></td>
+                </tr>
+                <tr>
+                    <td><label for="account_balance">Opening Balance ($):</label></td>
+                    <td><input type="number" id="account_balance" name="account_balance" required /></td>
+                </tr>
+                <tr>
+                    <td><label for="account_order">Account Order:</label></td>
+                    <td><input type="number" id="account_order" name="account_order" required /></td>
+                </tr>
+                <tr>
+                    <td><label for="account_debit">Debit ($):</label></td>
+                    <td><input type="number" id="account_debit" name="account_debit" required /></td>
+                </tr>
+                <tr>
+                    <td><label for="account_credit">Credit ($):</label></td>
+                    <td><input type="number" id="account_credit" name="account_credit" required /></td>
+                </tr>
+                <tr>
+                    <td>
+                        <label for="account_owner">Account Owner:</label>
+                    </td>
+                    <td>
+                        <select id="account_owner" name="account_owner" required>
+                            <% allUsers.forEach(function(user) { %>
+                            <option value="<%= user.id %>"><%= user.username %> (<%= user.last_name %>, <%= user.first_name %>)</option>
+                            <% }); %>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+            <button type="submit" class="button-primary" id="save_account_button">Save Account</button>
+        </form>
+    </div>
+</div>
+<% } %>
+<script id="accounts-data" type="application/json">
+    <%- JSON.stringify({ accounts }).replaceAll("</", "<\\/") %>
+</script>

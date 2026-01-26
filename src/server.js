@@ -10,6 +10,8 @@ const logger = require("./utils/logger");
 const { getCallerInfo } = require("./utils/utilities");
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
+const accountsRoutes = require("./routes/accounts");
+const accountsController = require("./controllers/accounts");
 const { SECURITY_QUESTIONS } = require("./data/security_questions");
 
 const app = express();
@@ -31,6 +33,22 @@ app.get("/pages/dashboard.html", async (req, res, next) => {
         const users = await usersController.listUsers();
         const currentUserId = Number(req.user.id);
         res.render("dashboard", { role, loggedInUsers, users, currentUserId });
+    } catch (error) {
+        next(error);
+    }
+});
+app.get("/pages/accounts_list.html", async (req, res, next) => {
+    const user = await usersController.getUserById(req.user.id);
+    const role = user ? user.role : "none";
+    let allUsers = [];
+    if(role == "administrator"){
+        allUsers = await usersController.listUsers();;
+    }
+    console.log("User role:", role);
+    try {
+        const result = await accountsController.listAccounts(req.user.id, req.user.token);
+        const accounts = result.rows;
+        res.render("accounts_list", { accounts, role, allUsers });
     } catch (error) {
         next(error);
     }
@@ -84,6 +102,7 @@ app.get("/pages/profile.html", async (req, res, next) => {
 app.use(express.static("web"));
 app.use("/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/accounts", accountsRoutes);
 app.use("/images", imageRoutes);
 
 // This if statement ensures the server only starts if this file is run directly.

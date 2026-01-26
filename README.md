@@ -21,7 +21,7 @@ Make sure PostgreSQL is running with credentials matching `.env`, then:
 ```bash
 npm install
 npm run db-init
-npm run dev
+npm run start
 ```
 
 Visit `http://localhost:3050` (or the port set in `.env`).
@@ -56,9 +56,10 @@ To run the app in development mode with auto-reloading:
 
 ```bash
 npm install
-npm run db-init
 npm run dev
 ```
+
+Running the "dev" script will trigger `db-init` first to ensure the database is set up.
 
 If you want to use the postgresql database in a Docker container during development, run:
 
@@ -66,3 +67,25 @@ If you want to use the postgresql database in a Docker container during developm
 docker compose up db
 ```
 Then ensure your `.env` file points to the Docker container's database settings.
+
+## Attribution
+
+- Built with [Express.js](https://expressjs.com/)
+- Database with [PostgreSQL](https://www.postgresql.org/)
+
+Other package licenses can be found in [attribution.md](attribution.md). Full license information is in [licenses.txt](licenses.txt).
+
+The attribution.md file is generated using [scripts/format_license_info.py](scripts/format_license_info.py). The script depends on the output of nlf (https://www.npmjs.com/package/nlf) which can be installed via npm:
+
+```bash
+npm install -g nlf
+```
+
+and run with 
+
+```bash
+python3 ./scripts/format_license_info.py licenses.txt -o attribution.md --project "FinLedger"
+```
+
+## License
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
