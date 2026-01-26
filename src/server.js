@@ -7,7 +7,7 @@ const userDocRoutes = require("./routes/user_docs");
 const authMiddleware = require("./middleware/auth");
 const db = require("./db/db");
 const logger = require("./utils/logger");
-const { getCallerInfo } = require("./utils/utilities");
+const { getCallerInfo, cleanupUserData } = require("./utils/utilities");
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
@@ -130,6 +130,7 @@ if (require.main === module) {
             try {
                 await usersController.sendPasswordExpiryWarnings();
                 await usersController.suspendUsersWithExpiredPasswords();
+                await cleanupUserData();
             } catch (error) {
                 logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
             }
