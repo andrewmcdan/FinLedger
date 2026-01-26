@@ -1,5 +1,7 @@
 const db = require("../db/db");
 const { isAdmin, isManager } = require("./users");
+const {log} = require("../utils/logger");
+const {getCallerInfo} = require("../utils/utilities");
 
 function listAccounts(userId, token) {
     let query = "SELECT * FROM accounts";
@@ -29,13 +31,14 @@ async function createAccount(ownerId, accountName, accountDescription, normalSid
     try {
         const query = `
         INSERT INTO accounts 
-        (user_id, account_name, account_description, normal_side, account_category, account_subcategory, balance, initial_balance, total_debits, total_credits, account_order, statement_type, comment, account_number) 
+        (user_id, account_name, account_description, normal_side, account_category_id, account_subcategory_id, balance, initial_balance, total_debits, total_credits, account_order, statement_type, comment, account_number) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
         RETURNING *`;
         const params = [ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, normalizedStatementType, comments, accountNumber];
         const result = await db.query(query, params);
         const error = result?.error;
         if (result.rows.length === 0) {
+            log("error", "Account creation failed", { ownerId, accountName, error }, getCallerInfo());
             throw new Error("Account creation failed. Error: " + error.message);
         }
         return result.rows[0];
@@ -56,12 +59,12 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
     }
 
     return db.transaction(async (client) => {
-        const categoryRes = await client.query("SELECT account_number_prefix FROM account_categories WHERE name = $1", [accountCategory]);
+        const categoryRes = await client.query("SELECT account_number_prefix FROM account_categories WHERE id = $1", [accountCategory]);
         if (categoryRes.rows.length === 0) {
             throw new Error(`Account category not found: ${accountCategory}`);
         }
 
-        const subcategoryRes = await client.query("SELECT order_index FROM account_subcategories WHERE name = $1", [accountSubcategory]);
+        const subcategoryRes = await client.query("SELECT order_index FROM account_subcategories WHERE id = $1", [accountSubcategory]);
         if (subcategoryRes.rows.length === 0) {
             throw new Error(`Account subcategory not found: ${accountSubcategory}`);
         }
@@ -73,8 +76,8 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
         const suffixRes = await client.query(
             `SELECT MAX(CAST(RIGHT(account_number::text, 2) AS INT)) AS max_suffix
              FROM accounts
-             WHERE account_category = $1
-               AND account_subcategory = $2
+             WHERE account_category_id = $1
+               AND account_subcategory_id = $2
                AND account_order = $3`,
             [accountCategory, accountSubcategory, orderValue],
         );

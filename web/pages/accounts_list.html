@@ -35,8 +35,8 @@
                         <td><%= account.normal_side.charAt(0).toUpperCase() + account.normal_side.slice(1) %></td>
                         <td data-is-currency><%= account.balance %></td>
                         <td data-long-text><%= account.account_description %></td>
-                        <td><%= account.account_category %></td>
-                        <td><%= account.account_subcategory %></td>
+                        <td><%= (allCategories.categories.find(function(category) { return category.id == account.account_category_id; }) || {}).name || "" %></td>
+                        <td><%= (allCategories.subcategories.find(function(subcat) { return subcat.id == account.account_subcategory_id; }) || {}).name || "" %></td>
                         <td><%= {"IS":"Income Statement", "BS":"Balance Sheet", "RE":"Retained Earnings Statement"}[account.statement_type] || "" %></td>
                         <td data-long-text><%= account.comment %></td>
                         <td data-is-currency><%= account.initial_balance %></td>
@@ -60,6 +60,7 @@
     <section class="stack">
         <header class="page-header">
             <h1>System Management</h1>
+            <!-- This section to manage system-wide settings related to accounts. Other system-wide settings can be added to the dashboard page. -->
         </header>
         <div class="grid">
             <article class="card">

@@ -30,8 +30,6 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - account_number: bigint
 - account_description: text
 - normal_side: text
-- account_category: text
-- account_subcategory: text
 - initial_balance: numeric
 - total_debits: numeric
 - total_credits: numeric
@@ -42,6 +40,8 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - statement_type: text
 - comment: text
 - status: text
+- account_category_id: bigint
+- account_subcategory_id: bigint
 
 ### public.app_logs
 - id: bigint

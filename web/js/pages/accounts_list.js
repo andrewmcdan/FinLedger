@@ -138,7 +138,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         );
         for (const subcategory of filtered) {
             const option = document.createElement("option");
-            option.value = subcategory.name;
+            option.value = subcategory.id;
             option.textContent = subcategory.name;
             accountSubcategorySelect.appendChild(option);
         }
