@@ -91,7 +91,7 @@ function getClient() {
 
     logInfo("Using POSTGRES_* environment variables for Postgres connection.");
     let port = Number(process.env.POSTGRES_PORT || 5432);
-    if(process.env.POSTGRES_HOST && process.env.POSTGRES_HOST == "db") {
+    if(process.env.POSTGRES_HOST && (process.env.POSTGRES_HOST == "db")) {
         port = 5432;
     }
     return new Client({
@@ -114,6 +114,10 @@ function getAdminClient() {
             password: process.env.POSTGRES_TEST_PASSWORD || "finledger_test",
             database: process.env.POSTGRES_TEST_ADMIN_DB || "postgres",
         });
+    }
+    let port = Number(process.env.POSTGRES_PORT || 5432);
+    if(process.env.POSTGRES_HOST && (process.env.POSTGRES_HOST == "db")) {
+        port = 5432;
     }
     return new Client({
         host: process.env.POSTGRES_HOST || "localhost",
