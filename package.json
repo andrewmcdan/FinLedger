@@ -10,7 +10,7 @@
     "db-init": "node --env-file=.env scripts/init-db.js",
     "db-reset": "node --env-file=.env scripts/reset-db.js",
     "db-init:test": "node --env-file=.env.test scripts/init-db.js",
-    "test": "node --env-file=.env.test --test"
+    "test": "node --env-file=.env.test --test --test-concurrency=1"
   },
   "dependencies": {
     "ejs": "^4.0.1",

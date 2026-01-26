@@ -43,13 +43,13 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             const normalSide = document.getElementById("account_type")?.value;
             const accountCategory = document.getElementById("account_category")?.value;
             const accountSubcategory = document.getElementById("account_subcategory")?.value;
-            const balance = parseFloat(document.getElementById("account_balance")?.value?.replace(/[^0-9.-]+/g, "")) || 0;
             const initialBalance = parseFloat(document.getElementById("initial_balance")?.value?.replace(/[^0-9.-]+/g, "")) || 0;
+            const balance = initialBalance;
             const accountOrder = parseInt(document.getElementById("account_order")?.value, 10) || 0;
             const statementType = document.getElementById("account_statement_type")?.value;
             const comments = document.getElementById("account_comments")?.value;
-            const total_debits = parseFloat(document.getElementById("account_debit")?.value?.replace(/[^0-9.-]+/g, "")) || 0;
-            const total_credits = parseFloat(document.getElementById("account_credit")?.value?.replace(/[^0-9.-]+/g, "")) || 0;
+            const total_debits = 0;
+            const total_credits = 0;
             const accountOwner = document.getElementById("account_owner")?.value;
 
             // TODO: Add validation for required fields
@@ -118,6 +118,38 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             el.title = el.textContent;
         }
     });
+
+    const accountCategorySelect = document.getElementById("account_category");
+    const accountSubcategorySelect = document.getElementById("account_subcategory");
+    const accountsDataEl = document.getElementById("accounts-data");
+    const accountsData = accountsDataEl ? JSON.parse(accountsDataEl.textContent || "{}") : {};
+    const subcategories = accountsData?.allCategories?.subcategories || [];
+
+    const renderSubcategories = (categoryId) => {
+        if (!accountSubcategorySelect) {
+            return;
+        }
+        accountSubcategorySelect.innerHTML = "";
+        if (!categoryId) {
+            return;
+        }
+        const filtered = subcategories.filter(
+            (subcategory) => String(subcategory.account_category_id) === String(categoryId),
+        );
+        for (const subcategory of filtered) {
+            const option = document.createElement("option");
+            option.value = subcategory.name;
+            option.textContent = subcategory.name;
+            accountSubcategorySelect.appendChild(option);
+        }
+    };
+
+    if (accountCategorySelect) {
+        accountCategorySelect.addEventListener("change", () => {
+            renderSubcategories(accountCategorySelect.value);
+        });
+        renderSubcategories(accountCategorySelect.value);
+    }
 }
 
 async function loadNumericHelpers() {

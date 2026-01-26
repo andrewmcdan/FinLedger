@@ -7,6 +7,23 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 
 ## DB-Structure
 
+### public.account_categories
+- id: integer
+- name: character varying
+- description: text
+- created_at: timestamp without time zone
+- updated_at: timestamp without time zone
+- account_number_prefix: character varying
+
+### public.account_subcategories
+- id: integer
+- account_category_id: integer
+- name: character varying
+- description: text
+- created_at: timestamp without time zone
+- updated_at: timestamp without time zone
+- order_index: integer
+
 ### public.accounts
 - id: bigint
 - account_name: text
@@ -24,6 +41,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - account_order: integer
 - statement_type: text
 - comment: text
+- status: text
 
 ### public.app_logs
 - id: bigint

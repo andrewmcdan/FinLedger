@@ -47,7 +47,8 @@ app.get("/pages/accounts_list.html", async (req, res, next) => {
     try {
         const result = await accountsController.listAccounts(req.user.id, req.user.token);
         const accounts = result.rows;
-        res.render("accounts_list", { accounts, role, allUsers });
+        const allCategories = await accountsController.listAccountCategories();
+        res.render("accounts_list", { accounts, role, allUsers, allCategories });
     } catch (error) {
         next(error);
     }

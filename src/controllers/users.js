@@ -212,7 +212,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
     updates.push(`updated_at = now()`);
     const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, email, first_name, last_name, address, user_icon_path`;
     const result = await db.query(query, values);
-    if( result.rowCount === 0) {
+    if (result.rowCount === 0) {
         logger.log("warn", `No user found with ID ${userId} to update profile`, { function: "updateUserProfile" }, utilities.getCallerInfo(), userId);
         return null;
     }
@@ -253,22 +253,15 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     }
 
     const createdUser = await db.transaction(async (client) => {
-        const result = await client.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path", [
-            username,
-            email,
-            password,
-            firstName,
-            lastName,
-            role,
-            address,
-            dateOfBirth,
-            tempPasswordFlag
-        ]);
+        const result = await client.query(
+            "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
+            [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
+        );
         await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
         return result.rows[0];
     });
     const userIconPath = createdUser.user_icon_path;
-    if (profileImage && (profileImage != null) && (profileImage !== "") && (profileImage !== "null") && userIconPath) {
+    if (profileImage && profileImage != null && profileImage !== "" && profileImage !== "null" && userIconPath) {
         logger.log("info", `Moving profile image for new user with ID ${createdUser.id}`, { function: "createUser" }, utilities.getCallerInfo(), createdUser.id);
         const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
         const destPath = path.join(__dirname, "../../user-icons/", userIconPath);
@@ -390,7 +383,7 @@ const setUserPassword = async (userId, password, temp = false) => {
         await savePasswordToHistory(userId, passwordHash, client);
         return result2.rowCount > 0;
     });
-}
+};
 
 const getUserByUsername = async (username) => {
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE username = $1", [username]);
@@ -399,7 +392,6 @@ const getUserByUsername = async (username) => {
     }
     return userResult.rows[0];
 };
-    
 
 module.exports = {
     getUserLoggedInStatus,
