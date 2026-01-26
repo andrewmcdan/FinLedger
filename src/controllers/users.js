@@ -140,16 +140,18 @@ const changePassword = async (userId, newPassword) => {
     if (!checkPasswordComplexity(newPassword)) {
         throw new Error("Password does not meet complexity requirements");
     }
-    const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
-    for (const row of pastPasswordsResult.rows) {
-        const matchResult = await db.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
-        if (matchResult.rows.length > 0) {
-            throw new Error("New password cannot be the same as any past passwords");
+    await db.transaction(async (client) => {
+        const pastPasswordsResult = await client.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
+        for (const row of pastPasswordsResult.rows) {
+            const matchResult = await client.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
+            if (matchResult.rows.length > 0) {
+                throw new Error("New password cannot be the same as any past passwords");
+            }
         }
-    }
-    logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
-    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
-    await savePasswordToHistory(userId, result.rows[0].password_hash);
+        logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
+        const result = await client.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
+        await savePasswordToHistory(userId, result.rows[0].password_hash, client);
+    });
 };
 
 const verifyCurrentPassword = async (userId, currentPassword) => {
@@ -250,21 +252,24 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path", [
-        username,
-        email,
-        password,
-        firstName,
-        lastName,
-        role,
-        address,
-        dateOfBirth,
-        tempPasswordFlag
-    ]);
-    const userIconPath = result.rows[0].user_icon_path;
-    await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
+    const createdUser = await db.transaction(async (client) => {
+        const result = await client.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path", [
+            username,
+            email,
+            password,
+            firstName,
+            lastName,
+            role,
+            address,
+            dateOfBirth,
+            tempPasswordFlag
+        ]);
+        await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
+        return result.rows[0];
+    });
+    const userIconPath = createdUser.user_icon_path;
     if (profileImage && (profileImage != null) && (profileImage !== "") && (profileImage !== "null") && userIconPath) {
-        logger.log("info", `Moving profile image for new user with ID ${result.rows[0].id}`, { function: "createUser" }, utilities.getCallerInfo());
+        logger.log("info", `Moving profile image for new user with ID ${createdUser.id}`, { function: "createUser" }, utilities.getCallerInfo());
         const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
         const destPath = path.join(__dirname, "../../user-icons/", userIconPath);
         fs.renameSync(sourcePath, destPath);
@@ -275,11 +280,12 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         let result = await sendEmail(email, emailSubject, emailBody);
         logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
     }
-    return result.rows[0];
+    return createdUser;
 };
 
-const savePasswordToHistory = async (userId, passwordHash) => {
-    await db.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
+const savePasswordToHistory = async (userId, passwordHash, client = null) => {
+    const executor = client || db;
+    await executor.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
 };
 
 const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
@@ -377,11 +383,13 @@ const setUserPassword = async (userId, password, temp = false) => {
     if (!checkPasswordComplexity(password)) {
         throw new Error("Password does not meet complexity requirements");
     }
-    const result = await db.query("SELECT crypt($1, gen_salt('bf')) AS password_hash", [password]);
-    const passwordHash = result.rows[0].password_hash;
-    const result2 = await db.query("UPDATE users SET password_hash = $1, temp_password = $2, password_changed_at = now(), password_expires_at = now() + ($3 * interval '15 minutes'), updated_at = now() WHERE id = $4", [passwordHash, temp, temp ? 1 : 90 * 24 * 60, userId]);
-    await savePasswordToHistory(userId, passwordHash);
-    return result2.rowCount > 0;
+    return db.transaction(async (client) => {
+        const result = await client.query("SELECT crypt($1, gen_salt('bf')) AS password_hash", [password]);
+        const passwordHash = result.rows[0].password_hash;
+        const result2 = await client.query("UPDATE users SET password_hash = $1, temp_password = $2, password_changed_at = now(), password_expires_at = now() + ($3 * interval '15 minutes'), updated_at = now() WHERE id = $4", [passwordHash, temp, temp ? 1 : 90 * 24 * 60, userId]);
+        await savePasswordToHistory(userId, passwordHash, client);
+        return result2.rowCount > 0;
+    });
 }
 
 const getUserByUsername = async (username) => {

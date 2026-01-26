@@ -80,12 +80,19 @@ router.post("/login", async (req, res) => {
     // If the user is found, not suspended, and password is correct, create a JWT token and save it in the DB.
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
-    // Update last login time and log the login event
-    await db.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
-    await db.query("INSERT INTO audit_logs (event_type, user_id) VALUES ($1, $2)", ["login", user.id]);
-    await db.query("INSERT INTO logged_in_users (user_id, token) VALUES ($1, $2)", [user.id, token]);
-    // reset failed login attempts on successful login
-    await db.query("UPDATE users SET failed_login_attempts = 0, suspension_end_at = NULL WHERE id = $1", [user.id]);
+    try {
+        await db.transaction(async (client) => {
+            // Update last login time and log the login event
+            await client.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
+            await client.query("INSERT INTO audit_logs (event_type, user_id) VALUES ($1, $2)", ["login", user.id]);
+            await client.query("INSERT INTO logged_in_users (user_id, token) VALUES ($1, $2)", [user.id, token]);
+            // reset failed login attempts on successful login
+            await client.query("UPDATE users SET failed_login_attempts = 0, suspension_end_at = NULL WHERE id = $1", [user.id]);
+        });
+    } catch (error) {
+        logger.log("error", `Login transaction failed for username ${username}: ${error}`, { function: "login" }, utilities.getCallerInfo());
+        return res.status(500).json({ error: "Login failed due to a server error" });
+    }
     logger.log("info", `User ${username} (ID: ${user.id}) logged in successfully`, { function: "login" }, utilities.getCallerInfo());
     return res.json({ token: token, user_id: user.id, username: username, must_change_password: user.temp_password === true });
 });
