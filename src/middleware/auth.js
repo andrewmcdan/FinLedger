@@ -27,7 +27,7 @@ const authMiddleware = async (req, res, next) => {
     const loggedIn = await getUserLoggedInStatus(user_id, token);
     if (!loggedIn) {
         if(req.path.startsWith("/pages/")) {
-            log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: user_id }, utilities.getCallerInfo());
+            log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: user_id }, utilities.getCallerInfo(), req.user.id);
             return res.status(401).json({ error: "NOT_LOGGED_IN" });
         }
         return res.status(401).json({ error: "Invalid or expired token" });
@@ -47,7 +47,7 @@ const authMiddleware = async (req, res, next) => {
             return res.status(403).json({ error: "TEMP_PASSWORD_CHANGE_REQUIRED" });
         }
     }
-    log("info", `User ${user_id} authenticated successfully`, { user_id: user_id }, utilities.getCallerInfo());
+    log("info", `User ${user_id} authenticated successfully`, { user_id: user_id }, utilities.getCallerInfo(), req.user.id);
     return next();
 };
 

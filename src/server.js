@@ -44,7 +44,6 @@ app.get("/pages/accounts_list.html", async (req, res, next) => {
     if(role == "administrator"){
         allUsers = await usersController.listUsers();;
     }
-    console.log("User role:", role);
     try {
         const result = await accountsController.listAccounts(req.user.id, req.user.token);
         const accounts = result.rows;

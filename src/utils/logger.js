@@ -12,7 +12,14 @@ const CONSOLE_LOG_LEVEL = process.env.CONSOLE_LOG_LEVEL || "debug";
 // Define log levels
 const levels = { trace: 0, debug: 1, info: 2, warn: 3, error: 4, fatal: 5 };
 
-// Main logging function
+/**
+ * Log an event. Depending on configuration, logs to console, file, and/or database.
+ * @param {*} level One of: trace, debug, info, warn, error, fatal
+ * @param {*} message The message to log
+ * @param {*} context Additional context or metadata for the log
+ * @param {*} source Source information. Use getCallerInfo() from utilities.js to get this.
+ * @param {*} user_id ID of the user associated with the log event. Optional.
+ */
 const log = async (level, message, context = null, source = "", user_id = null) => {
     const timestamp = new Date().toISOString();
     const levelValue = levels[level] !== undefined ? levels[level] : levels.info;
