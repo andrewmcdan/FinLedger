@@ -247,6 +247,7 @@ async function loadModule(moduleName) {
 function animateView() {
     view.classList.remove("page-enter");
     void view.offsetWidth;
+    view.classList.remove("page-enter-prep");
     view.classList.add("page-enter");
 }
 
@@ -254,6 +255,9 @@ async function renderRoute() {
     if (!view) {
         return;
     }
+
+    view.classList.remove("page-enter");
+    view.classList.add("page-enter-prep");
 
     const routeKey = getRouteFromHash();
     const route = routes[routeKey];
@@ -336,6 +340,8 @@ async function renderRoute() {
     }
     if (shouldAnimate) {
         animateView();
+    } else {
+        view.classList.remove("page-enter-prep");
     }
 }
 
