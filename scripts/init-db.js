@@ -93,6 +93,7 @@ function getClient() {
     let port = Number(process.env.POSTGRES_PORT || 5432);
     if(process.env.POSTGRES_HOST && process.env.POSTGRES_HOST === "db") {
         port = 5432;
+    }
     return new Client({
         host: process.env.POSTGRES_HOST || "localhost",
         port: port,
