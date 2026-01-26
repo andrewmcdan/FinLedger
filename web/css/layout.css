@@ -551,6 +551,13 @@ textarea {
     resize: vertical;
 }
 
+#accounts_table td[data-long-text] {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @keyframes spinnerSpin {
     to {
         transform: rotate(360deg);

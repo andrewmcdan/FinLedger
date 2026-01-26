@@ -11,7 +11,7 @@ function listAccounts(userId, token) {
     return db.query(query, params);
 }
 
-async function createAccount(ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, openingBalance, debit, credit, accountOrder, statementType, comments) {
+async function createAccount(ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, statementType, comments) {
     const accountNumber = await generateNewAccountNumber();
     const statementTypeMap = {
         "Income Statement": "IS",
@@ -29,11 +29,11 @@ async function createAccount(ownerId, accountName, accountDescription, normalSid
     try {
         const query = `
         INSERT INTO accounts 
-        (user_id, account_name, account_description, normal_side, account_category, account_subcategory, balance, debit, credit, account_order, statement_type, comment, account_number) 
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+        (user_id, account_name, account_description, normal_side, account_category, account_subcategory, balance, initial_balance, total_debits, total_credits, account_order, statement_type, comment, account_number) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
         RETURNING *`;
         const params = [ownerId, 
-            accountName, accountDescription, normalSide, accountCategory, accountSubcategory, openingBalance, debit, credit, accountOrder, normalizedStatementType, comments, accountNumber];
+            accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, normalizedStatementType, comments, accountNumber];
         const result = await db.query(query, params);
         const error = result?.error;
         if (result.rows.length === 0) {

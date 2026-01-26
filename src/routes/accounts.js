@@ -21,16 +21,12 @@ router.post("/create", async (req, res) => {
     if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    if(!(await isAdmin(userId, req.user.token))) {
+    if (!(await isAdmin(userId, req.user.token))) {
         return res.status(403).json({ error: "Forbidden. Only Admins can create accounts." });
     }
-    const { accountName, 
-        accountDescription, 
-        normalSide, 
-        accountCategory, 
-        accountSubcategory, openingBalance, debit, credit, accountOrder, statementType, comments, accountOwner } = req.body;
+    const { accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, total_debits, total_credits, accountOrder, statementType, comments, accountOwner } = req.body;
     try {
-        const newAccount = await accountsController.createAccount(accountOwner, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, openingBalance, debit, credit, accountOrder, statementType, comments);
+        const newAccount = await accountsController.createAccount(accountOwner, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, total_debits, total_credits, accountOrder, statementType, comments);
         res.status(201).json(newAccount);
     } catch (error) {
         res.status(500).json({ error: error.message });
