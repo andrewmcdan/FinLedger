@@ -16,6 +16,7 @@ const { Client } = require("pg");
 
 const SQL_DIR = path.resolve(__dirname, "..", "docker", "postgres"); // This path contains the SQL files to run
 const MIGRATIONS_DIR = path.join(SQL_DIR, "migrations");
+const README_PATH = path.join(SQL_DIR, "README.md");
 const VERBOSE = process.env.DB_INIT_VERBOSE !== "0";
 
 function logInfo(message) {
@@ -219,6 +220,95 @@ async function applyMigrations(client) {
     }
 }
 
+function formatColumnType(row) {
+    if (row.data_type === "USER-DEFINED") {
+        return row.udt_name;
+    }
+    if (row.data_type === "ARRAY") {
+        const baseType = row.udt_name && row.udt_name.startsWith("_") ? row.udt_name.slice(1) : row.udt_name;
+        return baseType ? `${baseType}[]` : "array";
+    }
+    return row.data_type;
+}
+
+async function getDbStructure(client) {
+    const { rows } = await client.query(`
+        SELECT c.table_schema,
+               c.table_name,
+               c.column_name,
+               c.data_type,
+               c.udt_name,
+               c.ordinal_position
+        FROM information_schema.columns c
+        JOIN information_schema.tables t
+          ON t.table_schema = c.table_schema
+         AND t.table_name = c.table_name
+        WHERE t.table_type = 'BASE TABLE'
+          AND c.table_schema NOT IN ('information_schema', 'pg_catalog')
+        ORDER BY c.table_schema, c.table_name, c.ordinal_position;
+    `);
+
+    const tables = new Map();
+    for (const row of rows) {
+        const tableKey = `${row.table_schema}.${row.table_name}`;
+        if (!tables.has(tableKey)) {
+            tables.set(tableKey, []);
+        }
+        tables.get(tableKey).push({
+            name: row.column_name,
+            type: formatColumnType(row),
+        });
+    }
+    return tables;
+}
+
+function replaceSection(content, header, section) {
+    const start = content.indexOf(header);
+    if (start === -1) {
+        return `${content.trimEnd()}\n\n${section}\n`;
+    }
+    const afterHeader = start + header.length;
+    const rest = content.slice(afterHeader);
+    const nextHeaderOffset = rest.search(/\n##\s+/);
+    if (nextHeaderOffset === -1) {
+        return `${content.slice(0, start).trimEnd()}\n\n${section}\n`;
+    }
+    const before = content.slice(0, start).trimEnd();
+    const after = rest.slice(nextHeaderOffset).trimStart();
+    return `${before}\n\n${section}\n\n${after}`;
+}
+
+async function updateDbStructureReadme(client) {
+    const header = "## DB-Structure";
+    const tables = await getDbStructure(client);
+    const lines = [header, ""];
+
+    if (tables.size === 0) {
+        lines.push("_No tables found in the database._");
+    } else {
+        for (const [tableName, columns] of tables.entries()) {
+            lines.push(`### ${tableName}`);
+            for (const column of columns) {
+                lines.push(`- ${column.name}: ${column.type}`);
+            }
+            lines.push("");
+        }
+    }
+
+    let readmeContents = "";
+    try {
+        readmeContents = await fs.readFile(README_PATH, "utf8");
+    } catch (error) {
+        if (error.code !== "ENOENT") {
+            throw error;
+        }
+    }
+
+    const updated = replaceSection(readmeContents || "", header, lines.join("\n").trimEnd());
+    await fs.writeFile(README_PATH, updated, "utf8");
+    logInfo(`Updated DB structure in ${README_PATH}`);
+}
+
 // Main
 async function run() {
     logInfo(`Base SQL directory: ${SQL_DIR}`);
@@ -262,6 +352,7 @@ async function run() {
 
         await ensureMigrationsTable(client);
         await applyMigrations(client);
+        await updateDbStructureReadme(client);
     } finally {
         await client.end();
         logInfo("Postgres connection closed.");
