@@ -19,6 +19,8 @@ const navLinks = Array.from(document.querySelectorAll(".app-nav [data-route]"));
 const loadingOverlay = document.getElementById("loading_overlay");
 const loadingLabel = loadingOverlay?.querySelector("[data-loading-label]") || loadingOverlay?.querySelector("div:last-child");
 let loadingCount = 0;
+let profileMenuInitialized = false;
+let userIconBlobUrl = null;
 
 async function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -237,7 +239,7 @@ async function loadModule(moduleName) {
         const module = await import(moduleUrl);
         URL.revokeObjectURL(moduleUrl);
         if (typeof module.default === "function") {
-            module.default({showLoadingOverlay, hideLoadingOverlay});
+            module.default({showLoadingOverlay, hideLoadingOverlay, userIconBlobUrl});
         }
     } catch (error) {
         console.error(`Failed to load module ${moduleName}`, error);
@@ -309,7 +311,7 @@ async function renderRoute() {
         }
 
         const profileNameSpan = document.querySelector("[data-profile-name]");
-        if (profileNameSpan) {
+        if (profileNameSpan && !profileMenuInitialized) {
             const username = localStorage.getItem("username") || "None";
             profileNameSpan.textContent = "Profile: " + username;
             if(username == "None") {
@@ -327,7 +329,7 @@ async function renderRoute() {
         }
 
         const userIconTargets = Array.from(document.querySelectorAll("[data-user-icon], [data-user-icon-menu]"));
-        if (userIconTargets.length) {
+        if (userIconTargets.length > 0 && !profileMenuInitialized) {
             // Use fetch with auth headers to get the user icon
             fetchWithAuth("/images/user-icon.png")
                 .then((response) => {
@@ -347,6 +349,7 @@ async function renderRoute() {
                 })
                 .then((blob) => {
                     const objectURL = URL.createObjectURL(blob);
+                    userIconBlobUrl = objectURL;
                     userIconTargets.forEach((img) => {
                         img.src = objectURL;
                     });
@@ -355,6 +358,7 @@ async function renderRoute() {
                     console.error("Error loading user icon:", error);
                 });
         }
+        profileMenuInitialized = true;
 
         document.title = route ? `FinLedger - ${route.title}` : "FinLedger";
         setActiveNav(route ? routeKey : null);

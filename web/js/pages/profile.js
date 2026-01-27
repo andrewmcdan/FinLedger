@@ -1,4 +1,4 @@
-export default function initProfile({ showLoadingOverlay, hideLoadingOverlay } = {}) {
+export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, userIconBlobUrl } = {}) {
     const showOverlay = typeof showLoadingOverlay === "function" ? showLoadingOverlay : () => {};
     const hideOverlay = typeof hideLoadingOverlay === "function" ? hideLoadingOverlay : () => {};
     const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
@@ -10,6 +10,7 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay } =
 
     const profileImage = document.querySelector("[data-profile-user-icon]");
     if (profileImage) {
+        if(!userIconBlobUrl) {
         fetch("/images/user-icon.png", { headers: authHeaders() })
             .then((response) => {
                 if (response.ok) {
@@ -31,6 +32,9 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay } =
             .catch((error) => {
                 console.error("Error loading user icon:", error);
             });
+        } else {
+            profileImage.src = userIconBlobUrl;
+        }
     }
 
     if (selectEls.some(Boolean)) {
