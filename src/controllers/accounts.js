@@ -3,10 +3,10 @@ const { isAdmin, isManager } = require("./users");
 const {log} = require("../utils/logger");
 const {getCallerInfo} = require("../utils/utilities");
 
-function listAccounts(userId, token) {
+async function listAccounts(userId, token) {
     let query = "SELECT * FROM accounts";
     const params = [];
-    if (!isAdmin(userId, token) && !isManager(userId, token)) {
+    if (!await isAdmin(userId, token) && !await isManager(userId, token)) {
         query += " WHERE owner_id = $1";
         params.push(userId);
     }

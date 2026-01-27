@@ -242,7 +242,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     let tempPasswordFlag = false;
     if (!password || password.length === 0) {
         // Generate a random temporary password using lastname, dob, and a random number
-        const randomNum = Math.floor(1000 + Math.random() * 9000); // 4 digit random number
+        const randomNum = Math.floor(100000000 + Math.random() * 900000000); // 9 digit random number
         const dobPart = new Date(dateOfBirth).toISOString().slice(5, 7) + new Date(dateOfBirth).toISOString().slice(2, 4);
         password = `${lastName}_${dobPart}_${randomNum}`;
         tempPasswordFlag = true;
