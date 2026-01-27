@@ -43,14 +43,28 @@ async function resolveSubcategory(client, accountSubcategory, categoryId) {
     return subcategory;
 }
 
-async function listAccounts(userId, token) {
+async function listAccounts(userId, token, offset = 0, limit = 25) {
     let query = "SELECT * FROM accounts";
     const params = [];
     if (!await isAdmin(userId, token) && !await isManager(userId, token)) {
         query += " WHERE user_id = $1";
         params.push(userId);
     }
+    query += " ORDER BY account_number ASC LIMIT $"+(params.length+1)+" OFFSET $"+(params.length+2);
+    params.push(limit);
+    params.push(offset);
     return db.query(query, params);
+}
+
+async function getAccountCounts(userId, token) {
+    let query = "SELECT COUNT(*) AS total_accounts FROM accounts";
+    const params = [];
+    if (!await isAdmin(userId, token) && !await isManager(userId, token)) {
+        query += " WHERE user_id = $1";
+        params.push(userId);
+    }
+    const result = await db.query(query, params);
+    return result.rows[0];
 }
 
 async function createAccount(ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, statementType, comments) {
@@ -144,4 +158,5 @@ module.exports = {
     listAccounts,
     createAccount,
     listAccountCategories,
+    getAccountCounts
 };

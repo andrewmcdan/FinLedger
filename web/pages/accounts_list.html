@@ -12,13 +12,14 @@
                 <button type="button-small" class="button-primary" id="add_account_button">Add New Account</button>
                 <% } %>
             </span>
-            <span class="span-actions">
-                <span data-accounts-page-down>&lt;</span>
+            <span class="span-actions page-navigation">
+                <span data-accounts-page-down data-accounts-page-btn>&lt;</span>
                 <span class="">Page: </span>
                 <span data-accounts-current-page>1 </span>
                 <span>of </span>
                 <span data-accounts-total-pages>1</span>
-                <span data-accounts-page-up>&gt;</span>
+                <span data-accounts-page-up data-accounts-page-btn>&gt;</span>
+                <span>&nbsp;&nbsp;&nbsp;</span>
             </span>
             </p>
         </div>        
@@ -49,7 +50,7 @@
                      The following forEach slows down page loading, especially with lots of accounts. Move code that loads accounts data to account_list.js
                      and have it populate the table body dynamically after page load. This can also provide for paginated loading of accounts.
                     -->
-                    <% accounts.forEach(function(account) { %>
+                    <% accounts.forEach(function(account) { return; %>
                     <tr>
                         <td><%= account.account_name %></td>
                         <td><%= account.account_number %></td>

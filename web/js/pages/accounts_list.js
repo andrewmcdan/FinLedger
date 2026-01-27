@@ -92,38 +92,161 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         });
     }
 
-    const currencyEls = document.querySelectorAll("[data-is-currency]");
-    const numericHelpers = await loadNumericHelpers();
-    currencyEls.forEach(el => {
-        el.textContent = numericHelpers.formatNumberAsCurrency(el.textContent);
-        if(el.type === "number"){
-            el.addEventListener("blur", () => {
-                // replace the number input with text input to allow formatting
-                const newEl = document.createElement("input");
-                newEl.type = "text";
-                newEl.id = el.id;
-                newEl.name = el.name;
-                newEl.className = el.className;
-                newEl.setAttribute("data-is-currency", "true");
-                newEl.value = el.value;
-                el.replaceWith(newEl);
-                newEl.value = numericHelpers.formatNumberAsCurrency(newEl.value);
-            });
-        }
-    });
+    const formatCurrencyEls = async () => {
+        const currencyEls = document.querySelectorAll("[data-is-currency]");
+        const numericHelpers = await loadNumericHelpers();
+        currencyEls.forEach((el) => {
+            el.textContent = numericHelpers.formatNumberAsCurrency(el.textContent);
+            if (el.type === "number") {
+                el.addEventListener("blur", () => {
+                    // replace the number input with text input to allow formatting
+                    const newEl = document.createElement("input");
+                    newEl.type = "text";
+                    newEl.id = el.id;
+                    newEl.name = el.name;
+                    newEl.className = el.className;
+                    newEl.setAttribute("data-is-currency", "true");
+                    newEl.value = el.value;
+                    el.replaceWith(newEl);
+                    newEl.value = numericHelpers.formatNumberAsCurrency(newEl.value);
+                });
+            }
+        });
+    };
 
-    const longTextEls = document.querySelectorAll("[data-long-text]");
-    longTextEls.forEach(el => {
-        if (el.textContent.length > 20) {
-            el.title = el.textContent;
+    const formatLongTextEls = () => {
+        const longTextEls = document.querySelectorAll("[data-long-text]");
+        longTextEls.forEach((el) => {
+            if (el.textContent.length > 20) {
+                el.title = el.textContent;
+            }
+        });
+    };
+
+    const accountsDataEl = document.getElementById("accounts-data");
+    const accountsData = accountsDataEl ? JSON.parse(accountsDataEl.textContent || "{}") : {};
+    const categories = accountsData?.allCategories?.categories || [];
+    const subcategories = accountsData?.allCategories?.subcategories || [];
+    const allUsers = accountsData?.allUsers || [];
+    const categoryNameById = new Map(categories.map((category) => [String(category.id), category.name]));
+    const subcategoryNameById = new Map(subcategories.map((subcategory) => [String(subcategory.id), subcategory.name]));
+    const userNameById = new Map(allUsers.map((user) => [String(user.id), user.username]));
+    if (userNameById.size === 0) {
+        const accountOwnerSelect = document.getElementById("account_owner");
+        if (accountOwnerSelect) {
+            for (const option of accountOwnerSelect.options) {
+                if (!option.value) {
+                    continue;
+                }
+                const label = option.textContent || "";
+                const username = label.split(" (")[0] || label;
+                userNameById.set(String(option.value), username);
+            }
         }
-    });
+    }
+    const statementTypeLabels = {
+        IS: "Income Statement",
+        BS: "Balance Sheet",
+        RE: "Retained Earnings Statement",
+    };
+
+    const pageDownBtn = document.querySelector("[data-accounts-page-down]");
+    const pageUpBtn = document.querySelector("[data-accounts-page-up]");
+    const currentPageEl = document.querySelector("[data-accounts-current-page]");
+    let currentPage = 1;
+    let accountCount = 0;
+    const accountsPerPage = 25;
+    try {
+        const response = await fetchWithAuth("/api/accounts/account_count");
+        if (response.ok) {
+            const data = await response.json();
+            accountCount = parseInt(data.total_accounts, 10) || 0;
+        }
+    } catch (error) {
+        alert("Error fetching account counts: " + error.message);
+    }
+
+    const totalPagesEl = document.querySelector("[data-accounts-total-pages]");
+    if (totalPagesEl) {
+        const totalPages = Math.ceil(accountCount / accountsPerPage);
+        totalPagesEl.textContent = totalPages;
+    }
+
+    const loadAccountsPage = async (page) => {
+        showLoadingOverlay();
+        try {
+            const offset = (page - 1) * accountsPerPage;
+            const response = await fetchWithAuth(`/api/accounts/list/${offset}/${accountsPerPage}`);
+            if (!response.ok) {
+                throw new Error("Failed to fetch accounts");
+            }
+            const accounts = await response.json();
+            const tbody = document.querySelector("#accounts_table tbody");
+            tbody.innerHTML = "";
+            for (const account of accounts) {
+                const accountOwner = userNameById.get(String(account.user_id)) || "";
+                const normalSide = account.normal_side
+                    ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1)
+                    : "";
+                const categoryName = categoryNameById.get(String(account.account_category_id)) || "";
+                const subcategoryName = subcategoryNameById.get(String(account.account_subcategory_id)) || "";
+                const statementType = statementTypeLabels[account.statement_type] || account.statement_type || "";
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${account.account_name ?? ""}</td>
+                    <td>${account.account_number ?? ""}</td>
+                    <td>${accountOwner}</td>
+                    <td>${normalSide}</td>
+                    <td data-is-currency>${account.balance ?? ""}</td>
+                    <td data-long-text>${account.account_description ?? ""}</td>
+                    <td>${categoryName}</td>
+                    <td>${subcategoryName}</td>
+                    <td>${statementType}</td>
+                    <td data-long-text>${account.comment ?? ""}</td>
+                    <td data-is-currency>${account.initial_balance ?? ""}</td>
+                    <td>${account.account_order ?? ""}</td>
+                    <td data-is-currency>${account.total_debits ?? ""}</td>
+                    <td data-is-currency>${account.total_credits ?? ""}</td>
+                    <td>
+                        <button type="button" class="button-small account-button" data-account-id="${account.id}" data-edit-account-button>Edit</button>
+                        <button type="button" class="button-small account-button" data-account-id="${account.id}" data-audit-account-button>Audit</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+            currentPageEl.textContent = page;
+            await formatCurrencyEls();
+            formatLongTextEls();
+        } catch (error) {
+            alert("Error loading accounts: " + error.message);
+        } finally {
+            hideLoadingOverlay();
+        }
+    };
+
+    if (pageDownBtn) {
+        pageDownBtn.addEventListener("click", () => {
+            if (currentPage > 1) {
+                currentPage -= 1;
+                loadAccountsPage(currentPage);
+            }
+        });
+    }
+
+    if (pageUpBtn) {
+        pageUpBtn.addEventListener("click", () => {
+            if (currentPage * accountsPerPage < accountCount) {
+                currentPage += 1;
+                loadAccountsPage(currentPage);
+            }
+        });
+    }
+
+    // Initial load
+    loadAccountsPage(currentPage);
 
     const accountCategorySelect = document.getElementById("account_category");
     const accountSubcategorySelect = document.getElementById("account_subcategory");
-    const accountsDataEl = document.getElementById("accounts-data");
-    const accountsData = accountsDataEl ? JSON.parse(accountsDataEl.textContent || "{}") : {};
-    const subcategories = accountsData?.allCategories?.subcategories || [];
 
     const renderSubcategories = (categoryId) => {
         if (!accountSubcategorySelect) {
@@ -133,9 +256,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         if (!categoryId) {
             return;
         }
-        const filtered = subcategories.filter(
-            (subcategory) => String(subcategory.account_category_id) === String(categoryId),
-        );
+        const filtered = subcategories.filter((subcategory) => String(subcategory.account_category_id) === String(categoryId));
         for (const subcategory of filtered) {
             const option = document.createElement("option");
             option.value = subcategory.id;
@@ -159,5 +280,3 @@ async function loadNumericHelpers() {
     const formatNumberWithCommas = module.formatNumberWithCommas;
     return { formatNumberAsCurrency, formatNumberWithCommas };
 }
-
-

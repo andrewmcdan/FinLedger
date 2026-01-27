@@ -563,6 +563,20 @@ textarea {
     white-space: nowrap;
 }
 
+.page-navigation {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 1.2rem;
+    padding-top: 1.5rem;
+}
+
+[data-accounts-page-btn] {
+    cursor: pointer;
+    user-select: none;
+    padding: 0.2rem 0.5rem;
+}
+
 @keyframes spinnerSpin {
     to {
         transform: rotate(360deg);

@@ -1,15 +1,28 @@
 const express = require("express");
 const router = express.Router();
 const accountsController = require("../controllers/accounts");
-const { isAdmin, getUserLoggedInStatus } = require("../controllers/users");
+const { isAdmin } = require("../controllers/users");
 
-router.get("/list", async (req, res) => {
+router.get("/account_count", async (req, res) => {
     const userId = req.user.id;
     if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
     try {
-        const result = await accountsController.listAccounts(req.user.id);
+        const result = await accountsController.getAccountCounts(req.user.id, req.user.token);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get("/list/:offset/:limit", async (req, res) => {
+    const userId = req.user.id;
+    if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+        const result = await accountsController.listAccounts(req.user.id, req.user.token, Number(req.params.offset), Number(req.params.limit));
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -34,10 +47,10 @@ router.post("/create", async (req, res) => {
 });
 
 router.get("/account-categories", async (req, res) => {
-    const loggedIn = await getUserLoggedInStatus(req.user.id, req.user.token);
-    if (!loggedIn) {
-        return res.status(401).json({ error: "Unauthorized" });
-    }
+    // const loggedIn = await getUserLoggedInStatus(req.user.id, req.user.token);
+    // if (!loggedIn) {
+    //     return res.status(401).json({ error: "Unauthorized" });
+    // }
     try {
         const result = await accountsController.listAccountCategories();
         res.json(result);
