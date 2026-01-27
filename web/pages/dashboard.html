@@ -42,8 +42,8 @@
                 <% users.filter(user => user.status === 'pending').forEach(user => { %>
                 <article class="data-row" data-user_id-<%= user.id %>>
                     <p class="value">
-                        <span class="approval-name"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
-                        <span class="approval-actions">
+                        <span class="span-label"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
+                        <span class="span-actions">
                             <button class="button-small" data-user-action="approve" data-user-id="<%= user.id %>">Approve</button>
                             <button class="button-small" data-user-action="reject" data-user-id="<%= user.id %>">Reject</button>
                         </span>
@@ -74,8 +74,8 @@
                 <% users.filter(user => user.status === 'suspended').forEach(user => { %>
                 <article class="data-row" data-suspended_user_id-<%= user.id %>>
                     <p class="value">
-                        <span class="approval-name"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
-                        <span class="approval-actions">
+                        <span class="span-label"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
+                        <span class="span-actions">
                             <button class="button-small" data-user-action="reinstate" data-user-id="<%= user.id %>">Reinstate</button>
                         </span>
                     </p>

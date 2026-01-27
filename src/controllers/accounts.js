@@ -47,7 +47,7 @@ async function listAccounts(userId, token) {
     let query = "SELECT * FROM accounts";
     const params = [];
     if (!await isAdmin(userId, token) && !await isManager(userId, token)) {
-        query += " WHERE owner_id = $1";
+        query += " WHERE user_id = $1";
         params.push(userId);
     }
     return db.query(query, params);
