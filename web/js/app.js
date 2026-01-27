@@ -20,12 +20,18 @@ const loadingOverlay = document.getElementById("loading_overlay");
 const loadingLabel = loadingOverlay?.querySelector("[data-loading-label]") || loadingOverlay?.querySelector("div:last-child");
 let loadingCount = 0;
 
+async function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function setLoadingOverlayVisible(isVisible) {
     if (!loadingOverlay) {
         return;
     }
     loadingOverlay.classList.toggle("is-visible", isVisible);
-    loadingOverlay.setAttribute("aria-hidden", isVisible ? "false" : "true");
+    setTimeout(() => {
+        loadingOverlay.setAttribute("aria-hidden", isVisible ? "false" : "true");
+    }, 200);
 }
 
 function showLoadingOverlay(message) {
@@ -266,6 +272,7 @@ async function renderRoute() {
     let overlayActive = false;
 
     showLoadingOverlay("Loading...");
+    const startTime = performance.now();
     overlayActive = true;
     try {
         try {
@@ -276,6 +283,7 @@ async function renderRoute() {
             view.innerHTML = markup;
             shouldAnimate = true;
             if (overlayActive) {
+                await delay(Math.max(0, 500 - (performance.now() - startTime)));
                 hideLoadingOverlay();
                 overlayActive = false;
             }
@@ -285,6 +293,7 @@ async function renderRoute() {
                 view.innerHTML = markup;
                 shouldAnimate = true;
                 if (overlayActive) {
+                    await delay(Math.max(0, 500 - (performance.now() - startTime)));
                     hideLoadingOverlay();
                     overlayActive = false;
                 }
@@ -292,6 +301,7 @@ async function renderRoute() {
                 view.innerHTML = '<section class="page"><h1>Page not found</h1></section>';
                 shouldAnimate = true;
                 if (overlayActive) {
+                    await delay(Math.max(0, 500 - (performance.now() - startTime)));
                     hideLoadingOverlay();
                     overlayActive = false;
                 }
@@ -356,6 +366,7 @@ async function renderRoute() {
         await loadModule(route ? route.module : null);
     } finally {
         if (overlayActive) {
+            await delay(Math.max(0, 500 - (performance.now() - startTime)));
             hideLoadingOverlay();
         }
         if (!shouldAnimate) {
