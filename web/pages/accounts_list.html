@@ -14,6 +14,7 @@
                 <thead>
                     <tr>
                         <th>Account Name</th>
+                        <th>Account Number</th>
                         <th>Account Owner</th>
                         <th>Account Type</th>
                         <th>Balance</th>
@@ -31,6 +32,7 @@
                     <% accounts.forEach(function(account) { %>
                     <tr>
                         <td><%= account.account_name %></td>
+                        <td><%= account.account_number %></td>
                         <td><%= (allUsers.find(function(user) { return user.id == account.user_id; }) || {}).username || "" %></td>
                         <td><%= account.normal_side.charAt(0).toUpperCase() + account.normal_side.slice(1) %></td>
                         <td data-is-currency><%= account.balance %></td>

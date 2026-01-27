@@ -3,6 +3,46 @@ const { isAdmin, isManager } = require("./users");
 const {log} = require("../utils/logger");
 const {getCallerInfo} = require("../utils/utilities");
 
+function isNumericId(value) {
+    if (typeof value === "number") {
+        return Number.isInteger(value);
+    }
+    if (typeof value === "string") {
+        return /^\d+$/.test(value.trim());
+    }
+    return false;
+}
+
+async function resolveCategory(client, accountCategory) {
+    const isId = isNumericId(accountCategory);
+    const query = isId
+        ? "SELECT id, account_number_prefix FROM account_categories WHERE id = $1"
+        : "SELECT id, account_number_prefix FROM account_categories WHERE name = $1";
+    const param = isId ? Number(accountCategory) : accountCategory;
+    const result = await client.query(query, [param]);
+    if (result.rows.length === 0) {
+        throw new Error(`Account category not found: ${accountCategory}`);
+    }
+    return result.rows[0];
+}
+
+async function resolveSubcategory(client, accountSubcategory, categoryId) {
+    const isId = isNumericId(accountSubcategory);
+    const query = isId
+        ? "SELECT id, order_index, account_category_id FROM account_subcategories WHERE id = $1"
+        : "SELECT id, order_index, account_category_id FROM account_subcategories WHERE name = $1";
+    const param = isId ? Number(accountSubcategory) : accountSubcategory;
+    const result = await client.query(query, [param]);
+    if (result.rows.length === 0) {
+        throw new Error(`Account subcategory not found: ${accountSubcategory}`);
+    }
+    const subcategory = result.rows[0];
+    if (categoryId !== undefined && categoryId !== null && String(subcategory.account_category_id) !== String(categoryId)) {
+        throw new Error(`Account subcategory not found: ${accountSubcategory}`);
+    }
+    return subcategory;
+}
+
 async function listAccounts(userId, token) {
     let query = "SELECT * FROM accounts";
     const params = [];
@@ -14,7 +54,6 @@ async function listAccounts(userId, token) {
 }
 
 async function createAccount(ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, statementType, comments) {
-    const accountNumber = await generateNewAccountNumber(accountCategory, accountSubcategory, accountOrder);
     const statementTypeMap = {
         "Income Statement": "IS",
         "Balance Sheet": "BS",
@@ -28,13 +67,15 @@ async function createAccount(ownerId, accountName, accountDescription, normalSid
         throw new Error(`Invalid statement type: ${statementType}`);
     }
 
+    const { accountNumber, categoryId, subcategoryId } = await generateNewAccountNumber(accountCategory, accountSubcategory, accountOrder);
+
     try {
         const query = `
         INSERT INTO accounts 
         (user_id, account_name, account_description, normal_side, account_category_id, account_subcategory_id, balance, initial_balance, total_debits, total_credits, account_order, statement_type, comment, account_number) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
         RETURNING *`;
-        const params = [ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, normalizedStatementType, comments, accountNumber];
+        const params = [ownerId, accountName, accountDescription, normalSide, categoryId, subcategoryId, balance, initialBalance, totalDebits, totalCredits, accountOrder, normalizedStatementType, comments, accountNumber];
         const result = await db.query(query, params);
         const error = result?.error;
         if (result.rows.length === 0) {
@@ -59,18 +100,11 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
     }
 
     return db.transaction(async (client) => {
-        const categoryRes = await client.query("SELECT account_number_prefix FROM account_categories WHERE id = $1", [accountCategory]);
-        if (categoryRes.rows.length === 0) {
-            throw new Error(`Account category not found: ${accountCategory}`);
-        }
+        const category = await resolveCategory(client, accountCategory);
+        const subcategory = await resolveSubcategory(client, accountSubcategory, category.id);
 
-        const subcategoryRes = await client.query("SELECT order_index FROM account_subcategories WHERE id = $1", [accountSubcategory]);
-        if (subcategoryRes.rows.length === 0) {
-            throw new Error(`Account subcategory not found: ${accountSubcategory}`);
-        }
-
-        const categoryCode = String(categoryRes.rows[0].account_number_prefix).padStart(2, "0");
-        const subcategoryCode = String(subcategoryRes.rows[0].order_index).padStart(2, "0");
+        const categoryCode = String(category.account_number_prefix).padStart(2, "0");
+        const subcategoryCode = String(subcategory.order_index).padStart(2, "0");
         const base = `${categoryCode}${subcategoryCode}${orderCode}`;
 
         const suffixRes = await client.query(
@@ -79,7 +113,7 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
              WHERE account_category_id = $1
                AND account_subcategory_id = $2
                AND account_order = $3`,
-            [accountCategory, accountSubcategory, orderValue],
+            [category.id, subcategory.id, orderValue],
         );
 
         const maxSuffix = suffixRes.rows[0]?.max_suffix;
@@ -89,7 +123,11 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
         }
 
         const suffixCode = String(nextSuffix).padStart(2, "0");
-        return `${base}${suffixCode}`;
+        return {
+            accountNumber: `${base}${suffixCode}`,
+            categoryId: category.id,
+            subcategoryId: subcategory.id,
+        };
     });
 }
 
