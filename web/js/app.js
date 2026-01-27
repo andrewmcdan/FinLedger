@@ -146,7 +146,7 @@ function fetchWithAuth(url, options = {}) {
     const userId = localStorage.getItem("user_id") || "";
     const mergedHeaders = {
         Authorization: `Bearer ${authToken}`,
-        User_id: `${userId}`,
+        "X-User-Id": `${userId}`,
         ...(options.headers || {}),
     };
 
@@ -165,7 +165,7 @@ async function fetchPageMarkup(pageName) {
         // Unauthorized
         // if the returned content is {"error": "Missing Authorization header"}, then redirect to not_logged_in.html
         let resJson = await response.clone().json();
-        if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing User_ID header" || resJson.error == "Invalid or expired token") {
+        if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing X-User-Id header" || resJson.error == "Invalid or expired token") {
             window.location.hash = "#/not_logged_in";
             return;
         }
@@ -247,6 +247,7 @@ async function loadModule(moduleName) {
 function animateView() {
     view.classList.remove("page-enter");
     void view.offsetWidth;
+    view.classList.remove("page-enter-prep");
     view.classList.add("page-enter");
 }
 
@@ -255,12 +256,17 @@ async function renderRoute() {
         return;
     }
 
+    view.classList.remove("page-enter");
+    view.classList.add("page-enter-prep");
+
     const routeKey = getRouteFromHash();
     const route = routes[routeKey];
     const pageName = route ? route.page : routes.not_found.page;
     let shouldAnimate = false;
+    let overlayActive = false;
 
-    // showLoadingOverlay();
+    showLoadingOverlay("Loading...");
+    overlayActive = true;
     try {
         try {
             const markup = await fetchPageMarkup(pageName);
@@ -269,14 +275,26 @@ async function renderRoute() {
             }
             view.innerHTML = markup;
             shouldAnimate = true;
+            if (overlayActive) {
+                hideLoadingOverlay();
+                overlayActive = false;
+            }
         } catch (error) {
             try {
                 const markup = await fetchPageMarkup("pages/public/not_found");
                 view.innerHTML = markup;
                 shouldAnimate = true;
+                if (overlayActive) {
+                    hideLoadingOverlay();
+                    overlayActive = false;
+                }
             } catch (fallbackError) {
                 view.innerHTML = '<section class="page"><h1>Page not found</h1></section>';
                 shouldAnimate = true;
+                if (overlayActive) {
+                    hideLoadingOverlay();
+                    overlayActive = false;
+                }
             }
         }
 
@@ -330,12 +348,19 @@ async function renderRoute() {
 
         document.title = route ? `FinLedger - ${route.title}` : "FinLedger";
         setActiveNav(route ? routeKey : null);
+        if (shouldAnimate) {
+            animateView();
+        } else {
+            view.classList.remove("page-enter-prep");
+        }
         await loadModule(route ? route.module : null);
     } finally {
-        hideLoadingOverlay();
-    }
-    if (shouldAnimate) {
-        animateView();
+        if (overlayActive) {
+            hideLoadingOverlay();
+        }
+        if (!shouldAnimate) {
+            view.classList.remove("page-enter-prep");
+        }
     }
 }
 
@@ -347,3 +372,5 @@ import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 
 window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
 window.addEventListener("hashchange", updateLoginLogoutButton);
+
+

@@ -170,7 +170,12 @@
 }
 
 .app-main.page-enter .page {
-    animation: pageFade 0.32s ease-out;
+    animation: pageFade 0.62s ease-out;
+}
+
+.app-main.page-enter-prep .page {
+    opacity: 0;
+    transform: translateY(10px);
 }
 
 .page {
@@ -549,6 +554,13 @@ button.button-small,
 
 textarea {
     resize: vertical;
+}
+
+#accounts_table td[data-long-text] {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 @keyframes spinnerSpin {

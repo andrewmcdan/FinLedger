@@ -9,7 +9,7 @@ const pathRoot = path.resolve(__dirname, "./../../user-icons/");
 const pathDefault = path.resolve(__dirname, "./../../web/public_images/default.png");
 
 router.get("/user-icon.png", async (req, res) => {
-    logger.log("info", `Request for user icon by user ID ${req.user ? req.user.id : "unknown"}`, { function: "user-icon" }, utilities.getCallerInfo());
+    logger.log("info", `Request for user icon by user ID ${req.user ? req.user.id : "unknown"}`, { function: "user-icon" }, utilities.getCallerInfo(), req.user ? req.user.id : null);
     // Get the user's icon filename based on req.user.id
     if (!req.user || !req.user.id) {
         // No user info, send default icon
@@ -39,7 +39,7 @@ const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, pathRoot),
     filename: (req, file, cb) => {
         cb(null, `${file.originalname}`);
-    }
+    },
 });
 
 const allowed = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
@@ -51,22 +51,17 @@ const upload = multer({
         const ext = path.extname(file.originalname).toLowerCase();
         if (!allowed.has(ext)) return cb(new Error("Invalid file type"));
         cb(null, true);
-    }
+    },
 });
 router.post("/upload-user-icon", upload.single("user_icon"), (req, res) => {
-    logger.log(
-        "info",
-        `Upload user icon request by user ID ${req.user ? req.user.id : "unknown"}`,
-        { function: "upload-user-icon" },
-        utilities.getCallerInfo()
-    );
+    logger.log("info", `Upload user icon request by user ID ${req.user ? req.user.id : "unknown"}`, { function: "upload-user-icon" }, utilities.getCallerInfo(), req.user ? req.user.id : null);
 
     if (!req.user?.id) return res.status(401).json({ error: "Unauthorized" });
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     return res.json({
         message: "File uploaded successfully",
-        file_name: req.file.filename
+        file_name: req.file.filename,
     });
 });
 

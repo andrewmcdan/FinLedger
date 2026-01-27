@@ -36,7 +36,7 @@ const getUserLoggedInStatus = async (user_id, token) => {
 };
 
 const isAdmin = async (userId, token) => {
-    logger.log("trace", `Checking if user ${userId} is an administrator`, { function: "isAdmin" }, utilities.getCallerInfo());
+    logger.log("trace", `Checking if user ${userId} is an administrator`, { function: "isAdmin" }, utilities.getCallerInfo(), userId);
     if (!token) {
         return false;
     }
@@ -53,7 +53,7 @@ const isAdmin = async (userId, token) => {
 };
 
 const isManager = async (userId, token) => {
-    logger.log("trace", `Checking if user ${userId} is a manager`, { function: "isManager" }, utilities.getCallerInfo());
+    logger.log("trace", `Checking if user ${userId} is a manager`, { function: "isManager" }, utilities.getCallerInfo(), userId);
     if (!token) {
         return false;
     }
@@ -114,22 +114,22 @@ const listLoggedInUsers = async () => {
 };
 
 const approveUser = async (userId) => {
-    logger.log("info", `Approving user with ID ${userId}`, { function: "approveUser" }, utilities.getCallerInfo());
+    logger.log("info", `Approving user with ID ${userId}`, { function: "approveUser" }, utilities.getCallerInfo(), userId);
     await db.query("UPDATE users SET status = 'active', updated_at = now() WHERE id = $1", [userId]);
 };
 
 const rejectUser = async (userId) => {
-    logger.log("info", `Rejecting user with ID ${userId}`, { function: "rejectUser" }, utilities.getCallerInfo());
+    logger.log("info", `Rejecting user with ID ${userId}`, { function: "rejectUser" }, utilities.getCallerInfo(), userId);
     await db.query("UPDATE users SET status = 'rejected', updated_at = now() WHERE id = $1", [userId]);
 };
 
 const suspendUser = async (userId, suspensionStart, suspensionEnd) => {
-    logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo());
+    logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo(), userId);
     await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended', updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId]);
 };
 
 const reinstateUser = async (userId) => {
-    logger.log("info", `Reinstating user with ID ${userId}`, { function: "reinstateUser" }, utilities.getCallerInfo());
+    logger.log("info", `Reinstating user with ID ${userId}`, { function: "reinstateUser" }, utilities.getCallerInfo(), userId);
     await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE id = $1", [userId]);
 };
 
@@ -140,16 +140,18 @@ const changePassword = async (userId, newPassword) => {
     if (!checkPasswordComplexity(newPassword)) {
         throw new Error("Password does not meet complexity requirements");
     }
-    const pastPasswordsResult = await db.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
-    for (const row of pastPasswordsResult.rows) {
-        const matchResult = await db.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
-        if (matchResult.rows.length > 0) {
-            throw new Error("New password cannot be the same as any past passwords");
+    await db.transaction(async (client) => {
+        const pastPasswordsResult = await client.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
+        for (const row of pastPasswordsResult.rows) {
+            const matchResult = await client.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
+            if (matchResult.rows.length > 0) {
+                throw new Error("New password cannot be the same as any past passwords");
+            }
         }
-    }
-    logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo());
-    const result = await db.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
-    await savePasswordToHistory(userId, result.rows[0].password_hash);
+        logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo(), userId);
+        const result = await client.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
+        await savePasswordToHistory(userId, result.rows[0].password_hash, client);
+    });
 };
 
 const verifyCurrentPassword = async (userId, currentPassword) => {
@@ -194,7 +196,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
     const values = [];
     Object.entries(fields).forEach(([key, value]) => {
         if (value === undefined) {
-            logger.log("debug", `Skipping undefined profile field ${key} for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo());
+            logger.log("debug", `Skipping undefined profile field ${key} for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo(), userId);
             return;
         }
         updates.push(`${key} = $${values.length + 1}`);
@@ -202,7 +204,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
     });
 
     if (!updates.length) {
-        logger.log("info", `No profile updates provided for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo());
+        logger.log("info", `No profile updates provided for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo(), userId);
         return null;
     }
 
@@ -210,11 +212,11 @@ const updateUserProfile = async (userId, profileUpdates) => {
     updates.push(`updated_at = now()`);
     const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, email, first_name, last_name, address, user_icon_path`;
     const result = await db.query(query, values);
-    if( result.rowCount === 0) {
-        logger.log("warn", `No user found with ID ${userId} to update profile`, { function: "updateUserProfile" }, utilities.getCallerInfo());
+    if (result.rowCount === 0) {
+        logger.log("warn", `No user found with ID ${userId} to update profile`, { function: "updateUserProfile" }, utilities.getCallerInfo(), userId);
         return null;
     }
-    logger.log("info", `Updated profile for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo());
+    logger.log("info", `Updated profile for user with ID ${userId}`, { function: "updateUserProfile" }, utilities.getCallerInfo(), userId);
     return result.rows[0];
 };
 
@@ -240,7 +242,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     let tempPasswordFlag = false;
     if (!password || password.length === 0) {
         // Generate a random temporary password using lastname, dob, and a random number
-        const randomNum = Math.floor(1000 + Math.random() * 9000); // 4 digit random number
+        const randomNum = Math.floor(100000000 + Math.random() * 900000000); // 9 digit random number
         const dobPart = new Date(dateOfBirth).toISOString().slice(5, 7) + new Date(dateOfBirth).toISOString().slice(2, 4);
         password = `${lastName}_${dobPart}_${randomNum}`;
         tempPasswordFlag = true;
@@ -250,21 +252,17 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const result = await db.query("INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path", [
-        username,
-        email,
-        password,
-        firstName,
-        lastName,
-        role,
-        address,
-        dateOfBirth,
-        tempPasswordFlag
-    ]);
-    const userIconPath = result.rows[0].user_icon_path;
-    await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash);
-    if (profileImage && (profileImage != null) && (profileImage !== "") && (profileImage !== "null") && userIconPath) {
-        logger.log("info", `Moving profile image for new user with ID ${result.rows[0].id}`, { function: "createUser" }, utilities.getCallerInfo());
+    const createdUser = await db.transaction(async (client) => {
+        const result = await client.query(
+            "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
+            [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
+        );
+        await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
+        return result.rows[0];
+    });
+    const userIconPath = createdUser.user_icon_path;
+    if (profileImage && profileImage != null && profileImage !== "" && profileImage !== "null" && userIconPath) {
+        logger.log("info", `Moving profile image for new user with ID ${createdUser.id}`, { function: "createUser" }, utilities.getCallerInfo(), createdUser.id);
         const sourcePath = path.join(__dirname, "../../user-icons/", path.basename(profileImage));
         const destPath = path.join(__dirname, "../../user-icons/", userIconPath);
         fs.renameSync(sourcePath, destPath);
@@ -275,11 +273,12 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         let result = await sendEmail(email, emailSubject, emailBody);
         logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
     }
-    return result.rows[0];
+    return createdUser;
 };
 
-const savePasswordToHistory = async (userId, passwordHash) => {
-    await db.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
+const savePasswordToHistory = async (userId, passwordHash, client = null) => {
+    const executor = client || db;
+    await executor.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
 };
 
 const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
@@ -291,7 +290,7 @@ const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
     const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')), updated_at = now() WHERE id = $7";
     const values = [questionsAndAnswers[0].question, questionsAndAnswers[0].answer, questionsAndAnswers[1].question, questionsAndAnswers[1].answer, questionsAndAnswers[2].question, questionsAndAnswers[2].answer, userId];
     await db.query(query, values);
-    logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo());
+    logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo(), userId);
 };
 
 const getSecurityQuestionsForUser = async (userId) => {
@@ -350,7 +349,7 @@ const sendPasswordExpiryWarnings = async () => {
         const emailSubject = "Password Expiration Warning";
         const emailBody = `Dear ${row.first_name} ${row.last_name},\n\nThis is a reminder that your password will expire in ${daysLeft} day(s) on ${row.password_expires_at.toDateString()}.\n\nPlease log in and change your password to avoid any disruption to your account access.\n\nBest regards,\nFinLedger Team`;
         let emailResult = await sendEmail(row.email, emailSubject, emailBody);
-        logger.log("info", `Sent password expiration warning email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "sendPasswordExpiryWarnings" }, utilities.getCallerInfo());
+        logger.log("info", `Sent password expiration warning email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "sendPasswordExpiryWarnings" }, utilities.getCallerInfo(), row.id);
     }
 };
 
@@ -363,7 +362,7 @@ const suspendUsersWithExpiredPasswords = async () => {
         // update password_expiry_email_tracking to log this suspension email
         const passwordExpiresAtResult = await db.query("SELECT password_expires_at FROM users WHERE id = $1", [row.id]);
         await db.query("INSERT INTO password_expiry_email_tracking (user_id, password_expires_at) VALUES ($1, $2)", [row.id, passwordExpiresAtResult.rows[0].password_expires_at]);
-        logger.log("info", `Sent account suspension email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo());
+        logger.log("info", `Sent account suspension email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo(), row.id);
     }
     logger.log("info", "Suspended users with expired passwords: " + result.rowCount, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo());
 };
@@ -377,12 +376,14 @@ const setUserPassword = async (userId, password, temp = false) => {
     if (!checkPasswordComplexity(password)) {
         throw new Error("Password does not meet complexity requirements");
     }
-    const result = await db.query("SELECT crypt($1, gen_salt('bf')) AS password_hash", [password]);
-    const passwordHash = result.rows[0].password_hash;
-    const result2 = await db.query("UPDATE users SET password_hash = $1, temp_password = $2, password_changed_at = now(), password_expires_at = now() + ($3 * interval '15 minutes'), updated_at = now() WHERE id = $4", [passwordHash, temp, temp ? 1 : 90 * 24 * 60, userId]);
-    await savePasswordToHistory(userId, passwordHash);
-    return result2.rowCount > 0;
-}
+    return db.transaction(async (client) => {
+        const result = await client.query("SELECT crypt($1, gen_salt('bf')) AS password_hash", [password]);
+        const passwordHash = result.rows[0].password_hash;
+        const result2 = await client.query("UPDATE users SET password_hash = $1, temp_password = $2, password_changed_at = now(), password_expires_at = now() + ($3 * interval '15 minutes'), updated_at = now() WHERE id = $4", [passwordHash, temp, temp ? 1 : 90 * 24 * 60, userId]);
+        await savePasswordToHistory(userId, passwordHash, client);
+        return result2.rowCount > 0;
+    });
+};
 
 const getUserByUsername = async (username) => {
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE username = $1", [username]);
@@ -391,7 +392,6 @@ const getUserByUsername = async (username) => {
     }
     return userResult.rows[0];
 };
-    
 
 module.exports = {
     getUserLoggedInStatus,

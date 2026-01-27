@@ -27,9 +27,32 @@ const uploadProfile = multer({
     },
 });
 const router = express.Router();
-const { getUserLoggedInStatus, getUserByUsername, setUserPassword, isAdmin, getUserById, listUsers, listLoggedInUsers, approveUser, createUser, rejectUser, suspendUser, reinstateUser, changePassword, changePasswordWithCurrentPassword, updateSecurityQuestionsWithCurrentPassword, updateUserProfile, getUserByEmail, updateSecurityQuestions, getSecurityQuestionsForUser, verifySecurityAnswers, getUserByResetToken, deleteUserById } = require("../controllers/users.js");
+const {
+    getUserLoggedInStatus,
+    getUserByUsername,
+    setUserPassword,
+    isAdmin,
+    getUserById,
+    listUsers,
+    listLoggedInUsers,
+    approveUser,
+    createUser,
+    rejectUser,
+    suspendUser,
+    reinstateUser,
+    changePassword,
+    changePasswordWithCurrentPassword,
+    updateSecurityQuestionsWithCurrentPassword,
+    updateUserProfile,
+    getUserByEmail,
+    updateSecurityQuestions,
+    getSecurityQuestionsForUser,
+    verifySecurityAnswers,
+    getUserByResetToken,
+    deleteUserById,
+} = require("../controllers/users.js");
 const { SECURITY_QUESTIONS } = require("../data/security_questions");
-const logger = require("../utils/logger.js");
+const { log } = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const { sendEmail } = require("../services/email.js");
 const db = require("../db/db.js");
@@ -99,11 +122,11 @@ router.post("/email-user", async (req, res) => {
         const emailBody = `Dear ${user.first_name || username},\n\n${message}\n\nBest regards,\nFinLedger Team`;
         const emailResult = await sendEmail(user.email, subject, emailBody);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
-            logger.log("warn", `Failed to send email to ${user.email} for username ${username}`, { function: "email-user" }, utilities.getCallerInfo());
+            log("warn", `Failed to send email to ${user.email} for username ${username}`, { function: "email-user" }, utilities.getCallerInfo(), requestingUserId);
         }
         return res.json({ message: "Email sent successfully" });
     } catch (error) {
-        logger.log("error", `Error sending email to username ${username}: ${error}`, { function: "email-user" }, utilities.getCallerInfo());
+        log("error", `Error sending email to username ${username}: ${error}`, { function: "email-user" }, utilities.getCallerInfo(), requestingUserId);
         return res.status(500).json({ error: "Failed to send email" });
     }
 });
@@ -125,12 +148,16 @@ router.get("/approve-user/:userId", async (req, res) => {
         return res.status(400).json({ error: "User is not pending approval" });
     }
     await approveUser(userIdToApprove);
-    logger.log("info", `User ID ${userIdToApprove} approved by admin user ID ${requestingUserId}`, { function: "approve-user" }, utilities.getCallerInfo());
+    log("info", `User ID ${userIdToApprove} approved by admin user ID ${requestingUserId}`, { function: "approve-user" }, utilities.getCallerInfo(), requestingUserId);
     const loginLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
     const loginLink = `${loginLinkUrlBase}/#/login`;
-    const emailResult = await sendEmail(userData.email, "Your FinLedger Account Has Been Approved", `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by an administrator. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nLogin here: ${loginLink}\n\nBest regards,\nThe FinLedger Team\n\n`);
+    const emailResult = await sendEmail(
+        userData.email,
+        "Your FinLedger Account Has Been Approved",
+        `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by an administrator. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nLogin here: ${loginLink}\n\nBest regards,\nThe FinLedger Team\n\n`,
+    );
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
-        logger.log("warn", `Failed to send approval email to ${userData.email} for user ID ${userIdToApprove}`, { function: "approve-user" }, utilities.getCallerInfo());
+        log("warn", `Failed to send approval email to ${userData.email} for user ID ${userIdToApprove}`, { function: "approve-user" }, utilities.getCallerInfo(), requestingUserId);
     }
     return res.json({ message: "User approved successfully" });
 });
@@ -160,19 +187,19 @@ router.post("/create-user", uploadProfile.single("user_icon"), async (req, res) 
     if (!requestingUserId) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    logger.log("info", `User ID ${requestingUserId} is attempting to create a new user`, { function: "create-user" }, utilities.getCallerInfo());
+    log("info", `User ID ${requestingUserId} is attempting to create a new user`, { function: "create-user" }, utilities.getCallerInfo(), requestingUserId);
     if (!(await isAdmin(requestingUserId, req.user.token))) {
-        logger.log("warn", `Access denied for user ID ${requestingUserId} to create a new user. Administrator role required.`, { function: "create-user" }, utilities.getCallerInfo());
+        log("warn", `Access denied for user ID ${requestingUserId} to create a new user. Administrator role required.`, { function: "create-user" }, utilities.getCallerInfo(), requestingUserId);
         return res.status(403).json({ error: "Access denied. Administrator role required." });
     }
     const { first_name, last_name, email, password, role, address, date_of_birth } = req.body;
     try {
         const user_icon_name = req.file ? req.file.path : null;
         const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, user_icon_name);
-        logger.log("info", `New user created with ID ${newUser.id} by admin user ID ${requestingUserId}`, { function: "create-user" }, utilities.getCallerInfo());
+        log("info", `New user created with ID ${newUser.id} by admin user ID ${requestingUserId}`, { function: "create-user" }, utilities.getCallerInfo(), requestingUserId);
         return res.json({ user: newUser });
     } catch (error) {
-        logger.log("error", `Error creating user by admin user ID ${requestingUserId}: ${error}`, { function: "create-user" }, utilities.getCallerInfo());
+        log("error", `Error creating user by admin user ID ${requestingUserId}: ${error}`, { function: "create-user" }, utilities.getCallerInfo(), requestingUserId);
         return res.status(500).json({ error: "Failed to create user" });
     }
 });
@@ -186,14 +213,14 @@ router.post("/create-user", uploadProfile.single("user_icon"), async (req, res) 
 //     const { newPassword, securityAnswers } = req.body;
 //     const verified = await verifySecurityAnswers(requestingUserId, securityAnswers);
 //     if (!verified) {
-//         logger.log("warn", `Security answers verification failed for user ID ${requestingUserId} during password change`, { function: "changePassword" }, utilities.getCallerInfo());
+//         log("warn", `Security answers verification failed for user ID ${requestingUserId} during password change`, { function: "changePassword" }, utilities.getCallerInfo());
 //         return res.status(403).json({ error: "Security answers verification failed" });
 //     }
 //     try {
 //         await changePassword(requestingUserId, newPassword);
 //         return res.json({ message: "Password changed successfully" });
 //     } catch (error) {
-//         logger.log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
+//         log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
 //         return res.status(500).json({ error: "Failed to change password" });
 //     }
 // });
@@ -219,10 +246,7 @@ router.post("/change-password", uploadNone.none(), async (req, res) => {
         if (error?.code === "INVALID_CURRENT_PASSWORD" || error?.message === "Current password is incorrect") {
             return res.status(403).json({ error: "Current password is incorrect" });
         }
-        const userErrorMessages = new Set([
-            "Password does not meet complexity requirements",
-            "New password cannot be the same as any past passwords",
-        ]);
+        const userErrorMessages = new Set(["Password does not meet complexity requirements", "New password cannot be the same as any past passwords"]);
         const errorMessage = userErrorMessages.has(error?.message) ? error.message : "Failed to change password";
         const statusCode = errorMessage === "Failed to change password" ? 500 : 400;
         return res.status(statusCode).json({ error: errorMessage });
@@ -296,7 +320,7 @@ router.post("/update-profile", uploadProfile.single("profile_image"), async (req
                 fs.renameSync(req.file.path, targetPath);
             }
         } catch (error) {
-            logger.log("error", `Error updating profile image for user ID ${requestingUserId}: ${error}`, { function: "update-profile" }, utilities.getCallerInfo());
+            log("error", `Error updating profile image for user ID ${requestingUserId}: ${error}`, { function: "update-profile" }, utilities.getCallerInfo(), requestingUserId);
             return res.status(500).json({ error: "Failed to update profile image" });
         }
     }
@@ -304,7 +328,7 @@ router.post("/update-profile", uploadProfile.single("profile_image"), async (req
         const updatedUser = await updateUserProfile(requestingUserId, profileUpdates);
         return res.json({ message: "Profile updated successfully", user: updatedUser });
     } catch (error) {
-        logger.log("error", `Error updating profile for user ID ${requestingUserId}: ${error}`, { function: "update-profile" }, utilities.getCallerInfo());
+        log("error", `Error updating profile for user ID ${requestingUserId}: ${error}`, { function: "update-profile" }, utilities.getCallerInfo(), requestingUserId);
         return res.status(500).json({ error: "Failed to update profile" });
     }
 });
@@ -338,21 +362,20 @@ router.post("/change-temp-password", async (req, res) => {
         await changePassword(requestingUserId, newPassword);
         return res.json({ message: "Password changed successfully" });
     } catch (error) {
-        logger.log("error", `Error changing temp password for user ID ${requestingUserId}: ${error}`, { function: "change-temp-password" }, utilities.getCallerInfo());
+        log("error", `Error changing temp password for user ID ${requestingUserId}: ${error}`, { function: "change-temp-password" }, utilities.getCallerInfo(), requestingUserId);
         return res.status(500).json({ error: "Failed to change password" });
     }
 });
 
 router.post("/register_new_user", async (req, res) => {
     const { first_name, last_name, email, password, address, date_of_birth, role, security_question_1, security_answer_1, security_question_2, security_answer_2, security_question_3, security_answer_3 } = req.body;
-    console.log({ first_name, last_name, email, password, address, date_of_birth, role, security_question_1, security_answer_1, security_question_2, security_answer_2, security_question_3, security_answer_3 });
     try {
         const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, null);
-        logger.log("info", `New user registered with ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo());
+        log("info", `New user registered with ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
         const emailResult = await sendEmail(email, "Welcome to FinLedger - Registration Successful", `Dear ${first_name},\n\nThank you for registering with FinLedger. Your account is currently pending approval by an administrator. You will receive another email once your account has been approved.\n\nBest regards,\nThe FinLedger Team\n\n`);
-        logger.log("info", `Registration email sent to ${email} for new user ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo());
+        log("info", `Registration email sent to ${email} for new user ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
-            logger.log("warn", `Failed to send registration email to ${email} for new user ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo());
+            log("warn", `Failed to send registration email to ${email} for new user ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
         }
         await updateSecurityQuestions(newUser.id, [
             { question: security_question_1, answer: security_answer_1 },
@@ -361,7 +384,7 @@ router.post("/register_new_user", async (req, res) => {
         ]);
         return res.json({ user: newUser });
     } catch (error) {
-        logger.log("error", `Error registering new user: ${error}`, { function: "register_new_user" }, utilities.getCallerInfo());
+        log("error", `Error registering new user: ${error}`, { function: "register_new_user" }, utilities.getCallerInfo());
         return res.status(500).json({ error: "Failed to register user" });
     }
 });
@@ -370,10 +393,10 @@ router.get("/reset-password/:email/:userName", async (req, res) => {
     const userNameToReset = req.params.userName;
     const emailToReset = req.params.email;
     // If userId is an email, look up the user ID
-        const userData1 = await getUserByEmail(emailToReset);
-        if (!userData1) {
-            return res.status(404).json({ error: "User not found" });
-        }
+    const userData1 = await getUserByEmail(emailToReset);
+    if (!userData1) {
+        return res.status(404).json({ error: "User not found" });
+    }
     const userData2 = await getUserByUsername(userNameToReset);
     if (!userData2) {
         return res.status(404).json({ error: "User not found" });
@@ -388,9 +411,13 @@ router.get("/reset-password/:email/:userName", async (req, res) => {
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
     await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2, updated_at = now() WHERE id = $3", [resetToken, tokenExpiry, userData2.id]);
-    const emailResult = await sendEmail(userData2.email, "FinLedger Password Reset Request", `Dear ${userData2.first_name},\n\nWe received a request to reset your FinLedger account password. Please use the link below to reset your password. This link will expire in 1 hour.\n\nPassword Reset Link: ${resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nBest regards,\nThe FinLedger Team\n\n`);
+    const emailResult = await sendEmail(
+        userData2.email,
+        "FinLedger Password Reset Request",
+        `Dear ${userData2.first_name},\n\nWe received a request to reset your FinLedger account password. Please use the link below to reset your password. This link will expire in 1 hour.\n\nPassword Reset Link: ${resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nBest regards,\nThe FinLedger Team\n\n`,
+    );
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
-        logger.log("warn", `Failed to send password reset email to ${userData2.email} for user ID ${userData2.id}`, { function: "reset-password" }, utilities.getCallerInfo());
+        log("warn", `Failed to send password reset email to ${userData2.email} for user ID ${userData2.id}`, { function: "reset-password" }, utilities.getCallerInfo(), userData2.id);
     }
     return res.json({ message: "Password reset email sent successfully" });
 });
@@ -414,7 +441,7 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     }
     const verified = await verifySecurityAnswers(userData.id, securityAnswers);
     if (!verified) {
-        logger.log("warn", `Security answers verification failed for user ID ${userData.id} during password reset`, { function: "verify-security-answers" }, utilities.getCallerInfo());
+        log("warn", `Security answers verification failed for user ID ${userData.id} during password reset`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
         return res.status(403).json({ error: "Security answers verification failed" });
     }
     try {
@@ -422,11 +449,8 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
         await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, updated_at = now() WHERE id = $1", [userData.id]);
         return res.json({ message: "Password reset successfully" });
     } catch (error) {
-        logger.log("error", `Error resetting password for user ID ${userData.id}: ${error}`, { function: "verify-security-answers" }, utilities.getCallerInfo());
-        const userErrorMessages = new Set([
-            "Password does not meet complexity requirements",
-            "New password cannot be the same as any past passwords",
-        ]);
+        log("error", `Error resetting password for user ID ${userData.id}: ${error}`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
+        const userErrorMessages = new Set(["Password does not meet complexity requirements", "New password cannot be the same as any past passwords"]);
         const errorMessage = userErrorMessages.has(error?.message) ? error.message : "Failed to reset password";
         const statusCode = errorMessage === "Failed to reset password" ? 500 : 400;
         return res.status(statusCode).json({ error: errorMessage });
@@ -449,8 +473,8 @@ router.post("/suspend-user", async (req, res) => {
     if (userData.status !== "active") {
         return res.status(400).json({ error: "Only active users can be suspended" });
     }
-    await suspendUser(userIdToSuspend, suspensionStart, suspensionEnd);;
-    logger.log("info", `User ID ${userIdToSuspend} suspended by admin user ID ${requestingUserId}`, { function: "suspend-user" }, utilities.getCallerInfo());
+    await suspendUser(userIdToSuspend, suspensionStart, suspensionEnd);
+    log("info", `User ID ${userIdToSuspend} suspended by admin user ID ${requestingUserId}`, { function: "suspend-user" }, utilities.getCallerInfo(), requestingUserId);
     return res.json({ message: "User suspended successfully" });
 });
 
@@ -471,7 +495,7 @@ router.get("/reinstate-user/:userId", async (req, res) => {
         return res.status(400).json({ error: "Only suspended users can be reinstated" });
     }
     await reinstateUser(userIdToReinstate);
-    logger.log("info", `User ID ${userIdToReinstate} reinstated by admin user ID ${requestingUserId}`, { function: "reinstate-user" }, utilities.getCallerInfo());
+    log("info", `User ID ${userIdToReinstate} reinstated by admin user ID ${requestingUserId}`, { function: "reinstate-user" }, utilities.getCallerInfo(), requestingUserId);
     return res.json({ message: "User reinstated successfully" });
 });
 
@@ -495,7 +519,7 @@ router.post("/update-user-field", async (req, res) => {
     if (!allowedFields.has(fieldName)) {
         return res.status(400).json({ error: "Field cannot be updated" });
     }
-    if(fieldName ==="fullname") {
+    if (fieldName === "fullname") {
         const nameParts = newValue.trim().split(" ");
         const firstName = nameParts.shift();
         const lastName = nameParts.join(" ");
@@ -505,7 +529,7 @@ router.post("/update-user-field", async (req, res) => {
         updateData[fieldName] = newValue;
         await updateUserProfile(userId, updateData);
     }
-    logger.log("info", `User ID ${userId} field ${fieldName} updated by admin user ID ${requestingUserId}`, { function: "update-user-field" }, utilities.getCallerInfo());
+    log("info", `User ID ${userId} field ${fieldName} updated by admin user ID ${requestingUserId}`, { function: "update-user-field" }, utilities.getCallerInfo(), requestingUserId);
     return res.json({ message: "User field updated successfully" });
 });
 
@@ -523,7 +547,7 @@ router.post("/delete-user", async (req, res) => {
         return res.status(404).json({ error: "User not found" });
     }
     await deleteUserById(userIdToDelete);
-    logger.log("info", `User ID ${userIdToDelete} deleted by admin user ID ${requestingUserId}`, { function: "delete-user" }, utilities.getCallerInfo());
+    log("info", `User ID ${userIdToDelete} deleted by admin user ID ${requestingUserId}`, { function: "delete-user" }, utilities.getCallerInfo(), requestingUserId);
     return res.json({ message: "User deleted successfully" });
 });
 
@@ -540,17 +564,16 @@ router.get("/reset-user-password/:userId", async (req, res) => {
     if (!userData) {
         return res.status(404).json({ error: "User not found" });
     }
-    try{
+    try {
         const tempPassword = utilities.generateRandomToken(12) + "aA1!";
         await setUserPassword(userIdToReset, tempPassword, true);
         const emailResult = await sendEmail(userData.email, "FinLedger Password Reset by Administrator", `Dear ${userData.first_name},\n\nAn administrator has reset your FinLedger account password. Please use the temporary password below to log in and change your password immediately.\n\nTemporary Password: ${tempPassword}\n\nBest regards,\nThe FinLedger Team\n\n`);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
-            logger.log("warn", `Failed to send admin password reset email to ${userData.email} for user ID ${userIdToReset}`, { function: "reset-user-password" }, utilities.getCallerInfo());
+            log("warn", `Failed to send admin password reset email to ${userData.email} for user ID ${userIdToReset}`, { function: "reset-user-password" }, utilities.getCallerInfo(), userIdToReset);
         }
         return res.json({ message: "User password reset successfully" });
-    }
-    catch (error) {
-        logger.log("error", `Error resetting password for user ID ${userIdToReset} by admin ID ${requestingUserId}: ${error}`, { function: "reset-user-password" }, utilities.getCallerInfo());
+    } catch (error) {
+        log("error", `Error resetting password for user ID ${userIdToReset} by admin ID ${requestingUserId}: ${error}`, { function: "reset-user-password" }, utilities.getCallerInfo(), requestingUserId);
         return res.status(500).json({ error: "Failed to reset user password" });
     }
 });

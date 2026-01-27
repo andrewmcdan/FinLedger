@@ -7,7 +7,7 @@ const userDocRoutes = require("./routes/user_docs");
 const authMiddleware = require("./middleware/auth");
 const db = require("./db/db");
 const logger = require("./utils/logger");
-const { getCallerInfo } = require("./utils/utilities");
+const { getCallerInfo, cleanupUserData } = require("./utils/utilities");
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
@@ -44,11 +44,11 @@ app.get("/pages/accounts_list.html", async (req, res, next) => {
     if(role == "administrator"){
         allUsers = await usersController.listUsers();;
     }
-    console.log("User role:", role);
     try {
         const result = await accountsController.listAccounts(req.user.id, req.user.token);
         const accounts = result.rows;
-        res.render("accounts_list", { accounts, role, allUsers });
+        const allCategories = await accountsController.listAccountCategories();
+        res.render("accounts_list", { accounts, role, allUsers, allCategories });
     } catch (error) {
         next(error);
     }
@@ -130,6 +130,7 @@ if (require.main === module) {
             try {
                 await usersController.sendPasswordExpiryWarnings();
                 await usersController.suspendUsersWithExpiredPasswords();
+                await cleanupUserData();
             } catch (error) {
                 logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
             }

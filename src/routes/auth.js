@@ -1,9 +1,9 @@
 const express = require("express");
-const { getUserLoggedInStatus } = require("../controllers/users.js");
+const { getUserLoggedInStatus, logoutInactiveUsers } = require("../controllers/users.js");
 const router = express.Router();
 const db = require("../db/db.js");
 const jwt = require("jsonwebtoken");
-const logger = require("../utils/logger.js");
+const { log } = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 
 router.use(express.json());
@@ -18,7 +18,7 @@ router.get("/status", async (req, res) => {
     if (scheme !== "Bearer" || !token) {
         return res.json({ ok: false, loggedIn: false });
     }
-    const user_id = req.get("user_id");
+    const user_id = req.get("X-User-Id");
     if (!user_id) {
         return res.json({ ok: false, loggedIn: false });
     }
@@ -28,7 +28,7 @@ router.get("/status", async (req, res) => {
 });
 
 router.post("/login", async (req, res) => {
-    logger.log("info", `Login attempt for username: ${req.body.username}`, { function: "login" }, utilities.getCallerInfo());
+    log("info", `Login attempt for username: ${req.body.username}`, { function: "login" }, utilities.getCallerInfo());
     // Implement login logic here
     const { username, password } = req.body;
     const userRowsNonAuth = await db.query("SELECT id, status, failed_login_attempts, suspension_end_at FROM users WHERE username = $1 AND status = 'active'", [username]);
@@ -40,7 +40,7 @@ router.post("/login", async (req, res) => {
     const userNonAuth = userRowsNonAuth.rows[0];
     // If the user has 3 or more failed login attempts, block login.
     if(userNonAuth.failed_login_attempts >= 3) {
-        logger.log("warn", `Blocked login attempt for suspended user who has too many attempts with incorrect passwords. User id: ${userNonAuth.id}`, { function: "login" }, utilities.getCallerInfo());
+        log("warn", `Blocked login attempt for suspended user who has too many attempts with incorrect passwords. User id: ${userNonAuth.id}`, { function: "login" }, utilities.getCallerInfo(), userNonAuth.id);
         return res.status(403).json({ error: "Account is suspended due to multiple failed login attempts. Please contact the Administrator." });
     }
 
@@ -64,7 +64,7 @@ router.post("/login", async (req, res) => {
 
     // If no user found with that username/password
     if (userRows.rowCount === 0) {
-        logger.log("warn", `Failed login attempt for username: ${username}. Invalid username or password.`, { function: "login" }, utilities.getCallerInfo());
+        log("warn", `Failed login attempt for username: ${username}. Invalid username or password.`, { function: "login" }, utilities.getCallerInfo(), userNonAuth.id);
         return res.status(401).json({ error: "Invalid username or password" });
     }
 
@@ -72,21 +72,27 @@ router.post("/login", async (req, res) => {
     if(user.status === "suspended") {
         const now = new Date();
         if(user.suspension_end_at && now < user.suspension_end_at) {
-            logger.log("warn", `Blocked login attempt for suspended user. User id: ${user.id}`, { function: "login" }, utilities.getCallerInfo());
+            log("warn", `Blocked login attempt for suspended user. User id: ${user.id}`, { function: "login" }, utilities.getCallerInfo(), user.id);
             return res.status(403).json({ error: `Account is suspended until ${user.suspension_end_at}` });
         }
     }
 
     // If the user is found, not suspended, and password is correct, create a JWT token and save it in the DB.
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "24h" });
 
-    // Update last login time and log the login event
-    await db.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
-    await db.query("INSERT INTO audit_logs (event_type, user_id) VALUES ($1, $2)", ["login", user.id]);
-    await db.query("INSERT INTO logged_in_users (user_id, token) VALUES ($1, $2)", [user.id, token]);
-    // reset failed login attempts on successful login
-    await db.query("UPDATE users SET failed_login_attempts = 0, suspension_end_at = NULL WHERE id = $1", [user.id]);
-    logger.log("info", `User ${username} (ID: ${user.id}) logged in successfully`, { function: "login" }, utilities.getCallerInfo());
+    try {
+        await db.transaction(async (client) => {
+            // Update last login time and log the login event
+            await client.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
+            await client.query("INSERT INTO logged_in_users (user_id, token) VALUES ($1, $2)", [user.id, token]);
+            // reset failed login attempts on successful login
+            await client.query("UPDATE users SET failed_login_attempts = 0, suspension_end_at = NULL WHERE id = $1", [user.id]);
+        });
+    } catch (error) {
+        log("error", `Login transaction failed for username ${username}: ${error}`, { function: "login" }, utilities.getCallerInfo(), user.id);
+        return res.status(500).json({ error: "Login failed due to a server error" });
+    }
+    log("info", `User ${username} (ID: ${user.id}) logged in successfully`, { function: "login" }, utilities.getCallerInfo(), user.id);
     return res.json({ token: token, user_id: user.id, username: username, must_change_password: user.temp_password === true });
 });
 
@@ -99,21 +105,23 @@ router.post("/logout", (req, res) => {
     if (scheme !== "Bearer" || !token) {
         return res.status(401).json({ error: "Invalid Authorization header" });
     }
-    const user_id = req.get("user_id");
+    const user_id = req.get("X-User-Id");
     if (!user_id) {
-        return res.status(401).json({ error: "Missing User_id header" });
+        return res.status(401).json({ error: "Missing X-User-Id header" });
     }
     // Set the logout_at column for user to now()
     db.query("UPDATE logged_in_users SET logout_at = NOW() WHERE user_id = $1 AND token = $2", [user_id, token])
         .then(() => {
-            logger.log("info", `User ID ${user_id} logged out successfully`, { function: "logout" }, utilities.getCallerInfo());
+            log("info", `User ID ${user_id} logged out successfully`, { function: "logout" }, utilities.getCallerInfo(), user_id);
             res.json({ ok: true, message: "Logged out successfully" });
         })
         .catch((error) => {
-            logger.log("error", `Error during logout for user ID ${user_id}: ${error}`, { function: "logout" }, utilities.getCallerInfo());
+            log("error", `Error during logout for user ID ${user_id}: ${error}`, { function: "logout" }, utilities.getCallerInfo(), user_id);
             console.error("Error during logout:", error);
             res.status(500).json({ error: "Internal server error" });
         });
 });
 
 module.exports = router;
+
+
