@@ -1,3 +1,20 @@
+const errorMessagePrettyMap = {
+    "duplicate key value violates unique constraint": "An item with that value already exists.",
+    "violates foreign key constraint": "The selected related item does not exist.",
+    "null value in column": "A required field is missing.",
+    "accounts_account_name_key": "An account with that name already exists.",
+};
+
+const errorFormatter = (error) => {
+    let errors = [];
+    for (const [key, prettyMessage] of Object.entries(errorMessagePrettyMap)) {
+        if (error.includes(key)) {
+            errors.push(prettyMessage);
+        }
+    }
+    return errors.length > 0 ? errors[errors.length - 1] : "An unknown error occurred.";
+}
+
 function fetchWithAuth(url, options = {}) {
     const authToken = localStorage.getItem("auth_token") || "";
     const userId = localStorage.getItem("user_id") || "";
@@ -85,7 +102,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 const newAccount = await response.json();
                 window.location.reload();
             } catch (error) {
-                alert("Error creating account: " + error.message);
+                alert("Error creating account: " + errorFormatter(error.message));
             } finally {
                 hideLoadingOverlay();
             }
