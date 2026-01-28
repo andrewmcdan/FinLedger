@@ -395,14 +395,117 @@ test("suspendUsersWithExpiredPasswords ignores non-expired users", async () => {
     assert.equal(emailCalls.length, 0);
 });
 
-test.todo("changePasswordWithCurrentPassword updates password when current password matches");
-test.todo("changePasswordWithCurrentPassword rejects invalid current password");
-test.todo("updateSecurityQuestionsWithCurrentPassword updates questions when current password matches");
-test.todo("updateSecurityQuestionsWithCurrentPassword rejects invalid current password");
-test.todo("updateUserProfile updates provided fields and returns updated user");
-test.todo("updateUserProfile returns null when no updates provided");
-test.todo("updateUserProfile returns null when user missing");
-test.todo("deleteUserById removes user record");
-test.todo("setUserPassword updates password hash and temp flag");
-test.todo("setUserPassword rejects passwords that fail complexity checks");
-test.todo("getUserByUsername returns user and null for missing");
+test("changePasswordWithCurrentPassword updates password when current password matches", async () => {
+    const user = await insertUser({ username: "cpwcc", email: "cpwcc@example.com", password: "ValidPass1!" });
+
+    await usersController.changePasswordWithCurrentPassword(user.id, "ValidPass1!", "NewPass2@");
+
+    const ok = await db.query("SELECT 1 FROM users WHERE id = $1 AND password_hash = crypt($2, password_hash)", [user.id, "NewPass2@"]);
+    assert.equal(ok.rowCount, 1);
+});
+
+test("changePasswordWithCurrentPassword rejects invalid current password", async () => {
+    const user = await insertUser({ username: "cpwccbad", email: "cpwccbad@example.com", password: "ValidPass1!" });
+
+    await assert.rejects(
+        async () => usersController.changePasswordWithCurrentPassword(user.id, "wrong", "NewPass2@"),
+        (err) => {
+            assert.equal(err.code, "INVALID_CURRENT_PASSWORD");
+            assert.match(err.message, /Current password is incorrect/);
+            return true;
+        },
+    );
+});
+
+test("updateSecurityQuestionsWithCurrentPassword updates questions when current password matches", async () => {
+    const user = await insertUser({ username: "useqcc", email: "useqcc@example.com", password: "ValidPass1!" });
+    const qa = [
+        { question: "Q1?", answer: "A1" },
+        { question: "Q2?", answer: "A2" },
+        { question: "Q3?", answer: "A3" },
+    ];
+
+    await usersController.updateSecurityQuestionsWithCurrentPassword(user.id, "ValidPass1!", qa);
+
+    const questions = await usersController.getSecurityQuestionsForUser(user.id);
+    assert.equal(questions.security_question_1, "Q1?");
+    const verified = await usersController.verifySecurityAnswers(user.id, ["A1", "A2", "A3"]);
+    assert.equal(verified, true);
+});
+
+test("updateSecurityQuestionsWithCurrentPassword rejects invalid current password", async () => {
+    const user = await insertUser({ username: "useqccbad", email: "useqccbad@example.com", password: "ValidPass1!" });
+    const qa = [
+        { question: "Q1?", answer: "A1" },
+        { question: "Q2?", answer: "A2" },
+        { question: "Q3?", answer: "A3" },
+    ];
+
+    await assert.rejects(
+        async () => usersController.updateSecurityQuestionsWithCurrentPassword(user.id, "wrong", qa),
+        (err) => {
+            assert.equal(err.code, "INVALID_CURRENT_PASSWORD");
+            assert.match(err.message, /Current password is incorrect/);
+            return true;
+        },
+    );
+});
+
+test("updateUserProfile updates provided fields and returns updated user", async () => {
+    const user = await insertUser({ username: "uprof", email: "uprof@example.com", firstName: "Old", lastName: "Name", password: "ValidPass1!" });
+
+    const updated = await usersController.updateUserProfile(user.id, { first_name: "New", last_name: "Name2", address: "123 Main" });
+    assert.ok(updated);
+    assert.equal(updated.first_name, "New");
+    assert.equal(updated.last_name, "Name2");
+    assert.equal(updated.address, "123 Main");
+
+    const dbUser = await db.query("SELECT first_name, last_name, address FROM users WHERE id = $1", [user.id]);
+    assert.equal(dbUser.rows[0].first_name, "New");
+    assert.equal(dbUser.rows[0].last_name, "Name2");
+    assert.equal(dbUser.rows[0].address, "123 Main");
+});
+
+test("updateUserProfile returns null when no updates provided", async () => {
+    const user = await insertUser({ username: "uprofnone", email: "uprofnone@example.com" });
+    const updated = await usersController.updateUserProfile(user.id, {});
+    assert.equal(updated, null);
+});
+
+test("updateUserProfile returns null when user missing", async () => {
+    const updated = await usersController.updateUserProfile(999999, { first_name: "X" });
+    assert.equal(updated, null);
+});
+
+test("deleteUserById removes user record", async () => {
+    const user = await insertUser({ username: "del", email: "del@example.com" });
+    await usersController.deleteUserById(user.id);
+    const result = await db.query("SELECT 1 FROM users WHERE id = $1", [user.id]);
+    assert.equal(result.rowCount, 0);
+});
+
+test("setUserPassword updates password hash and temp flag", async () => {
+    const user = await insertUser({ username: "setpw", email: "setpw@example.com", password: "ValidPass1!" });
+
+    const ok = await usersController.setUserPassword(user.id, "NewPass2@", true);
+    assert.equal(ok, true);
+
+    const result = await db.query("SELECT temp_password FROM users WHERE id = $1", [user.id]);
+    assert.equal(result.rows[0].temp_password, true);
+
+    const match = await db.query("SELECT 1 FROM users WHERE id = $1 AND password_hash = crypt($2, password_hash)", [user.id, "NewPass2@"]);
+    assert.equal(match.rowCount, 1);
+});
+
+test("setUserPassword rejects passwords that fail complexity checks", async () => {
+    const user = await insertUser({ username: "setpwb", email: "setpwb@example.com", password: "ValidPass1!" });
+    await assert.rejects(() => usersController.setUserPassword(user.id, "short", false), /complexity requirements/);
+});
+
+test("getUserByUsername returns user and null for missing", async () => {
+    const user = await insertUser({ username: "byuname", email: "byuname@example.com" });
+    const found = await usersController.getUserByUsername("byuname");
+    assert.equal(found.id, user.id);
+    const missing = await usersController.getUserByUsername("nope");
+    assert.equal(missing, null);
+});
