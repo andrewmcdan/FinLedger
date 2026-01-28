@@ -253,6 +253,11 @@ async function deactivateAccount(accountId) {
         throw new Error(`Account with ID ${accountId} not found.`);
     }
     sanitizeInput(accountId);
+    const accountRes = await db.query(`SELECT balance FROM accounts WHERE id = $1`, [accountId]);
+    const account = accountRes.rows[0];
+    if (Number(account.balance) !== 0) {
+        throw new Error(`Cannot deactivate account ID ${accountId} because it has a non-zero balance.`);
+    }
     const query = `UPDATE accounts SET status = $1 WHERE id = $2 RETURNING *`;
     const params = ['inactive', accountId];
     const result = await db.query(query, params);

@@ -3,36 +3,39 @@
         <h1>Accounts List</h1>
         <p>Manage your accounts</p>
     </header>
-    
-    
+    <% if (role === 'administrator') { %>
+    <div class="data-row">
+        <p class="value">
+            <span class="span-label">
+                <button type="button-small" class="button-primary" id="add_account_button">Add New Account</button>
+            </span>
+        </p>
+    </div>
+    <% } %>
+    <div class="stack">
         <div class="data-row">
             <p class="value">
-            <span class="span-label">
-                <% if (role === 'administrator') { %>
-                <button type="button-small" class="button-primary" id="add_account_button">Add New Account</button>
-                <% } %>
-            </span>
-            <span class="actions page-navigation">
-                <select id="accounts_per_page_select" data-accounts-per-page-select>
-                    <option value="5">5 per page</option>
-                    <option value="10" selected>10 per page</option>
-                    <option value="25">25 per page</option>
-                    <option value="50">50 per page</option>
-                    <option value="100">100 per page</option>
-                </select>
-            </span>
-            <span class="span-actions page-navigation">
-                <span data-accounts-page-down data-accounts-page-btn>&lt;</span>
-                <span>Page: </span>
-                <span data-accounts-current-page>1 </span>
-                <span>of </span>
-                <span data-accounts-total-pages>1</span>
-                <span data-accounts-page-up data-accounts-page-btn>&gt;</span>
-                <span>&nbsp;&nbsp;&nbsp;</span>
-            </span>
+                <span class="span-label">Click a column header to filter the accounts list.</span>
+                <span class="actions page-navigation">
+                    <select id="accounts_per_page_select" data-accounts-per-page-select>
+                        <option value="5">5 per page</option>
+                        <option value="10" selected>10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </span>
+                <span class="span-actions page-navigation">
+                    <span data-accounts-page-down data-accounts-page-btn>&lt;</span>
+                    <span>Page: </span>
+                    <span data-accounts-current-page>1 </span>
+                    <span>of </span>
+                    <span data-accounts-total-pages>1</span>
+                    <span data-accounts-page-up data-accounts-page-btn>&gt;</span>
+                    <span>&nbsp;&nbsp;&nbsp;</span>
+                </span>
             </p>
-        </div>        
-    <div class="stack">
+        </div>
         <div class="table-scroll">
             <table class="table table--wide" id="accounts_table">
                 <thead>
@@ -40,6 +43,7 @@
                         <th>Account Name</th>
                         <th>Account Number</th>
                         <th>Account Owner</th>
+                        <th>Status</th>
                         <th>Account Type</th>
                         <th>Balance</th>
                         <th>Description</th>
@@ -54,8 +58,7 @@
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody data-accounts-list>
-                </tbody>
+                <tbody data-accounts-list></tbody>
             </table>
         </div>
     </div>
@@ -115,6 +118,22 @@
             </div>
         </div>
     </section>
+    <div id="account_list_filter_modal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-button" id="close_account_list_filter_modal" aria-label="Close">&times;</span>
+            <h2 id="account_list_filter_modal_title">Filter Accounts List</h2>
+            <form id="account_list_filter_form">
+                <table>
+                    <tr>
+                        <td><label for="account_list_filter__label"></label></td>
+                        <td><input type="text" id="account_list_filter__input" name="account_list_filter__input" /></td>
+                    </tr>
+                </table>
+                <button type="submit" class="button-primary" id="apply_account_list_filter_button">Apply Filter</button>
+            </form>
+        </div>
+    </div>
+    <% if (role === 'administrator') { %>
     <div id="delete_category_modal" class="modal" aria-hidden="true">
         <div class="modal-content">
             <span class="close-button" id="close_delete_category_modal" aria-label="Close">&times;</span>
@@ -259,6 +278,7 @@
             </form>
         </div>
     </div>
+    <% } %>
     <% } %>
     <script id="accounts-data" type="application/json">
         <%- JSON.stringify({  allCategories, allUsers }).replaceAll("</", "<\\/") %>

@@ -551,10 +551,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 const subcategoryName = subcategoryNameById.get(String(account.account_subcategory_id)) || "";
                 const statementType = statementTypeLabels[account.statement_type] || account.statement_type || "";
                 const tr = document.createElement("tr");
+                const status = account.status.charAt(0).toUpperCase() + account.status.slice(1);
                 tr.innerHTML = `
                     <td data-account_name-${account.id}>${account.account_name ?? ""}</td>
                     <td data-account_number-${account.id}>${account.account_number ?? ""}</td>
                     <td data-user_id-${account.id}>${accountOwner}</td>
+                    <td>${status ?? ""}</td>
                     <td data-normal_side-${account.id}>${normalSide}</td>
                     <td data-is-currency>${account.balance ?? ""}</td>
                     <td data-account_description-${account.id} data-long-text>${account.account_description ?? ""}</td>
@@ -916,6 +918,47 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 window.location.reload();
             } catch (error) {
                 alert("Error deleting category: " + errorFormatter(error.message));
+            } finally {
+                hideLoadingOverlay();
+            }
+        });
+    }
+
+    const deactivateAccountSelectEl = document.getElementById("deactivate_account_select");
+    const deactivateAccountButton = document.getElementById("deactivate_account_button");
+    if (deactivateAccountButton && deactivateAccountSelectEl) {
+        deactivateAccountButton.addEventListener("click", async (event) => {
+            event.preventDefault();
+            const accountId = deactivateAccountSelectEl.value;
+            if (!accountId) {
+                alert("Please select an account to deactivate.");
+                return;
+            }
+            const confirmDeactivate = confirm("Are you sure you want to deactivate the selected account?");
+            if (!confirmDeactivate) {
+                return;
+            }
+            showLoadingOverlay();
+            try {
+                const response = await fetchWithAuth("/api/accounts/set-account-status", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        account_id: accountId,
+                        is_active: false,
+                    }),
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || "Failed to deactivate account");
+                }
+                const result = await response.json();
+                window.location.reload();
+            } catch (error) {
+                console.log(error.message);
+                alert("Error deactivating account: " + errorFormatter(error.message));
             } finally {
                 hideLoadingOverlay();
             }
