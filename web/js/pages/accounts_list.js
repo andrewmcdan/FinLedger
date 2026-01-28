@@ -964,6 +964,47 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             }
         });
     }
+
+    const reactivateButtons = document.querySelectorAll('[data-account-action="reactivate"]');
+    if (reactivateButtons.length) {
+        reactivateButtons.forEach((button) => {
+            button.addEventListener("click", async () => {
+                const accountId = button.dataset.accountId;
+                if (!accountId) {
+                    return;
+                }
+                const confirmReactivate = confirm("Are you sure you want to reactivate this account?");
+                if (!confirmReactivate) {
+                    return;
+                }
+                showLoadingOverlay();
+                try {
+                    const response = await fetchWithAuth("/api/accounts/set-account-status", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            account_id: accountId,
+                            is_active: true,
+                        }),
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || "Failed to reactivate account");
+                    }
+                    const row = document.querySelector(`[data-inactive_account_id-${accountId}]`);
+                    if (row) {
+                        row.remove();
+                    }
+                } catch (error) {
+                    alert("Error reactivating account: " + errorFormatter(error.message));
+                } finally {
+                    hideLoadingOverlay();
+                }
+            });
+        });
+    }
 }
 
 async function loadNumericHelpers() {
