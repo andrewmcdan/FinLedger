@@ -47,7 +47,7 @@ const authMiddleware = async (req, res, next) => {
             return res.status(403).json({ error: "TEMP_PASSWORD_CHANGE_REQUIRED" });
         }
     }
-    log("info", `User ${userId} authenticated successfully`, { user_id: userId }, utilities.getCallerInfo(), req.user.id);
+    log("trace", `User ${userId} authenticated successfully`, { user_id: userId }, utilities.getCallerInfo(), req.user.id);
     return next();
 };
 
