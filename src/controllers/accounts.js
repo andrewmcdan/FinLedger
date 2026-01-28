@@ -154,9 +154,34 @@ async function listAccountCategories() {
     return result;
 }
 
+async function updateAccountField({ account_id, field, value }) {
+    const allowedFields = [
+        "account_name",
+        "account_number",
+        "account_description",
+        "normal_side",
+        "statement_type",
+        "comment",
+        "account_category_id",
+        "account_subcategory_id",
+        "user_id",
+    ];
+    if (!allowedFields.includes(field)) {
+        return {success: false, message: `Field "${field}" cannot be updated.`};
+    }
+    let query = `UPDATE accounts SET ${field} = $1 WHERE id = $2 RETURNING *`;
+    const params = [value, account_id];
+    const result = await db.query(query, params);
+    if (result.rows.length === 0) {
+        return {success: false, message: `Account with ID ${account_id} not found.`};
+    }
+    return {success: true, message: "Account updated successfully", account: result.rows[0]};
+};
+
 module.exports = {
     listAccounts,
     createAccount,
     listAccountCategories,
-    getAccountCounts
+    getAccountCounts,
+    updateAccountField,
 };

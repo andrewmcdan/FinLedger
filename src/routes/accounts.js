@@ -46,6 +46,23 @@ router.post("/create", async (req, res) => {
     }
 });
 
+router.post("/update-account-field", async (req, res) => {
+    const userId = req.user.id;
+    if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!(await isAdmin(userId, req.user.token))) {
+        return res.status(403).json({ error: "Forbidden. Only Admins can update accounts." });
+    }
+    console.log("Update Account Field Request Body:", req.body);
+    let result = await accountsController.updateAccountField(req.body);
+    if(result.success){
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ error: result.message });
+    }
+});
+
 router.get("/account-categories", async (req, res) => {
     // const loggedIn = await getUserLoggedInStatus(req.user.id, req.user.token);
     // if (!loggedIn) {
