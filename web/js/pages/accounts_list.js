@@ -153,9 +153,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     const pageDownBtn = document.querySelector("[data-accounts-page-down]");
     const pageUpBtn = document.querySelector("[data-accounts-page-up]");
     const currentPageEl = document.querySelector("[data-accounts-current-page]");
+    const accountsPerPageSelect = document.querySelector("[data-accounts-per-page-select]");
+    const totalPagesEl = document.querySelector("[data-accounts-total-pages]");
     let currentPage = 1;
     let accountCount = 0;
-    const accountsPerPage = 25;
+    let accountsPerPage = accountsPerPageSelect ? parseInt(accountsPerPageSelect.value, 10) : 10;
+
     try {
         const response = await fetchWithAuth("/api/accounts/account_count");
         if (response.ok) {
@@ -165,11 +168,22 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     } catch (error) {
         alert("Error fetching account counts: " + error.message);
     }
-
-    const totalPagesEl = document.querySelector("[data-accounts-total-pages]");
+    
     if (totalPagesEl) {
         const totalPages = Math.ceil(accountCount / accountsPerPage);
         totalPagesEl.textContent = totalPages;
+    }
+    
+    if (accountsPerPageSelect) {
+        accountsPerPageSelect.addEventListener("change", () => {
+            accountsPerPage = parseInt(accountsPerPageSelect.value, 10);
+            currentPage = 1;
+            loadAccountsPage(currentPage);
+            if (totalPagesEl) {
+                const totalPages = Math.ceil(accountCount / accountsPerPage);
+                totalPagesEl.textContent = totalPages;
+            }
+        });
     }
 
     const loadAccountsPage = async (page) => {

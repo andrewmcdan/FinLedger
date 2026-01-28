@@ -12,9 +12,18 @@
                 <button type="button-small" class="button-primary" id="add_account_button">Add New Account</button>
                 <% } %>
             </span>
+            <span class="actions page-navigation">
+                <select id="accounts_per_page_select" data-accounts-per-page-select>
+                    <option value="5">5 per page</option>
+                    <option value="10" selected>10 per page</option>
+                    <option value="25">25 per page</option>
+                    <option value="50">50 per page</option>
+                    <option value="100">100 per page</option>
+                </select>
+            </span>
             <span class="span-actions page-navigation">
                 <span data-accounts-page-down data-accounts-page-btn>&lt;</span>
-                <span class="">Page: </span>
+                <span>Page: </span>
                 <span data-accounts-current-page>1 </span>
                 <span>of </span>
                 <span data-accounts-total-pages>1</span>
