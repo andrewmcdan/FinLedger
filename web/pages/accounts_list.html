@@ -46,32 +46,6 @@
                     </tr>
                 </thead>
                 <tbody data-accounts-list>
-                    <!-- TODO: 
-                     The following forEach slows down page loading, especially with lots of accounts. Move code that loads accounts data to account_list.js
-                     and have it populate the table body dynamically after page load. This can also provide for paginated loading of accounts.
-                    -->
-                    <% accounts.forEach(function(account) { return; %>
-                    <tr>
-                        <td><%= account.account_name %></td>
-                        <td><%= account.account_number %></td>
-                        <td><%= (allUsers.find(function(user) { return user.id == account.user_id; }) || {}).username || "" %></td>
-                        <td><%= account.normal_side.charAt(0).toUpperCase() + account.normal_side.slice(1) %></td>
-                        <td data-is-currency><%= account.balance %></td>
-                        <td data-long-text><%= account.account_description %></td>
-                        <td><%= (allCategories.categories.find(function(category) { return category.id == account.account_category_id; }) || {}).name || "" %></td>
-                        <td><%= (allCategories.subcategories.find(function(subcat) { return subcat.id == account.account_subcategory_id; }) || {}).name || "" %></td>
-                        <td><%= {"IS":"Income Statement", "BS":"Balance Sheet", "RE":"Retained Earnings Statement"}[account.statement_type] || "" %></td>
-                        <td data-long-text><%= account.comment %></td>
-                        <td data-is-currency><%= account.initial_balance %></td>
-                        <td><%= account.account_order %></td>
-                        <td data-is-currency><%= account.total_debits %></td>
-                        <td data-is-currency><%= account.total_credits %></td>
-                        <td>
-                            <button type="button" class="button-small account-button" data-account-id="<%= account.id %>" data-edit-account-button>Edit</button>
-                            <button type="button" class="button-small account-button" data-account-id="<%= account.id %>" data-audit-account-button>Audit</button>
-                        </td>
-                    </tr>
-                    <% }); %>
                 </tbody>
             </table>
         </div>
