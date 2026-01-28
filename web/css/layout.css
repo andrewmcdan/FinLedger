@@ -507,7 +507,7 @@ button.button-small,
     animation-play-state: paused;
 }
 
-#account_modal {
+.modal {
     position: fixed;
     top: 0;
     left: 0;
@@ -524,12 +524,12 @@ button.button-small,
     overflow-y: scroll;
 }
 
-#account_modal.is-visible {
+.modal.is-visible {
     opacity: 1;
     pointer-events: auto;
 }
 
-#account_modal .modal-content {
+.modal .modal-content {
     background: var(--surface-strong);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -545,10 +545,10 @@ button.button-small,
     background: transparent;
 }
 
-#account_modal td,
-#account_modal input,
-#account_modal select,
-#account_modal textarea {
+.modal td,
+.modal input,
+.modal select,
+.modal textarea {
     width: 450px;
 }
 

@@ -82,7 +82,6 @@
                 <article class="data-row">
                     <p>
                         <button type="button" class="button-primary" data-add-category-button>Add Category</button>
-                        <button type="button" class="button-primary" data-add-subcategory-button>Add Subcategory</button>
                         <button type="button" class="button-primary" data-delete-category-button>Delete Category</button>
                     </p>
                 </article>
@@ -116,6 +115,72 @@
             </div>
         </div>
     </section>
+    <div id="delete_category_modal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-button" id="close_delete_category_modal" aria-label="Close">&times;</span>
+            <h2 id="delete_category_modal_title">Delete Category</h2>
+            <form id="delete_category_form">
+                <table>
+                    <tr>
+                        <td><label for="delete_category__category_select">Select Category to Delete:</label></td>
+                        <td>
+                            <select id="delete_category__category_select" name="delete_category__category_select" required>
+                                <option value="" disabled selected>Select a category or subcategory</option>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+                <button type="submit" class="button-primary" id="confirm_delete_category_button">Delete Category</button>
+            </form>
+        </div>
+    </div>
+    <div id="category_modal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-button" id="close_category_modal" aria-label="Close">&times;</span>
+            <h2 id="category_modal_title">Add Category</h2>
+            <form id="category_form">
+                <table>
+                    <tr>
+                        <td><label for="is_subcategory">Is subcategory:</label></td>
+                        <td><input type="checkbox" id="is_subcategory" name="is_subcategory" /></td>
+                    </tr>
+                    <tr data-category-name-row>
+                        <td><label for="add_category__category_name">Category Name:</label></td>
+                        <td><input type="text" id="add_category__category_name" name="category_name" required /></td>
+                    </tr>
+                    <tr data-category-description-row>
+                        <td><label for="add_category__category_description">Category Description:</label></td>
+                        <td><textarea id="add_category__category_description" name="category_description"></textarea></td>
+                    </tr>
+                    <tr data-category-subcategory-name-row>
+                        <td><label for="add_category__subcategory_name">Initial Subcategory Name:</label></td>
+                        <td><input type="text" id="add_category__subcategory_name" name="subcategory_name" /></td>
+                    </tr>
+                    <tr data-category-subcategory-description-row>
+                        <td><label for="add_category__subcategory_description">Initial Subcategory Description:</label></td>
+                        <td><textarea id="add_category__subcategory_description" name="subcategory_description"></textarea></td>
+                    </tr>
+                    <tr data-category-select-row hidden>
+                        <td><label for="add_category__category_select">Category:</label></td>
+                        <td><select id="add_category__category_select"></select></td>
+                    </tr>
+                    <tr data-subcategory-name-row hidden>
+                        <td><label for="add_category__subcategory_name_existing">Subcategory Name:</label></td>
+                        <td><input type="text" id="add_category__subcategory_name_existing" name="subcategory_name_existing" /></td>
+                    </tr>
+                    <tr data-subcategory-description-row hidden>
+                        <td><label for="add_category__subcategory_description_existing">Subcategory Description:</label></td>
+                        <td><textarea id="add_category__subcategory_description_existing" name="subcategory_description_existing"></textarea></td>
+                    </tr>
+                    <tr data-account-prefix-row>
+                        <td><label for="account_number_prefix">Account Number Prefix:</label></td>
+                        <td><input type="text" id="account_number_prefix" name="account_number_prefix" required /></td>
+                    </tr>
+                </table>
+                <button type="submit" class="button-primary" id="save_category_button">Save Category</button>
+            </form>
+        </div>
+    </div>
     <div id="account_modal" class="modal" aria-hidden="true">
         <div class="modal-content">
             <span class="close-button" id="close_account_modal" aria-label="Close">&times;</span>

@@ -1,7 +1,7 @@
 const db = require("../db/db");
 const { isAdmin, isManager } = require("./users");
 const {log} = require("../utils/logger");
-const {getCallerInfo} = require("../utils/utilities");
+const {getCallerInfo, sanitizeInput} = require("../utils/utilities");
 
 function isNumericId(value) {
     if (typeof value === "number") {
@@ -44,6 +44,8 @@ async function resolveSubcategory(client, accountSubcategory, categoryId) {
 }
 
 async function listAccounts(userId, token, offset = 0, limit = 25) {
+    sanitizeInput(offset);
+    sanitizeInput(limit);
     let query = "SELECT * FROM accounts";
     const params = [];
     if (!await isAdmin(userId, token) && !await isManager(userId, token)) {
@@ -57,6 +59,8 @@ async function listAccounts(userId, token, offset = 0, limit = 25) {
 }
 
 async function getAccountCounts(userId, token) {
+    sanitizeInput(userId);
+    sanitizeInput(token);
     let query = "SELECT COUNT(*) AS total_accounts FROM accounts";
     const params = [];
     if (!await isAdmin(userId, token) && !await isManager(userId, token)) {
@@ -155,6 +159,9 @@ async function listAccountCategories() {
 }
 
 async function updateAccountField({ account_id, field, value }) {
+    sanitizeInput(account_id);
+    sanitizeInput(field);
+    sanitizeInput(value);
     const allowedFields = [
         "account_name",
         "account_number",
@@ -169,8 +176,71 @@ async function updateAccountField({ account_id, field, value }) {
     if (!allowedFields.includes(field)) {
         return {success: false, message: `Field "${field}" cannot be updated.`};
     }
+    const coerceBigInt = (rawValue, { allowNull = false } = {}) => {
+        if (rawValue === null || rawValue === undefined || rawValue === "") {
+            if (allowNull) {
+                return { ok: true, value: null };
+            }
+            return { ok: false, message: "Value is required." };
+        }
+        const trimmed = String(rawValue).trim();
+        if (!/^\d+$/.test(trimmed)) {
+            return { ok: false, message: "Value must be a whole number." };
+        }
+        return { ok: true, value: trimmed };
+    };
+    const normalizeStatementType = (rawValue) => {
+        if (rawValue === null || rawValue === undefined || rawValue === "") {
+            return { ok: false, message: "Statement type is required." };
+        }
+        const statementTypeMap = {
+            "Income Statement": "IS",
+            "Balance Sheet": "BS",
+            "Retained Earnings Statement": "RE",
+            IS: "IS",
+            BS: "BS",
+            RE: "RE",
+        };
+        const resolved = statementTypeMap[String(rawValue).trim()];
+        if (!resolved) {
+            return { ok: false, message: `Invalid statement type: ${rawValue}` };
+        }
+        return { ok: true, value: resolved };
+    };
+    const normalizeNormalSide = (rawValue) => {
+        if (rawValue === null || rawValue === undefined || rawValue === "") {
+            return { ok: false, message: "Normal side is required." };
+        }
+        const normalized = String(rawValue).trim().toLowerCase();
+        if (!["debit", "credit"].includes(normalized)) {
+            return { ok: false, message: `Invalid normal side: ${rawValue}` };
+        }
+        return { ok: true, value: normalized };
+    };
+
+    let resolvedValue = value;
+    if (["account_number", "account_category_id", "account_subcategory_id", "user_id"].includes(field)) {
+        const numericResult = coerceBigInt(value, { allowNull: false });
+        if (!numericResult.ok) {
+            return { success: false, message: numericResult.message };
+        }
+        resolvedValue = numericResult.value;
+    } else if (field === "statement_type") {
+        const statementResult = normalizeStatementType(value);
+        if (!statementResult.ok) {
+            return { success: false, message: statementResult.message };
+        }
+        resolvedValue = statementResult.value;
+    } else if (field === "normal_side") {
+        const normalResult = normalizeNormalSide(value);
+        if (!normalResult.ok) {
+            return { success: false, message: normalResult.message };
+        }
+        resolvedValue = normalResult.value;
+    }
+
     let query = `UPDATE accounts SET ${field} = $1 WHERE id = $2 RETURNING *`;
-    const params = [value, account_id];
+    const params = [resolvedValue, account_id];
     const result = await db.query(query, params);
     if (result.rows.length === 0) {
         return {success: false, message: `Account with ID ${account_id} not found.`};
@@ -178,10 +248,173 @@ async function updateAccountField({ account_id, field, value }) {
     return {success: true, message: "Account updated successfully", account: result.rows[0]};
 };
 
+async function deactivateAccount(accountId) {
+    if (!await isValidAccountId(accountId)) {
+        throw new Error(`Account with ID ${accountId} not found.`);
+    }
+    sanitizeInput(accountId);
+    const query = `UPDATE accounts SET status = $1 WHERE id = $2 RETURNING *`;
+    const params = ['inactive', accountId];
+    const result = await db.query(query, params);
+    if (result.rows.length === 0) {
+        throw new Error(`Account with ID ${accountId} not found.`);
+    }
+    return result.rows[0];
+}
+
+async function activateAccount(accountId) {
+    if (!await isValidAccountId(accountId)) {
+        throw new Error(`Account with ID ${accountId} not found.`);
+    }
+    const query = `UPDATE accounts SET status = $1 WHERE id = $2 RETURNING *`;
+    const params = ['active', accountId];
+    const result = await db.query(query, params);
+    if (result.rows.length === 0) {
+        throw new Error(`Account with ID ${accountId} not found.`);
+    }
+    return result.rows[0];
+}
+
+async function isValidAccountId(accountId) {
+    const query = `SELECT id FROM accounts WHERE id = $1`;
+    const params = [accountId];
+    const result = await db.query(query, params);
+    return result.rows.length > 0;
+}
+
+async function setAccountStatus(accountId, status) {
+    sanitizeInput(status);
+    sanitizeInput(accountId);
+    if (!await isValidAccountId(accountId)) {
+        throw new Error(`Account with ID ${accountId} not found.`);
+    }
+    if (status === 'active') {
+        return activateAccount(accountId);
+    } else if (status === 'inactive') {
+        return deactivateAccount(accountId);
+    } else {
+        throw new Error(`Invalid status: ${status}`);
+    }
+}
+
+async function addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription) {
+    sanitizeInput(categoryName);
+    sanitizeInput(accountNumberPrefix);
+    sanitizeInput(categoryDescription);
+    sanitizeInput(initialSubcategoryName);
+    sanitizeInput(initialSubcategoryDescription);
+    return db.transaction(async (client) => {
+        const categoryCheck = await client.query("SELECT id FROM account_categories WHERE name = $1", [categoryName]);
+        if (categoryCheck.rows.length > 0) {
+            throw new Error(`Account category with name "${categoryName}" already exists.`);
+        }
+        const subcategoryCheck = await client.query("SELECT id FROM account_subcategories WHERE name = $1", [initialSubcategoryName]);
+        if (subcategoryCheck.rows.length > 0) {
+            throw new Error(`Account subcategory with name "${initialSubcategoryName}" already exists.`);
+        }
+        const categoryResult = await client.query(
+            `
+            INSERT INTO account_categories (name, description, account_number_prefix)
+            VALUES ($1, $2, $3)
+            RETURNING *`,
+            [categoryName, categoryDescription || null, accountNumberPrefix],
+        );
+        if (categoryResult.rows.length === 0) {
+            throw new Error("Category creation failed.");
+        }
+        const category = categoryResult.rows[0];
+        const subcategoryResult = await client.query(
+            `
+            INSERT INTO account_subcategories (name, description, account_category_id, order_index)
+            VALUES ($1, $2, $3, $4)
+            RETURNING *`,
+            [initialSubcategoryName, initialSubcategoryDescription || null, category.id, 0],
+        );
+        if (subcategoryResult.rows.length === 0) {
+            throw new Error("Subcategory creation failed.");
+        }
+        return { category, subcategory: subcategoryResult.rows[0] };
+    });
+}
+
+async function addSubcategory(subcategoryName, accountCategoryId, orderIndex, subcategoryDescription) {
+    sanitizeInput(subcategoryName);
+    sanitizeInput(accountCategoryId);
+    sanitizeInput(orderIndex);
+    sanitizeInput(subcategoryDescription);
+    return db.transaction(async (client) => {
+        const categoryCheck = await client.query("SELECT id FROM account_categories WHERE id = $1", [accountCategoryId]);
+        if (categoryCheck.rows.length === 0) {
+            throw new Error(`Account category with ID ${accountCategoryId} does not exist.`);
+        }
+        const subcategoryCheck = await client.query("SELECT id FROM account_subcategories WHERE name = $1 AND account_category_id = $2", [subcategoryName, accountCategoryId]);
+        if (subcategoryCheck.rows.length > 0) {
+            throw new Error(`Account subcategory with name "${subcategoryName}" already exists for category ID ${accountCategoryId}.`);
+        }
+        let resolvedOrderIndex = Number.parseInt(orderIndex, 10);
+        if (!Number.isFinite(resolvedOrderIndex)) {
+            const nextIndexResult = await client.query(
+                "SELECT COALESCE(MAX(order_index), 0) + 1 AS next_index FROM account_subcategories WHERE account_category_id = $1",
+                [accountCategoryId],
+            );
+            resolvedOrderIndex = nextIndexResult.rows[0]?.next_index ?? 0;
+        }
+        const result = await client.query(
+            `
+            INSERT INTO account_subcategories (name, description, account_category_id, order_index)
+            VALUES ($1, $2, $3, $4)
+            RETURNING *`,
+            [subcategoryName, subcategoryDescription || null, accountCategoryId, resolvedOrderIndex],
+        );
+        if (result.rows.length === 0) {
+            throw new Error("Subcategory creation failed.");
+        }
+        return result.rows[0];
+    });
+}
+
+async function deleteCategory(categoryId) {
+    sanitizeInput(categoryId);
+    return db.transaction(async (client) => {
+        const accountCheck = await client.query(
+            `SELECT 1
+             FROM accounts
+             WHERE account_category_id = $1
+                OR account_subcategory_id IN (
+                    SELECT id FROM account_subcategories WHERE account_category_id = $1
+                )
+             LIMIT 1`,
+            [categoryId],
+        );
+        if (accountCheck.rows.length > 0) {
+            throw new Error(`Cannot delete category ID ${categoryId} because it has associated accounts.`);
+        }
+        await client.query("DELETE FROM account_categories WHERE id = $1", [categoryId]);
+        return { success: true };
+    });
+}
+
+async function deleteSubcategory(subcategoryId) {
+    sanitizeInput(subcategoryId);
+    return db.transaction(async (client) => {
+        const accountCheck = await client.query("SELECT id FROM accounts WHERE account_subcategory_id = $1", [subcategoryId]);
+        if (accountCheck.rows.length > 0) {
+            throw new Error(`Cannot delete subcategory ID ${subcategoryId} because it has associated accounts.`);
+        }
+        await client.query("DELETE FROM account_subcategories WHERE id = $1", [subcategoryId]);
+        return { success: true };
+    });
+}
+
 module.exports = {
     listAccounts,
     createAccount,
     listAccountCategories,
     getAccountCounts,
     updateAccountField,
+    setAccountStatus,
+    addCategory,
+    addSubcategory,
+    deleteCategory,
+    deleteSubcategory,
 };

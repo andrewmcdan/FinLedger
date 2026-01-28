@@ -2,7 +2,9 @@ const errorMessagePrettyMap = {
     "duplicate key value violates unique constraint": "An item with that value already exists.",
     "violates foreign key constraint": "The selected related item does not exist.",
     "null value in column": "A required field is missing.",
-    "accounts_account_name_key": "An account with that name already exists.",
+    accounts_account_name_key: "An account with that name already exists.",
+    "Cannot delete category": "Cannot delete category because accounts are tied to it.",
+    "Cannot delete subcategory": "Cannot delete subcategory because accounts are tied to it.",
 };
 
 const errorFormatter = (error) => {
@@ -13,7 +15,7 @@ const errorFormatter = (error) => {
         }
     }
     return errors.length > 0 ? errors[errors.length - 1] : "An unknown error occurred.";
-}
+};
 
 function fetchWithAuth(url, options = {}) {
     const authToken = localStorage.getItem("auth_token") || "";
@@ -147,6 +149,16 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     const allUsers = accountsData?.allUsers || [];
     const categoryNameById = new Map(categories.map((category) => [String(category.id), category.name]));
     const subcategoryNameById = new Map(subcategories.map((subcategory) => [String(subcategory.id), subcategory.name]));
+    const categoryById = new Map(categories.map((category) => [String(category.id), category]));
+    const subcategoryById = new Map(subcategories.map((subcategory) => [String(subcategory.id), subcategory]));
+    const subcategoriesByCategoryId = new Map();
+    subcategories.forEach((subcategory) => {
+        const key = String(subcategory.account_category_id);
+        if (!subcategoriesByCategoryId.has(key)) {
+            subcategoriesByCategoryId.set(key, []);
+        }
+        subcategoriesByCategoryId.get(key).push(subcategory);
+    });
     const userNameById = new Map(allUsers.map((user) => [String(user.id), user.username]));
     if (userNameById.size === 0) {
         const accountOwnerSelect = document.getElementById("account_owner");
@@ -210,9 +222,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             case "user_id":
                 return userNameById.get(String(account.user_id)) || "";
             case "normal_side":
-                return account.normal_side
-                    ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1)
-                    : "";
+                return account.normal_side ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1) : "";
             case "account_description":
                 return account.account_description ?? "";
             case "account_category_id":
@@ -267,23 +277,30 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         }
     };
 
+    const getDefaultSubcategoryForCategory = (categoryId) => {
+        if (!categoryId) {
+            return null;
+        }
+        return subcategories.find((subcategory) => String(subcategory.account_category_id) === String(categoryId)) || null;
+    };
+
+    const updateSubcategoryCell = (account, subcategoryId) => {
+        const subcategoryCell = document.querySelector(`[data-account_subcategory_id-${account.id}]`);
+        if (!subcategoryCell) {
+            return;
+        }
+        account.account_subcategory_id = subcategoryId;
+        subcategoryCell.textContent = formatDisplayValue(account, "account_subcategory_id");
+        formatLongTextCell(subcategoryCell);
+    };
+
     function setupAccountEditing(accounts) {
         if (!Array.isArray(accounts) || accounts.length === 0) {
             return;
         }
         const ownerOptions = getOwnerOptions();
         for (const account of accounts) {
-            const editableColumns = [
-                "account_name",
-                "account_number",
-                "user_id",
-                "normal_side",
-                "account_description",
-                "account_category_id",
-                "account_subcategory_id",
-                "statement_type",
-                "comment",
-            ];
+            const editableColumns = ["account_name", "account_number", "user_id", "normal_side", "account_description", "account_category_id", "account_subcategory_id", "statement_type", "comment"];
             for (const column of editableColumns) {
                 const selector = `[data-${column}-${account.id}]`;
                 const cell = document.querySelector(selector);
@@ -318,9 +335,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                     })();
                     const displayValue = formatDisplayValue(account, column);
                     if (column === "user_id") {
-                        const options = ownerOptions.length
-                            ? ownerOptions
-                            : [{ value: rawValue, label: displayValue || "Unassigned" }];
+                        const options = ownerOptions.length ? ownerOptions : [{ value: rawValue, label: displayValue || "Unassigned" }];
                         cell.innerHTML = `<select data-input-${column}-${account.id}>
                             ${buildOptionsHTML(options, rawValue)}
                         </select>`;
@@ -338,9 +353,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                         </select>`;
                     } else if (column === "account_subcategory_id") {
                         const categoryId = account.account_category_id ?? "";
-                        const filtered = categoryId
-                            ? subcategories.filter((subcategory) => String(subcategory.account_category_id) === String(categoryId))
-                            : subcategories;
+                        const filtered = categoryId ? subcategories.filter((subcategory) => String(subcategory.account_category_id) === String(categoryId)) : subcategories;
                         const subcategoryOptions = filtered.map((subcategory) => ({
                             value: String(subcategory.id),
                             label: subcategory.name,
@@ -401,7 +414,57 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                             } else if (column === "account_description") {
                                 account.account_description = newValue;
                             } else if (column === "account_category_id") {
+                                const previousCategoryId = rawValue;
+                                const previousSubcategoryId = String(account.account_subcategory_id ?? "");
                                 account.account_category_id = newValue;
+                                const defaultSubcategory = getDefaultSubcategoryForCategory(newValue);
+                                if (!defaultSubcategory) {
+                                    alert("No subcategories found for the selected category.");
+                                    account.account_category_id = previousCategoryId;
+                                    cell.textContent = formatDisplayValue(account, "account_category_id");
+                                    updateSubcategoryCell(account, previousSubcategoryId);
+                                    return;
+                                }
+                                const newSubcategoryId = String(defaultSubcategory.id);
+                                try {
+                                    const subcategoryResponse = await fetchWithAuth("/api/accounts/update-account-field", {
+                                        method: "POST",
+                                        headers: {
+                                            "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify({
+                                            account_id: account.id,
+                                            field: "account_subcategory_id",
+                                            value: newSubcategoryId,
+                                        }),
+                                    });
+                                    const subcategoryData = await subcategoryResponse.json().catch(() => ({}));
+                                    if (!subcategoryResponse.ok) {
+                                        throw new Error(subcategoryData.error || "Failed to update account subcategory");
+                                    }
+                                    updateSubcategoryCell(account, newSubcategoryId);
+                                } catch (error) {
+                                    alert(error.message || "Error updating account subcategory");
+                                    try {
+                                        await fetchWithAuth("/api/accounts/update-account-field", {
+                                            method: "POST",
+                                            headers: {
+                                                "Content-Type": "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                                account_id: account.id,
+                                                field: "account_category_id",
+                                                value: previousCategoryId,
+                                            }),
+                                        });
+                                    } catch (revertError) {
+                                        // ignore revert errors, we'll resync UI below
+                                    }
+                                    account.account_category_id = previousCategoryId;
+                                    cell.textContent = formatDisplayValue(account, "account_category_id");
+                                    updateSubcategoryCell(account, previousSubcategoryId);
+                                    return;
+                                }
                             } else if (column === "account_subcategory_id") {
                                 account.account_subcategory_id = newValue;
                             } else if (column === "statement_type") {
@@ -452,12 +515,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     } catch (error) {
         alert("Error fetching account counts: " + error.message);
     }
-    
+
     if (totalPagesEl) {
         const totalPages = Math.ceil(accountCount / accountsPerPage);
         totalPagesEl.textContent = totalPages;
     }
-    
+
     if (accountsPerPageSelect) {
         accountsPerPageSelect.addEventListener("change", () => {
             accountsPerPage = parseInt(accountsPerPageSelect.value, 10);
@@ -483,9 +546,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             tbody.innerHTML = "";
             for (const account of accounts) {
                 const accountOwner = userNameById.get(String(account.user_id)) || "";
-                const normalSide = account.normal_side
-                    ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1)
-                    : "";
+                const normalSide = account.normal_side ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1) : "";
                 const categoryName = categoryNameById.get(String(account.account_category_id)) || "";
                 const subcategoryName = subcategoryNameById.get(String(account.account_subcategory_id)) || "";
                 const statementType = statementTypeLabels[account.statement_type] || account.statement_type || "";
@@ -570,6 +631,296 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         renderSubcategories(accountCategorySelect.value);
     }
 
+    const addCategoryButton = document.querySelector("[data-add-category-button]");
+    const addSubcategoryButton = document.querySelector("[data-add-subcategory-button]");
+    const addCategoryModal = document.getElementById("category_modal");
+    const isSubcategoryCheckbox = document.getElementById("is_subcategory");
+    const categoryNameRow = document.querySelector("[data-category-name-row]");
+    const categoryDescriptionRow = document.querySelector("[data-category-description-row]");
+    const categorySubcategoryNameRow = document.querySelector("[data-category-subcategory-name-row]");
+    const categorySubcategoryDescriptionRow = document.querySelector("[data-category-subcategory-description-row]");
+    const categorySelectRow = document.querySelector("[data-category-select-row]");
+    const subcategoryNameRow = document.querySelector("[data-subcategory-name-row]");
+    const subcategoryDescriptionRow = document.querySelector("[data-subcategory-description-row]");
+    const accountPrefixRow = document.querySelector("[data-account-prefix-row]");
+    const categoryNameInput = document.getElementById("add_category__category_name");
+    const categoryDescriptionInput = document.getElementById("add_category__category_description");
+    const initialSubcategoryNameInput = document.getElementById("add_category__subcategory_name");
+    const initialSubcategoryDescriptionInput = document.getElementById("add_category__subcategory_description");
+    const categorySelect = document.getElementById("add_category__category_select");
+    const subcategoryNameInput = document.getElementById("add_category__subcategory_name_existing");
+    const subcategoryDescriptionInput = document.getElementById("add_category__subcategory_description_existing");
+    const accountPrefixInput = document.getElementById("account_number_prefix");
+    const populateCategorySelect = () => {
+        if (!categorySelect) {
+            return;
+        }
+        categorySelect.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Select a category";
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        categorySelect.appendChild(placeholder);
+        categories.forEach((category) => {
+            const option = document.createElement("option");
+            option.value = String(category.id);
+            option.textContent = category.name;
+            categorySelect.appendChild(option);
+        });
+    };
+    const updateCategoryModalFields = (forceSubcategory) => {
+        if (!isSubcategoryCheckbox) {
+            return;
+        }
+        if (typeof forceSubcategory === "boolean") {
+            isSubcategoryCheckbox.checked = forceSubcategory;
+        }
+        const isSubcategory = isSubcategoryCheckbox.checked;
+        if (categoryNameRow) {
+            categoryNameRow.hidden = isSubcategory;
+        }
+        if (categoryDescriptionRow) {
+            categoryDescriptionRow.hidden = isSubcategory;
+        }
+        if (categorySubcategoryNameRow) {
+            categorySubcategoryNameRow.hidden = isSubcategory;
+        }
+        if (categorySubcategoryDescriptionRow) {
+            categorySubcategoryDescriptionRow.hidden = isSubcategory;
+        }
+        if (categorySelectRow) {
+            categorySelectRow.hidden = !isSubcategory;
+        }
+        if (subcategoryNameRow) {
+            subcategoryNameRow.hidden = !isSubcategory;
+        }
+        if (subcategoryDescriptionRow) {
+            subcategoryDescriptionRow.hidden = !isSubcategory;
+        }
+        if (accountPrefixRow) {
+            accountPrefixRow.hidden = isSubcategory;
+        }
+        if (categoryNameInput) {
+            categoryNameInput.required = !isSubcategory;
+        }
+        if (categoryDescriptionInput) {
+            categoryDescriptionInput.required = false;
+        }
+        if (initialSubcategoryNameInput) {
+            initialSubcategoryNameInput.required = !isSubcategory;
+        }
+        if (initialSubcategoryDescriptionInput) {
+            initialSubcategoryDescriptionInput.required = false;
+        }
+        if (categorySelect) {
+            categorySelect.required = isSubcategory;
+            if (isSubcategory && categorySelect.options.length === 0) {
+                populateCategorySelect();
+            }
+        }
+        if (subcategoryNameInput) {
+            subcategoryNameInput.required = isSubcategory;
+        }
+        if (subcategoryDescriptionInput) {
+            subcategoryDescriptionInput.required = false;
+        }
+        if (accountPrefixInput) {
+            accountPrefixInput.required = !isSubcategory;
+        }
+    };
+    if (categorySelect) {
+        populateCategorySelect();
+    }
+    if (addCategoryButton && addCategoryModal) {
+        console.log("Adding event listener to add category button");
+        addCategoryButton.addEventListener("click", () => {
+            addCategoryModal.classList.add("is-visible");
+            addCategoryModal.setAttribute("aria-hidden", "false");
+            updateCategoryModalFields(false);
+        });
+    }
+    const closeCategoryModalButton = document.getElementById("close_category_modal");
+    if (closeCategoryModalButton && addCategoryModal) {
+        closeCategoryModalButton.addEventListener("click", () => {
+            addCategoryModal.classList.remove("is-visible");
+            addCategoryModal.setAttribute("aria-hidden", "true");
+        });
+    }
+    closeCategoryModalButton.style.cursor = "pointer";
+
+    if (addSubcategoryButton && addCategoryModal) {
+        addSubcategoryButton.addEventListener("click", () => {
+            addCategoryModal.classList.add("is-visible");
+            addCategoryModal.setAttribute("aria-hidden", "false");
+            updateCategoryModalFields(true);
+        });
+    }
+    if (isSubcategoryCheckbox) {
+        isSubcategoryCheckbox.addEventListener("change", () => {
+            updateCategoryModalFields();
+        });
+        updateCategoryModalFields();
+    }
+
+    const saveCategoryButton = document.getElementById("save_category_button");
+    if (saveCategoryButton) {
+        saveCategoryButton.addEventListener("click", async (event) => {
+            event.preventDefault();
+            showLoadingOverlay();
+            const isSubcategory = isSubcategoryCheckbox ? isSubcategoryCheckbox.checked : false;
+            const categoryName = categoryNameInput ? categoryNameInput.value.trim() : "";
+            const categoryDescription = categoryDescriptionInput ? categoryDescriptionInput.value.trim() : "";
+            const accountNumberPrefix = accountPrefixInput ? accountPrefixInput.value.trim() : "";
+            const categoryId = categorySelect ? categorySelect.value : "";
+            const subcategoryName = subcategoryNameInput ? subcategoryNameInput.value.trim() : "";
+            const subcategoryDescription = subcategoryDescriptionInput ? subcategoryDescriptionInput.value.trim() : "";
+            const initialSubcategoryName = initialSubcategoryNameInput ? initialSubcategoryNameInput.value.trim() : "";
+            const initialSubcategoryDescription = initialSubcategoryDescriptionInput ? initialSubcategoryDescriptionInput.value.trim() : "";
+            try {
+                const response = await fetchWithAuth("/api/accounts/add-category", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        isSubcategory,
+                        categoryName,
+                        categoryDescription,
+                        accountNumberPrefix,
+                        categoryId,
+                        subcategoryName,
+                        subcategoryDescription,
+                        initialSubcategoryName,
+                        initialSubcategoryDescription,
+                    }),
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || "Failed to add category/subcategory");
+                }
+                const result = await response.json();
+                window.location.reload();
+            } catch (error) {
+                alert("Error adding category/subcategory: " + errorFormatter(error.message));
+            } finally {
+                hideLoadingOverlay();
+            }
+        });
+    }
+
+    const deleteCategoryButton = document.querySelector("[data-delete-category-button]");
+    const deleteCategoryModal = document.getElementById("delete_category_modal");
+    const deleteCategorySelect = document.getElementById("delete_category__category_select");
+    const populateDeleteCategorySelect = () => {
+        if (!deleteCategorySelect) {
+            return;
+        }
+        deleteCategorySelect.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Select a category or subcategory";
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        deleteCategorySelect.appendChild(placeholder);
+        categories.forEach((category) => {
+            const optgroup = document.createElement("optgroup");
+            optgroup.label = category.name;
+            const categoryOption = document.createElement("option");
+            categoryOption.value = `category:${category.id}`;
+            categoryOption.textContent = `[Category] ${category.name}`;
+            optgroup.appendChild(categoryOption);
+            const subcats = subcategoriesByCategoryId.get(String(category.id)) || [];
+            subcats.forEach((subcategory) => {
+                const subOption = document.createElement("option");
+                subOption.value = `subcategory:${subcategory.id}`;
+                subOption.textContent = `- ${subcategory.name}`;
+                optgroup.appendChild(subOption);
+            });
+            deleteCategorySelect.appendChild(optgroup);
+        });
+    };
+    if (deleteCategorySelect) {
+        populateDeleteCategorySelect();
+    }
+    if (deleteCategoryButton && deleteCategoryModal) {
+        deleteCategoryButton.addEventListener("click", () => {
+            deleteCategoryModal.classList.add("is-visible");
+            deleteCategoryModal.setAttribute("aria-hidden", "false");
+            populateDeleteCategorySelect();
+        });
+    }
+    const closeDeleteCategoryModalButton = document.getElementById("close_delete_category_modal");
+    if (closeDeleteCategoryModalButton && deleteCategoryModal) {
+        closeDeleteCategoryModalButton.addEventListener("click", () => {
+            deleteCategoryModal.classList.remove("is-visible");
+            deleteCategoryModal.setAttribute("aria-hidden", "true");
+        });
+    }
+    closeDeleteCategoryModalButton.style.cursor = "pointer";
+
+    const confirmDeleteCategoryButton = document.getElementById("confirm_delete_category_button");
+    if (confirmDeleteCategoryButton) {
+        confirmDeleteCategoryButton.addEventListener("click", async (event) => {
+            event.preventDefault();
+            showLoadingOverlay();
+            const selection = deleteCategorySelect ? deleteCategorySelect.value : "";
+            if (!selection || !selection.includes(":")) {
+                alert("Please select a category or subcategory to delete.");
+                hideLoadingOverlay();
+                return;
+            }
+            const [selectionType, selectionId] = selection.split(":");
+            let endpoint = "";
+            if (selectionType === "category") {
+                const category = categoryById.get(String(selectionId));
+                const categoryName = category ? category.name : "this category";
+                const subcats = subcategoriesByCategoryId.get(String(selectionId)) || [];
+                if (subcats.length > 0) {
+                    const confirmDelete = confirm(`Deleting category "${categoryName}" will also delete ${subcats.length} subcategory(ies). Continue?`);
+                    if (!confirmDelete) {
+                        hideLoadingOverlay();
+                        return;
+                    }
+                } else {
+                    const confirmDelete = confirm(`Delete category "${categoryName}"?`);
+                    if (!confirmDelete) {
+                        hideLoadingOverlay();
+                        return;
+                    }
+                }
+                endpoint = `/api/accounts/category/${selectionId}`;
+            } else if (selectionType === "subcategory") {
+                const subcategory = subcategoryById.get(String(selectionId));
+                const subcategoryName = subcategory ? subcategory.name : "this subcategory";
+                const confirmDelete = confirm(`Delete subcategory "${subcategoryName}"?`);
+                if (!confirmDelete) {
+                    hideLoadingOverlay();
+                    return;
+                }
+                endpoint = `/api/accounts/subcategory/${selectionId}`;
+            } else {
+                alert("Invalid selection.");
+                hideLoadingOverlay();
+                return;
+            }
+            try {
+                const response = await fetchWithAuth(endpoint, {
+                    method: "DELETE",
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || "Failed to delete category");
+                }
+                const result = await response.json();
+                window.location.reload();
+            } catch (error) {
+                alert("Error deleting category: " + errorFormatter(error.message));
+            } finally {
+                hideLoadingOverlay();
+            }
+        });
+    }
 }
 
 async function loadNumericHelpers() {
