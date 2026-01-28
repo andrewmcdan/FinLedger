@@ -78,7 +78,7 @@ async function insertUser({
             $13, crypt($14, gen_salt('bf')),
             $15, crypt($16, gen_salt('bf')),
             gen_random_uuid()
-        ) RETURNING id`,
+        ) RETURNING id, username, email, first_name, last_name, role, status`,
         [
             username,
             email,
