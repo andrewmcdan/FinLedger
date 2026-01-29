@@ -18,14 +18,21 @@ const transporter = nodemailer.createTransport({
 function sendEmail(to, subject, body) {
     // Placeholder function to simulate email sending
     logger.log("info", `Sending email to ${to} with subject "${subject}"`, { function: "sendEmail" }, utilities.getCallerInfo());
-    console.log(transporter);
     const mailOptions = {
         from: process.env.SMTP_EMAIL_FROM,
         to: to,
         subject: subject,
         text: body,
     };
-    return transporter.sendMail(mailOptions);
+    return transporter.sendMail(mailOptions)
+        .then((result) => {
+            logger.log("debug", `Email sent to ${to}`, { function: "sendEmail", messageId: result?.messageId }, utilities.getCallerInfo());
+            return result;
+        })
+        .catch((error) => {
+            logger.log("error", `Failed to send email to ${to}: ${error.message}`, { function: "sendEmail" }, utilities.getCallerInfo());
+            throw error;
+        });
 }
 
 module.exports = {
