@@ -1,20 +1,8 @@
-function fetchWithAuth(url, options = {}) {
-    const authToken = localStorage.getItem("auth_token") || "";
-    const userId = localStorage.getItem("user_id") || "";
-    const mergedHeaders = {
-        Authorization: `Bearer ${authToken}`,
-        "X-User-Id": `${userId}`,
-        ...(options.headers || {}),
-    };
-
-    return fetch(url, {
-        ...options,
-        credentials: options.credentials || "include",
-        headers: mergedHeaders,
-    });
-}
-
-export default function initDashboard({showLoadingOverlay, hideLoadingOverlay}) {
+export default async function initDashboard({showLoadingOverlay, hideLoadingOverlay}) {
+    const authHelpers = await loadFetchWithAuth();
+    const { fetchWithAuth } = authHelpers;
+    const domHelpers = await loadDomHelpers();
+    const { createInput, createSelect } = domHelpers;
     const stamp = document.querySelector("[data-last-updated]");
     if (stamp) {
         stamp.textContent = new Date().toLocaleString();
@@ -123,26 +111,34 @@ export default function initDashboard({showLoadingOverlay, hideLoadingOverlay}) 
             let value = column === "fullname" ? `${user.first_name} ${user.last_name}` : user[column];
             const handleClick = () => {
                 cell.removeEventListener("click", handleClick);
+                const inputAttr = `data-input-${column}-${user.id}`;
                 if (isDate) {
-                    cell.innerHTML = `<input type="datetime-local" value="${value ? new Date(value).toISOString().slice(0, 16) : ""}" data-input-${column}-${user.id} />`;
+                    const dateValue = value ? new Date(value).toISOString().slice(0, 16) : "";
+                    const input = createInput("datetime-local", dateValue, inputAttr);
+                    cell.replaceChildren(input);
                 } else if (column === "role") {
-                    cell.innerHTML = `<select data-input-${column}-${user.id}>
-                                <option value="administrator" ${value === "administrator" ? "selected" : ""}>Administrator</option>
-                                <option value="manager" ${value === "manager" ? "selected" : ""}>Manager</option>
-                                <option value="accountant" ${value === "accountant" ? "selected" : ""}>Accountant</option>
-                            </select>`;
+                    const roleOptions = [
+                        { value: "administrator", label: "Administrator" },
+                        { value: "manager", label: "Manager" },
+                        { value: "accountant", label: "Accountant" },
+                    ];
+                    const select = createSelect(roleOptions, value, inputAttr);
+                    cell.replaceChildren(select);
                 } else if (column === "status") {
-                    cell.innerHTML = `<select data-input-${column}-${user.id}>
-                                <option value="active" ${value === "active" ? "selected" : ""}>Active</option>
-                                <option value="pending" ${value === "pending" ? "selected" : ""}>Pending</option>
-                                <option value="suspended" ${value === "suspended" ? "selected" : ""}>Suspended</option>
-                                <option value="deactivated" ${value === "deactivated" ? "selected" : ""}>Deactivated</option>
-                                <option value="rejected" ${value === "rejected" ? "selected" : ""}>Rejected</option>
-                            </select>`;
+                    const statusOptions = [
+                        { value: "active", label: "Active" },
+                        { value: "pending", label: "Pending" },
+                        { value: "suspended", label: "Suspended" },
+                        { value: "deactivated", label: "Deactivated" },
+                        { value: "rejected", label: "Rejected" },
+                    ];
+                    const select = createSelect(statusOptions, value, inputAttr);
+                    cell.replaceChildren(select);
                 } else {
-                    cell.innerHTML = `<input type="text" value="${value || ""}" data-input-${column}-${user.id} />`;
+                    const input = createInput("text", value || "", inputAttr);
+                    cell.replaceChildren(input);
                 }
-                const inputEl = document.querySelector(`[data-input-${column}-${user.id}]`);
+                const inputEl = cell.querySelector(`[data-input-${column}-${user.id}]`);
                 inputEl.focus();
                 inputEl.addEventListener("blur", async () => {
                     const newValue = inputEl.value;
@@ -383,6 +379,20 @@ export default function initDashboard({showLoadingOverlay, hideLoadingOverlay}) 
             }
         });
     }
+}
+
+async function loadDomHelpers() {
+    const moduleUrl = new URL("/js/utils/dom_helpers.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    const { createInput, createSelect } = module;
+    return { createInput, createSelect };
+}
+
+async function loadFetchWithAuth() {
+    const moduleUrl = new URL("/js/utils/fetch_with_auth.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    const { fetchWithAuth } = module;
+    return { fetchWithAuth };
 }
 
 
