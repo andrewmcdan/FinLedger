@@ -7,22 +7,51 @@ const connectionString = useTestDb
 
 const pool = new postgres.Pool({ connectionString });
 
+const getLogger = () => {
+    try {
+        return require("../utils/logger");
+    } catch (error) {
+        return null;
+    }
+};
+
+const logDb = (level, message, context = null) => {
+    const logger = getLogger();
+    if (!logger || typeof logger.log !== "function") {
+        return;
+    }
+    logger.log(level, message, context, "", null, { skipDb: true });
+};
+
 const query = async (text, params) => {
-    return pool.query(text, params);
+    try {
+        return await pool.query(text, params);
+    } catch (error) {
+        logDb("error", "Database query failed", {
+            error: error.message,
+            statement: text,
+            paramCount: Array.isArray(params) ? params.length : 0,
+        });
+        throw error;
+    }
 };
 
 const transaction = async (callback) => {
     const client = await pool.connect();
     try {
+        logDb("debug", "Starting database transaction");
         await client.query("BEGIN");
         const result = await callback(client);
         await client.query("COMMIT");
+        logDb("debug", "Committed database transaction");
         return result;
     } catch (error) {
         try {
             await client.query("ROLLBACK");
+            logDb("warn", "Rolled back database transaction", { error: error.message });
         } catch (rollbackError) {
             console.error("Failed to rollback transaction:", rollbackError);
+            logDb("error", "Failed to rollback database transaction", { error: rollbackError.message });
         }
         throw error;
     } finally {
@@ -35,6 +64,7 @@ const getClient = async () => {
 };
 
 const closePool = async () => {
+    logDb("info", "Closing database pool", { useTestDb });
     await pool.end();
 };
 

@@ -12,6 +12,7 @@ router.get("/user-icon.png", async (req, res) => {
     logger.log("info", `Request for user icon by user ID ${req.user ? req.user.id : "unknown"}`, { function: "user-icon" }, utilities.getCallerInfo(), req.user ? req.user.id : null);
     // Get the user's icon filename based on req.user.id
     if (!req.user || !req.user.id) {
+        logger.log("warn", "User icon request without authenticated user", { path: req.path }, utilities.getCallerInfo());
         // No user info, send default icon
         return res.sendFile(path.join(pathDefault));
     }
@@ -24,7 +25,7 @@ router.get("/user-icon.png", async (req, res) => {
     const userIconPath = path.join(pathRoot, userIconFileName);
     res.sendFile(userIconPath, (err) => {
         if (err) {
-            console.error("Error sending user icon file:", err);
+            logger.log("error", `Error sending user icon file: ${err.message}`, { path: userIconPath }, utilities.getCallerInfo(), req.user ? req.user.id : null);
             res.sendFile(pathDefault);
         }
     });
@@ -49,15 +50,24 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     fileFilter: (req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase();
-        if (!allowed.has(ext)) return cb(new Error("Invalid file type"));
+        if (!allowed.has(ext)) {
+            logger.log("warn", "Rejected user icon upload due to invalid file type", { ext, filename: file.originalname }, utilities.getCallerInfo(), req.user ? req.user.id : null);
+            return cb(new Error("Invalid file type"));
+        }
         cb(null, true);
     },
 });
 router.post("/upload-user-icon", upload.single("user_icon"), (req, res) => {
     logger.log("info", `Upload user icon request by user ID ${req.user ? req.user.id : "unknown"}`, { function: "upload-user-icon" }, utilities.getCallerInfo(), req.user ? req.user.id : null);
 
-    if (!req.user?.id) return res.status(401).json({ error: "Unauthorized" });
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    if (!req.user?.id) {
+        logger.log("warn", "Unauthorized user icon upload request", { path: req.path }, utilities.getCallerInfo());
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (!req.file) {
+        logger.log("warn", "User icon upload missing file", { userId: req.user.id }, utilities.getCallerInfo(), req.user.id);
+        return res.status(400).json({ error: "No file uploaded" });
+    }
 
     return res.json({
         message: "File uploaded successfully",

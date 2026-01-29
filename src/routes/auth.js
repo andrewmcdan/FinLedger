@@ -12,18 +12,22 @@ router.use(express.json());
 router.get("/status", async (req, res) => {
     const authHeader = req.get("authorization");
     if (!authHeader) {
+        log("trace", "Auth status request missing authorization header", { path: req.path }, utilities.getCallerInfo());
         return res.json({ ok: false, loggedIn: false });
     }
     const [scheme, token] = authHeader.split(" ");
     if (scheme !== "Bearer" || !token) {
+        log("trace", "Auth status request invalid authorization header", { path: req.path }, utilities.getCallerInfo());
         return res.json({ ok: false, loggedIn: false });
     }
     const user_id = req.get("X-User-Id");
     if (!user_id) {
+        log("trace", "Auth status request missing user id header", { path: req.path }, utilities.getCallerInfo());
         return res.json({ ok: false, loggedIn: false });
     }
     req.user = { token: token, id: user_id };
     const loggedIn = await getUserLoggedInStatus(user_id, token);
+    log("trace", "Auth status request processed", { user_id, loggedIn }, utilities.getCallerInfo(), user_id);
     res.json({ ok: true, loggedIn: loggedIn });
 });
 
@@ -33,6 +37,7 @@ router.post("/login", async (req, res) => {
     const { username, password } = req.body;
     const userRowsNonAuth = await db.query("SELECT id, status, failed_login_attempts, suspension_end_at FROM users WHERE username = $1 AND status = 'active'", [username]);
     if (userRowsNonAuth.rowCount === 0) {
+        log("warn", `Login failed - user not found or inactive for username: ${username}`, { function: "login" }, utilities.getCallerInfo());
         return res.status(401).json({ error: "Invalid username or password" });
     }
     
@@ -99,16 +104,20 @@ router.post("/login", async (req, res) => {
 router.post("/logout", (req, res) => {
     const authHeader = req.get("authorization");
     if (!authHeader) {
+        log("warn", "Logout request missing Authorization header", { path: req.path }, utilities.getCallerInfo());
         return res.status(401).json({ error: "Missing Authorization header" });
     }
     const [scheme, token] = authHeader.split(" ");
     if (scheme !== "Bearer" || !token) {
+        log("warn", "Logout request invalid Authorization header", { path: req.path }, utilities.getCallerInfo());
         return res.status(401).json({ error: "Invalid Authorization header" });
     }
     const user_id = req.get("X-User-Id");
     if (!user_id) {
+        log("warn", "Logout request missing X-User-Id header", { path: req.path }, utilities.getCallerInfo());
         return res.status(401).json({ error: "Missing X-User-Id header" });
     }
+    log("info", `Logout request received for user ID ${user_id}`, { function: "logout" }, utilities.getCallerInfo(), user_id);
     // Set the logout_at column for user to now()
     db.query("UPDATE logged_in_users SET logout_at = NOW() WHERE user_id = $1 AND token = $2", [user_id, token])
         .then(() => {

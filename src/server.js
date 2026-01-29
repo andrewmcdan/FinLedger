@@ -7,7 +7,7 @@ const userDocRoutes = require("./routes/user_docs");
 const authMiddleware = require("./middleware/auth");
 const db = require("./db/db");
 const logger = require("./utils/logger");
-const { getCallerInfo, cleanupUserData } = require("./utils/utilities");
+const { getCallerInfo, cleanupUserData, cleanupLogs } = require("./utils/utilities");
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
@@ -27,6 +27,7 @@ app.use(authMiddleware);
 // Any routes added after this point will require authentication
 app.get("/pages/dashboard.html", async (req, res, next) => {
     try {
+        logger.log("debug", "Rendering dashboard", { userId: req.user?.id }, getCallerInfo(), req.user?.id);
         const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
         const role = result.rows[0]?.role || "none";
         const loggedInUsers = await usersController.listLoggedInUsers();
@@ -34,6 +35,7 @@ app.get("/pages/dashboard.html", async (req, res, next) => {
         const currentUserId = Number(req.user.id);
         res.render("dashboard", { role, loggedInUsers, users, currentUserId });
     } catch (error) {
+        logger.log("error", `Dashboard render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
         next(error);
     }
 });
@@ -45,11 +47,13 @@ app.get("/pages/accounts_list.html", async (req, res, next) => {
         allUsers = await usersController.listUsers();;
     }
     try {
+        logger.log("debug", "Rendering accounts list", { userId: req.user?.id, role }, getCallerInfo(), req.user?.id);
         const result = await accountsController.listAccounts(req.user.id, req.user.token);
         const accounts = result.rows;
         const allCategories = await accountsController.listAccountCategories();
         res.render("accounts_list", { accounts, role, allUsers, allCategories });
     } catch (error) {
+        logger.log("error", `Accounts list render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
         next(error);
     }
 });
@@ -68,10 +72,12 @@ app.get("/pages/public/forgot-password_submit.html", async (req, res, next) => {
     try {
         const resetToken = req.query.reset_token;
         if (!resetToken) {
+            logger.log("debug", "Rendering forgot-password submit with empty token", {}, getCallerInfo());
             return res.render("public/forgot-password_submit", { security_questions: emptyQuestions, reset_token: "" });
         }
         const userData = await usersController.getUserByResetToken(resetToken);
         if (!userData) {
+            logger.log("warn", "Forgot-password submit with invalid reset token", {}, getCallerInfo());
             return res.render("public/forgot-password_submit", { security_questions: emptyQuestions, reset_token: "" });
         }
         const securityQuestions = await usersController.getSecurityQuestionsForUser(userData.id);
@@ -87,15 +93,18 @@ app.get("/pages/public/forgot-password_submit.html", async (req, res, next) => {
             reset_token: resetToken,
         });
     } catch (error) {
+        logger.log("error", `Forgot-password submit render failed: ${error.message}`, {}, getCallerInfo());
         return next(error);
     }
 });
 app.get("/pages/profile.html", async (req, res, next) => {
     try {
+        logger.log("debug", "Rendering profile page", { userId: req.user?.id }, getCallerInfo(), req.user?.id);
         const result = await db.query("SELECT id, role, first_name, last_name, email, address, password_expires_at, suspension_start_at, suspension_end_at, security_question_1, security_question_2, security_question_3, temp_password FROM users WHERE id = $1", [req.user.id]);
         const user = result.rows[0] || {};
         res.render("profile", { user: user });
     } catch (error) {
+        logger.log("error", `Profile render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
         next(error);
     }
 });
@@ -137,6 +146,17 @@ if (require.main === module) {
         },
         60 * 60 * 1000,
     ); // every hour
+
+    setInterval(
+        async () => {
+            try {
+                await cleanupLogs();
+            } catch (error) {
+                logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
+            }
+        },
+        24 * 60 * 60 * 1000,
+    ); // every 24 hours
 }
 
 // Export the app for testing purposes
