@@ -24,14 +24,18 @@ function checkPasswordComplexity(password) {
 }
 
 const getUserLoggedInStatus = async (user_id, token) => {
+    logger.log("trace", "Checking logged-in status", { user_id }, utilities.getCallerInfo(), user_id);
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
     if (result.rowCount === 0) {
+        logger.log("trace", "No active session found", { user_id }, utilities.getCallerInfo(), user_id);
         return false;
     }
     if (result.rows[0].logout_at < new Date()) {
+        logger.log("trace", "Session expired", { user_id }, utilities.getCallerInfo(), user_id);
         return false;
     }
     await db.query("UPDATE logged_in_users SET logout_at = now() + INTERVAL '1 hour' WHERE user_id = $1 AND token = $2", [user_id, token]);
+    logger.log("trace", "Extended session expiration", { user_id }, utilities.getCallerInfo(), user_id);
     return true;
 };
 
@@ -70,35 +74,44 @@ const isManager = async (userId, token) => {
 };
 
 const getUserById = async (userId) => {
+    logger.log("debug", "Fetching user by ID", { userId }, utilities.getCallerInfo(), userId);
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
     if (userResult.rowCount === 0) {
+        logger.log("warn", "User not found by ID", { userId }, utilities.getCallerInfo(), userId);
         return null;
     }
     return userResult.rows[0];
 };
 
 const getUserByEmail = async (email) => {
+    logger.log("debug", "Fetching user by email", { email }, utilities.getCallerInfo());
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE email = $1", [email]);
     if (userResult.rowCount === 0) {
+        logger.log("warn", "User not found by email", { email }, utilities.getCallerInfo());
         return null;
     }
     return userResult.rows[0];
 };
 
 const getUserByResetToken = async (resetToken) => {
+    logger.log("debug", "Fetching user by reset token", {}, utilities.getCallerInfo());
     const userResult = await db.query("SELECT id, username, email, first_name, last_name FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()", [resetToken]);
     if (userResult.rowCount === 0) {
+        logger.log("warn", "User not found by reset token", {}, utilities.getCallerInfo());
         return null;
     }
     return userResult.rows[0];
 };
 
 const listUsers = async () => {
+    logger.log("debug", "Listing users", {}, utilities.getCallerInfo());
     const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at, address, user_icon_path, temp_password, password_expires_at FROM users ORDER BY id ASC");
+    logger.log("debug", "Users listed", { count: usersResult.rowCount }, utilities.getCallerInfo());
     return usersResult.rows;
 };
 
 const listLoggedInUsers = async () => {
+    logger.log("debug", "Listing logged-in users", {}, utilities.getCallerInfo());
     const loggedInUsersResult = await db.query("SELECT id, user_id, login_at, logout_at FROM logged_in_users ORDER BY id ASC");
     const uniqueLoggedInUsersMap = new Map();
     for (const row of loggedInUsersResult.rows) {
@@ -110,6 +123,7 @@ const listLoggedInUsers = async () => {
         }
     }
     const loggedInUsers = Array.from(uniqueLoggedInUsersMap.values());
+    logger.log("debug", "Logged-in users listed", { count: loggedInUsers.length }, utilities.getCallerInfo());
     return loggedInUsers;
 };
 
@@ -138,6 +152,7 @@ const changePassword = async (userId, newPassword) => {
         newPassword = decodeURIComponent(newPassword);
     }
     if (!checkPasswordComplexity(newPassword)) {
+        logger.log("warn", "Password complexity check failed", { userId }, utilities.getCallerInfo(), userId);
         throw new Error("Password does not meet complexity requirements");
     }
     await db.transaction(async (client) => {
@@ -152,16 +167,21 @@ const changePassword = async (userId, newPassword) => {
         const result = await client.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
         await savePasswordToHistory(userId, result.rows[0].password_hash, client);
     });
+    logger.log("info", "Password changed successfully", { userId }, utilities.getCallerInfo(), userId);
 };
 
 const verifyCurrentPassword = async (userId, currentPassword) => {
     const result = await db.query("SELECT 1 FROM users WHERE id = $1 AND password_hash = crypt($2, password_hash)", [userId, currentPassword]);
+    if (result.rowCount === 0) {
+        logger.log("debug", "Current password verification failed", { userId }, utilities.getCallerInfo(), userId);
+    }
     return result.rowCount > 0;
 };
 
 const changePasswordWithCurrentPassword = async (userId, currentPassword, newPassword) => {
     const verified = await verifyCurrentPassword(userId, currentPassword);
     if (!verified) {
+        logger.log("warn", "Current password verification failed during password change", { userId }, utilities.getCallerInfo(), userId);
         const error = new Error("Current password is incorrect");
         error.code = "INVALID_CURRENT_PASSWORD";
         throw error;
@@ -172,6 +192,7 @@ const changePasswordWithCurrentPassword = async (userId, currentPassword, newPas
 const updateSecurityQuestionsWithCurrentPassword = async (userId, currentPassword, securityQuestions) => {
     const verified = await verifyCurrentPassword(userId, currentPassword);
     if (!verified) {
+        logger.log("warn", "Current password verification failed during security question update", { userId }, utilities.getCallerInfo(), userId);
         const error = new Error("Current password is incorrect");
         error.code = "INVALID_CURRENT_PASSWORD";
         throw error;
@@ -233,6 +254,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
  * @returns
  */
 const createUser = async (firstName, lastName, email, password, role, address, dateOfBirth, profileImage) => {
+    logger.log("info", "Creating user", { email, role }, utilities.getCallerInfo());
     // username should be made of the first name initial, the full last name, and a four digit (two-digit month and two-digit year) of when the account is created
     const username = `${firstName.charAt(0)}${lastName}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`;
     if (role !== "accountant" && role !== "administrator" && role !== "manager") {
@@ -260,6 +282,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
         return result.rows[0];
     });
+    logger.log("info", "User created", { userId: createdUser.id, username: createdUser.username, role }, utilities.getCallerInfo(), createdUser.id);
     const userIconPath = createdUser.user_icon_path;
     if (profileImage && profileImage != null && profileImage !== "" && profileImage !== "null" && userIconPath) {
         logger.log("info", `Moving profile image for new user with ID ${createdUser.id}`, { function: "createUser" }, utilities.getCallerInfo(), createdUser.id);
@@ -285,6 +308,7 @@ const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
     // questionsAndAnswers should be an array of objects with 'question' and 'answer' properties
     // The table has rows like this:   security_question_1 TEXT, security_answer_hash_1 TEXT, security_question_2 TEXT, security_answer_hash_2 TEXT, security_question_3 TEXT, security_answer_hash_3 TEXT,
     if (questionsAndAnswers.length !== 3) {
+        logger.log("warn", "Invalid security question payload length", { userId, length: questionsAndAnswers.length }, utilities.getCallerInfo(), userId);
         throw new Error("Exactly three security questions and answers must be provided");
     }
     const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')), updated_at = now() WHERE id = $7";
@@ -294,8 +318,10 @@ const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
 };
 
 const getSecurityQuestionsForUser = async (userId) => {
+    logger.log("debug", "Fetching security questions for user", { userId }, utilities.getCallerInfo(), userId);
     const result = await db.query("SELECT security_question_1, security_question_2, security_question_3 FROM users WHERE id = $1", [userId]);
     if (result.rowCount === 0) {
+        logger.log("warn", "Security questions not found for user", { userId }, utilities.getCallerInfo(), userId);
         return null;
     }
     return {
@@ -308,6 +334,7 @@ const getSecurityQuestionsForUser = async (userId) => {
 const verifySecurityAnswers = async (userId, answers) => {
     // answers should be an array of strings with the answers to the security questions in order
     if (answers.length !== 3) {
+        logger.log("warn", "Invalid security answer payload length", { userId, length: answers.length }, utilities.getCallerInfo(), userId);
         throw new Error("Exactly three answers must be provided");
     }
     const query = "SELECT 1 FROM users WHERE id = $1 AND security_answer_hash_1 = crypt($2, security_answer_hash_1) AND security_answer_hash_2 = crypt($3, security_answer_hash_2) AND security_answer_hash_3 = crypt($4, security_answer_hash_3)";
@@ -328,6 +355,7 @@ const unsuspendExpiredSuspensions = async () => {
 
 const sendPasswordExpiryWarnings = async () => {
     const warningThresholdDays = 3;
+    logger.log("debug", "Sending password expiry warnings", { warningThresholdDays }, utilities.getCallerInfo());
     const result = await db.query("SELECT id, email, first_name, last_name, password_expires_at FROM users WHERE password_expires_at IS NOT NULL AND password_expires_at <= now() + ($1 * interval '1 day') AND password_expires_at > now()", [warningThresholdDays]);
     const trackingResult = await db.query("SELECT pet.user_id, pet.password_expires_at, pet.email_sent_at FROM password_expiry_email_tracking pet JOIN users u ON u.id = pet.user_id WHERE u.password_expires_at IS NOT NULL AND u.password_expires_at <= now() + ($1 * interval '1 day') AND u.password_expires_at > now()", [warningThresholdDays]);
     const warnedWithin24Hours = new Set();
@@ -339,6 +367,7 @@ const sendPasswordExpiryWarnings = async () => {
     }
 
     const pendingWarnings = result.rows.filter((row) => !warnedWithin24Hours.has(row.id));
+    logger.log("debug", "Password expiry warnings queued", { pendingCount: pendingWarnings.length }, utilities.getCallerInfo());
 
     for (const row of pendingWarnings) {
         const trackResult = await db.query("INSERT INTO password_expiry_email_tracking (user_id, password_expires_at) VALUES ($1, $2) ON CONFLICT (user_id, password_expires_at, email_sent_date) DO NOTHING RETURNING id", [row.id, row.password_expires_at]);
@@ -351,9 +380,11 @@ const sendPasswordExpiryWarnings = async () => {
         let emailResult = await sendEmail(row.email, emailSubject, emailBody);
         logger.log("info", `Sent password expiration warning email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "sendPasswordExpiryWarnings" }, utilities.getCallerInfo(), row.id);
     }
+    logger.log("debug", "Password expiry warnings complete", { processedCount: pendingWarnings.length }, utilities.getCallerInfo());
 };
 
 const suspendUsersWithExpiredPasswords = async () => {
+    logger.log("debug", "Suspending users with expired passwords", {}, utilities.getCallerInfo());
     const result = await db.query("UPDATE users SET status = 'suspended', suspension_start_at = now(), suspension_end_at = NULL, updated_at = now() WHERE password_expires_at <= now() AND status != 'suspended' RETURNING id, email, first_name, last_name");
     for (const row of result.rows) {
         const emailSubject = "Account Suspended Due to Expired Password";
@@ -365,6 +396,7 @@ const suspendUsersWithExpiredPasswords = async () => {
         logger.log("info", `Sent account suspension email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo(), row.id);
     }
     logger.log("info", "Suspended users with expired passwords: " + result.rowCount, { function: "suspendUsersWithExpiredPasswords" }, utilities.getCallerInfo());
+    logger.log("debug", "Expired password suspension complete", { suspendedCount: result.rowCount }, utilities.getCallerInfo());
 };
 
 const deleteUserById = async (userId) => {
@@ -374,8 +406,10 @@ const deleteUserById = async (userId) => {
 
 const setUserPassword = async (userId, password, temp = false) => {
     if (!checkPasswordComplexity(password)) {
+        logger.log("warn", "Password complexity check failed for setUserPassword", { userId, temp }, utilities.getCallerInfo(), userId);
         throw new Error("Password does not meet complexity requirements");
     }
+    logger.log("info", "Setting user password", { userId, temp }, utilities.getCallerInfo(), userId);
     return db.transaction(async (client) => {
         const result = await client.query("SELECT crypt($1, gen_salt('bf')) AS password_hash", [password]);
         const passwordHash = result.rows[0].password_hash;
@@ -386,8 +420,10 @@ const setUserPassword = async (userId, password, temp = false) => {
 };
 
 const getUserByUsername = async (username) => {
+    logger.log("debug", "Fetching user by username", { username }, utilities.getCallerInfo());
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE username = $1", [username]);
     if (userResult.rowCount === 0) {
+        logger.log("warn", "User not found by username", { username }, utilities.getCallerInfo());
         return null;
     }
     return userResult.rows[0];

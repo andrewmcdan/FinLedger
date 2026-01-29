@@ -9,18 +9,22 @@ const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html", "/ap
 const authMiddleware = async (req, res, next) => {
     // If req is for a public route, skip authentication
     if (non_auth_paths_begin.some((publicPath) => req.path.startsWith(publicPath)) || non_auth_paths_full.includes(req.path)) {
+        log("trace", "Skipping auth for public route", { path: req.path }, utilities.getCallerInfo());
         return next();
     }
     const authHeader = req.get("authorization");
     if (!authHeader) {
+        log("warn", "Missing Authorization header", { path: req.path }, utilities.getCallerInfo());
         return res.status(401).json({ error: "Missing Authorization header" });
     }
     const [scheme, token] = authHeader.split(" ");
     if (scheme !== "Bearer" || !token) {
+        log("warn", "Invalid Authorization header", { path: req.path }, utilities.getCallerInfo());
         return res.status(401).json({ error: "Invalid Authorization header" });
     }
     const userId = req.get("X-User-Id");
     if (!userId) {
+        log("warn", "Missing X-User-Id header", { path: req.path }, utilities.getCallerInfo());
         return res.status(401).json({ error: "Missing X-User-Id header" });
     }
     req.user = { token: token, id: userId };
@@ -30,6 +34,7 @@ const authMiddleware = async (req, res, next) => {
             log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: userId }, utilities.getCallerInfo(), req.user.id);
             return res.status(401).json({ error: "NOT_LOGGED_IN" });
         }
+        log("warn", "Invalid or expired token", { user_id: userId, path: req.path }, utilities.getCallerInfo(), req.user.id);
         return res.status(401).json({ error: "Invalid or expired token" });
     }
     const tempPasswordResult = await db.query("SELECT temp_password FROM users WHERE id = $1", [userId]);
@@ -44,6 +49,7 @@ const authMiddleware = async (req, res, next) => {
             "/api/users/security-questions-list",
         ]);
         if (!tempAllowedPaths.has(req.path)) {
+            log("warn", "Blocked request due to temporary password requirement", { user_id: userId, path: req.path }, utilities.getCallerInfo(), req.user.id);
             return res.status(403).json({ error: "TEMP_PASSWORD_CHANGE_REQUIRED" });
         }
     }

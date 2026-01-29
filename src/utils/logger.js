@@ -19,20 +19,26 @@ const levels = { trace: 0, debug: 1, info: 2, warn: 3, error: 4, fatal: 5 };
  * @param {*} context Additional context or metadata for the log
  * @param {*} source Source information. Use getCallerInfo() from utilities.js to get this.
  * @param {*} user_id ID of the user associated with the log event. Optional.
+ * @param {Object} options Optional logging options.
+ * @param {boolean} options.skipConsole Skip logging to console when true.
+ * @param {boolean} options.skipFile Skip logging to file when true.
+ * @param {boolean} options.skipDb Skip logging to database when true.
  */
-const log = async (level, message, context = null, source = "", user_id = null) => {
+const log = async (level, message, context = null, source = "", user_id = null, options = {}) => {
     const timestamp = new Date().toISOString();
     const levelValue = levels[level] !== undefined ? levels[level] : levels.info;
+    const { skipConsole = false, skipFile = false, skipDb = false } = options || {};
+    const sourceLabel = source && source.file ? `${source.file}:${source.line}:${source.column}` : "";
 
     // Log to console
-    if (LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL] && source != "") {
-        console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context===null ? "" : context, `${source.file}:${source.line}:${source.column}`);
-    } else if (LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL]) {
+    if (!skipConsole && LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL] && sourceLabel) {
+        console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context===null ? "" : context, sourceLabel);
+    } else if (!skipConsole && LOG_TO_CONSOLE && levelValue >= levels[CONSOLE_LOG_LEVEL]) {
         console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context===null ? "" : context);
     }
 
     // Log to database
-    if (LOG_TO_DB && levelValue >= levels[DB_LOG_LEVEL]) {
+    if (!skipDb && LOG_TO_DB && levelValue >= levels[DB_LOG_LEVEL]) {
         try {
             const queryString = `
                 INSERT INTO app_logs (level, message, context, source${user_id ? ", user_id" : ""})
@@ -50,9 +56,9 @@ const log = async (level, message, context = null, source = "", user_id = null) 
     }
 
     // Log to file
-    if (LOG_TO_FILE && levelValue >= levels[LOG_TO_FILE_LEVEL]) {
+    if (!skipFile && LOG_TO_FILE && levelValue >= levels[LOG_TO_FILE_LEVEL]) {
         const fs = require("fs");
-        const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message} ${JSON.stringify(context)} ${source.file}:${source.line}:${source.column}\n`;
+        const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message} ${JSON.stringify(context)} ${sourceLabel}\n`;
         // If file doesn't exist, create it
         if (!fs.existsSync(LOG_FILE_PATH)) {
             fs.writeFileSync(LOG_FILE_PATH, "");
