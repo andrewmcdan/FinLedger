@@ -93,15 +93,24 @@
                 <article class="card">
                     <h2>Account Deactivation</h2>
                     <p class="meta">Deactivate accounts that are no longer in use to prevent further transactions.</p>
-                    <% if (accounts.filter(function(account) { return account.status === 'inactive'; }).length == 0) { %>
-                    <p>No inactive accounts found.</p>
+                    <% const inactiveAccounts = accounts.filter(function(account) { return account.status === 'inactive'; }); %>
+                    <% if (inactiveAccounts.length == 0) { %>
+                    <p class="meta">No inactive accounts found.</p>
                     <% } else { %>
-                    <article class="data-row">
-                        <h3>Inactive Accounts</h3>
-                        <% accounts.filter(function(account) { return account.status === 'inactive'; }).forEach(function(account) { %>
-                        <p class="value"><span><%= account.account_name %> (ID: <%= account.id %>)</span></p>
-                        <% }); %>
+                    <p class="meta">Click to reactivate</p>
+                    <% inactiveAccounts.forEach(function(account) { %>
+                    <article class="data-row" data-inactive_account_id-<%= account.id %>>
+                        <p class="value">
+                            <span class="span-label">
+                                <span><%= account.account_name %></span>
+                                <span class="meta"> (Account #: <%= account.account_number %>, ID: <%= account.id %>)</span>
+                            </span>
+                            <span class="span-actions">
+                                <button class="button-small" data-account-action="reactivate" data-account-id="<%= account.id %>">Reactivate</button>
+                            </span>
+                        </p>
                     </article>
+                    <% }); %>
                     <% } %>
                 </article>
                 <article class="card">

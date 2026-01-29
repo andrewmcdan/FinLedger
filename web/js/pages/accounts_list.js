@@ -17,23 +17,11 @@ const errorFormatter = (error) => {
     return errors.length > 0 ? errors[errors.length - 1] : "An unknown error occurred.";
 };
 
-function fetchWithAuth(url, options = {}) {
-    const authToken = localStorage.getItem("auth_token") || "";
-    const userId = localStorage.getItem("user_id") || "";
-    const mergedHeaders = {
-        Authorization: `Bearer ${authToken}`,
-        "X-User-Id": `${userId}`,
-        ...(options.headers || {}),
-    };
-
-    return fetch(url, {
-        ...options,
-        credentials: options.credentials || "include",
-        headers: mergedHeaders,
-    });
-}
-
 export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay }) {
+    const authHelpers = await loadFetchWithAuth();
+    const { fetchWithAuth } = authHelpers;
+    const domHelpers = await loadDomHelpers();
+    const { createCell, createInput, createSelect, createTextarea } = domHelpers;
     const add_account_button = document.getElementById("add_account_button");
     const account_modal = document.getElementById("account_modal");
     const close_account_modal_button = document.getElementById("close_account_modal");
@@ -254,16 +242,6 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             .map((option) => ({ value: String(option.value), label: option.textContent || "" }));
     };
 
-    const buildOptionsHTML = (options, selectedValue) => {
-        const selected = String(selectedValue ?? "");
-        return options
-            .map((option) => {
-                const value = String(option.value);
-                const isSelected = value === selected ? "selected" : "";
-                return `<option value="${value}" ${isSelected}>${option.label}</option>`;
-            })
-            .join("");
-    };
 
     const formatLongTextCell = (cell) => {
         if (!cell || !cell.hasAttribute("data-long-text")) {
@@ -334,23 +312,21 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                         }
                     })();
                     const displayValue = formatDisplayValue(account, column);
+                    const inputAttr = `data-input-${column}-${account.id}`;
                     if (column === "user_id") {
                         const options = ownerOptions.length ? ownerOptions : [{ value: rawValue, label: displayValue || "Unassigned" }];
-                        cell.innerHTML = `<select data-input-${column}-${account.id}>
-                            ${buildOptionsHTML(options, rawValue)}
-                        </select>`;
+                        const select = createSelect(options, rawValue, inputAttr);
+                        cell.replaceChildren(select);
                     } else if (column === "normal_side") {
-                        cell.innerHTML = `<select data-input-${column}-${account.id}>
-                            ${buildOptionsHTML(accountTypeOptions, rawValue)}
-                        </select>`;
+                        const select = createSelect(accountTypeOptions, rawValue, inputAttr);
+                        cell.replaceChildren(select);
                     } else if (column === "account_category_id") {
                         const categoryOptions = categories.map((category) => ({
                             value: String(category.id),
                             label: category.name,
                         }));
-                        cell.innerHTML = `<select data-input-${column}-${account.id}>
-                            ${buildOptionsHTML(categoryOptions, rawValue)}
-                        </select>`;
+                        const select = createSelect(categoryOptions, rawValue, inputAttr);
+                        cell.replaceChildren(select);
                     } else if (column === "account_subcategory_id") {
                         const categoryId = account.account_category_id ?? "";
                         const filtered = categoryId ? subcategories.filter((subcategory) => String(subcategory.account_category_id) === String(categoryId)) : subcategories;
@@ -358,21 +334,23 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                             value: String(subcategory.id),
                             label: subcategory.name,
                         }));
-                        cell.innerHTML = `<select data-input-${column}-${account.id}>
-                            ${buildOptionsHTML(subcategoryOptions, rawValue)}
-                        </select>`;
+                        const select = createSelect(subcategoryOptions, rawValue, inputAttr);
+                        cell.replaceChildren(select);
                     } else if (column === "statement_type") {
-                        cell.innerHTML = `<select data-input-${column}-${account.id}>
-                            ${buildOptionsHTML(statementTypeOptions, rawValue)}
-                        </select>`;
+                        const select = createSelect(statementTypeOptions, rawValue, inputAttr);
+                        cell.replaceChildren(select);
                     } else if (column === "account_number") {
-                        cell.innerHTML = `<input type="number" step="1" value="${rawValue}" data-input-${column}-${account.id} />`;
+                        const input = createInput("number", rawValue, inputAttr);
+                        input.step = "1";
+                        cell.replaceChildren(input);
                     } else if (column === "account_description" || column === "comment") {
-                        cell.innerHTML = `<textarea rows="2" data-input-${column}-${account.id}>${rawValue}</textarea>`;
+                        const textarea = createTextarea(rawValue, inputAttr, 2);
+                        cell.replaceChildren(textarea);
                     } else {
-                        cell.innerHTML = `<input type="text" value="${rawValue}" data-input-${column}-${account.id} />`;
+                        const input = createInput("text", rawValue, inputAttr);
+                        cell.replaceChildren(input);
                     }
-                    const inputEl = document.querySelector(`[data-input-${column}-${account.id}]`);
+                    const inputEl = cell.querySelector(`[data-input-${column}-${account.id}]`);
                     if (!inputEl) {
                         return;
                     }
@@ -543,7 +521,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             }
             const accounts = await response.json();
             const tbody = document.querySelector("#accounts_table tbody");
-            tbody.innerHTML = "";
+            tbody.replaceChildren();
             for (const account of accounts) {
                 const accountOwner = userNameById.get(String(account.user_id)) || "";
                 const normalSide = account.normal_side ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1) : "";
@@ -551,27 +529,31 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 const subcategoryName = subcategoryNameById.get(String(account.account_subcategory_id)) || "";
                 const statementType = statementTypeLabels[account.statement_type] || account.statement_type || "";
                 const tr = document.createElement("tr");
-                const status = account.status.charAt(0).toUpperCase() + account.status.slice(1);
-                tr.innerHTML = `
-                    <td data-account_name-${account.id}>${account.account_name ?? ""}</td>
-                    <td data-account_number-${account.id}>${account.account_number ?? ""}</td>
-                    <td data-user_id-${account.id}>${accountOwner}</td>
-                    <td>${status ?? ""}</td>
-                    <td data-normal_side-${account.id}>${normalSide}</td>
-                    <td data-is-currency>${account.balance ?? ""}</td>
-                    <td data-account_description-${account.id} data-long-text>${account.account_description ?? ""}</td>
-                    <td data-account_category_id-${account.id}>${categoryName}</td>
-                    <td data-account_subcategory_id-${account.id}>${subcategoryName}</td>
-                    <td data-statement_type-${account.id}>${statementType}</td>
-                    <td data-comment-${account.id} data-long-text>${account.comment ?? ""}</td>
-                    <td data-is-currency>${account.initial_balance ?? ""}</td>
-                    <td>${account.account_order ?? ""}</td>
-                    <td data-is-currency>${account.total_debits ?? ""}</td>
-                    <td data-is-currency>${account.total_credits ?? ""}</td>
-                    <td>
-                        <button type="button" class="button-small account-button" data-account-id="${account.id}" data-audit-account-button>Audit</button>
-                    </td>
-                `;
+                const status = account.status ? `${account.status.charAt(0).toUpperCase()}${account.status.slice(1)}` : "";
+                tr.appendChild(createCell({ text: account.account_name ?? "", dataAttr: `data-account_name-${account.id}` }));
+                tr.appendChild(createCell({ text: account.account_number ?? "", dataAttr: `data-account_number-${account.id}` }));
+                tr.appendChild(createCell({ text: accountOwner, dataAttr: `data-user_id-${account.id}` }));
+                tr.appendChild(createCell({ text: status }));
+                tr.appendChild(createCell({ text: normalSide, dataAttr: `data-normal_side-${account.id}` }));
+                tr.appendChild(createCell({ text: account.balance ?? "", isCurrency: true }));
+                tr.appendChild(createCell({ text: account.account_description ?? "", dataAttr: `data-account_description-${account.id}`, isLongText: true }));
+                tr.appendChild(createCell({ text: categoryName, dataAttr: `data-account_category_id-${account.id}` }));
+                tr.appendChild(createCell({ text: subcategoryName, dataAttr: `data-account_subcategory_id-${account.id}` }));
+                tr.appendChild(createCell({ text: statementType, dataAttr: `data-statement_type-${account.id}` }));
+                tr.appendChild(createCell({ text: account.comment ?? "", dataAttr: `data-comment-${account.id}`, isLongText: true }));
+                tr.appendChild(createCell({ text: account.initial_balance ?? "", isCurrency: true }));
+                tr.appendChild(createCell({ text: account.account_order ?? "" }));
+                tr.appendChild(createCell({ text: account.total_debits ?? "", isCurrency: true }));
+                tr.appendChild(createCell({ text: account.total_credits ?? "", isCurrency: true }));
+                const actionCell = document.createElement("td");
+                const auditButton = document.createElement("button");
+                auditButton.type = "button";
+                auditButton.className = "button-small account-button";
+                auditButton.setAttribute("data-account-id", account.id);
+                auditButton.setAttribute("data-audit-account-button", "");
+                auditButton.textContent = "Audit";
+                actionCell.appendChild(auditButton);
+                tr.appendChild(actionCell);
                 tbody.appendChild(tr);
             }
             currentPageEl.textContent = page;
@@ -613,7 +595,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         if (!accountSubcategorySelect) {
             return;
         }
-        accountSubcategorySelect.innerHTML = "";
+        accountSubcategorySelect.replaceChildren();
         if (!categoryId) {
             return;
         }
@@ -657,7 +639,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         if (!categorySelect) {
             return;
         }
-        categorySelect.innerHTML = "";
+        categorySelect.replaceChildren();
         const placeholder = document.createElement("option");
         placeholder.value = "";
         placeholder.textContent = "Select a category";
@@ -818,7 +800,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         if (!deleteCategorySelect) {
             return;
         }
-        deleteCategorySelect.innerHTML = "";
+        deleteCategorySelect.replaceChildren();
         const placeholder = document.createElement("option");
         placeholder.value = "";
         placeholder.textContent = "Select a category or subcategory";
@@ -964,6 +946,47 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             }
         });
     }
+
+    const reactivateButtons = document.querySelectorAll('[data-account-action="reactivate"]');
+    if (reactivateButtons.length) {
+        reactivateButtons.forEach((button) => {
+            button.addEventListener("click", async () => {
+                const accountId = button.dataset.accountId;
+                if (!accountId) {
+                    return;
+                }
+                const confirmReactivate = confirm("Are you sure you want to reactivate this account?");
+                if (!confirmReactivate) {
+                    return;
+                }
+                showLoadingOverlay();
+                try {
+                    const response = await fetchWithAuth("/api/accounts/set-account-status", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            account_id: accountId,
+                            is_active: true,
+                        }),
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || "Failed to reactivate account");
+                    }
+                    const row = document.querySelector(`[data-inactive_account_id-${accountId}]`);
+                    if (row) {
+                        row.remove();
+                    }
+                } catch (error) {
+                    alert("Error reactivating account: " + errorFormatter(error.message));
+                } finally {
+                    hideLoadingOverlay();
+                }
+            });
+        });
+    }
 }
 
 async function loadNumericHelpers() {
@@ -972,4 +995,18 @@ async function loadNumericHelpers() {
     const formatNumberAsCurrency = module.formatNumberAsCurrency;
     const formatNumberWithCommas = module.formatNumberWithCommas;
     return { formatNumberAsCurrency, formatNumberWithCommas };
+}
+
+async function loadDomHelpers() {
+    const moduleUrl = new URL("/js/utils/dom_helpers.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    const { createCell, createInput, createSelect, createTextarea } = module;
+    return { createCell, createInput, createSelect, createTextarea };
+}
+
+async function loadFetchWithAuth() {
+    const moduleUrl = new URL("/js/utils/fetch_with_auth.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    const { fetchWithAuth } = module;
+    return { fetchWithAuth };
 }
