@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_by INTEGER REFERENCES users(id),
     approved_at TIMESTAMP,
-    posted_at TIMESTAMP,
+    posted_at TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_journal_entries_entry_date

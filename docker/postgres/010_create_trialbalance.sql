@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS trial_balance_runs (
     run_type TEXT NOT NULL CHECK (run_type IN ('unadjusted', 'adjusted')),
     as_of_date TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by INTEGER NOT NULL REFERENCES users(id)
+    created_by INTEGER NOT NULL REFERENCES users(id),
     total_debits NUMERIC(18, 2) NOT NULL,
     total_credits NUMERIC(18, 2) NOT NULL
 );
