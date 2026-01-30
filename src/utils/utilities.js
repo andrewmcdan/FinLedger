@@ -24,7 +24,7 @@ function sanitizeInput(input) {
     if (typeof input !== "string") {
         return input;
     }
-    return input.replace(/[<>&"'`]/g, (char) => {
+    let sanitized1 = input.replace(/[<>&"'`]/g, (char) => {
         switch (char) {
             case "<":
                 return "&lt;";
@@ -42,6 +42,9 @@ function sanitizeInput(input) {
                 return char;
         }
     });
+    let sanitized2 = sanitized1.replace(/'/g, "''");
+    let sanitized3 = sanitized2.replace(/[$.]/g, "");
+    return sanitized3;
 }
 
 function generateRandomToken(length = 32) {
