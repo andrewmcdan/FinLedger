@@ -40,17 +40,29 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
         });
     }
 
-    // get list of users
-    const usersDataEl = document.getElementById("users-data");
     let usersData = [];
-    let currentUserId = null;
-    try {
-        let parsed = usersDataEl ? JSON.parse(usersDataEl.textContent) : [];
-        usersData = parsed.users || [];
-        currentUserId = parsed.currentUserId || null;
-    } catch (error) {
-        usersData = [];
-        console.error("Failed to parse users data", error);
+    const currentUserId = Number(localStorage.getItem("user_id")) || null;
+    const shouldLoadUsers = Boolean(document.querySelector("[data-users-list]"));
+    if (shouldLoadUsers) {
+        showLoadingOverlay();
+        try {
+            const response = await fetchWithAuth("/api/users/list-users", {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to fetch users");
+            }
+            usersData = Array.isArray(data.users) ? data.users : [];
+        } catch (error) {
+            alert("Error loading users: " + error.message);
+            usersData = [];
+        } finally {
+            hideLoadingOverlay();
+        }
     }
     const actionButtons = document.querySelectorAll("[data-user-action]");
     if (actionButtons.length) {
