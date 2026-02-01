@@ -571,7 +571,8 @@ textarea {
     padding-top: 1.5rem;
 }
 
-[data-accounts-page-btn] {
+[data-accounts-page-btn],
+[data-users-page-btn] {
     cursor: pointer;
     user-select: none;
     padding: 0.2rem 0.5rem;
