@@ -27,6 +27,8 @@ export default function initLogout() {
                     localStorage.removeItem("must_change_password");
                     // Redirect to the login page
                     window.location.href = "/#/login";
+                    // reload the page to clear any cached data
+                    window.location.reload();
                 }
             })
             .catch((error) => {
