@@ -13,7 +13,13 @@ router.get("/account_count", async (req, res) => {
     }
     try {
         log("debug", "Account count requested", { userId }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.getAccountCounts(req.user.id, req.user.token);
+        const { filterField, filterValue, filterMin, filterMax } = req.query;
+        const result = await accountsController.getAccountCounts(req.user.id, req.user.token, {
+            filterField,
+            filterValue,
+            filterMin,
+            filterMax,
+        });
         log("debug", "Account count retrieved", { userId, total: result?.total_accounts }, utilities.getCallerInfo(), userId);
         res.json(result);
     } catch (error) {
@@ -29,8 +35,16 @@ router.get("/list/:offset/:limit", async (req, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
     try {
-        log("debug", "Account list requested", { userId, offset: req.params.offset, limit: req.params.limit }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.listAccounts(req.user.id, req.user.token, Number(req.params.offset), Number(req.params.limit));
+        log("debug", "Account list requested", { userId, offset: req.params.offset, limit: req.params.limit, query: req.query }, utilities.getCallerInfo(), userId);
+        const { filterField, filterValue, filterMin, filterMax, sortField, sortDirection } = req.query;
+        const result = await accountsController.listAccounts(req.user.id, req.user.token, Number(req.params.offset), Number(req.params.limit), {
+            filterField,
+            filterValue,
+            filterMin,
+            filterMax,
+            sortField,
+            sortDirection,
+        });
         log("debug", "Account list retrieved", { userId, count: result.rowCount }, utilities.getCallerInfo(), userId);
         res.json(result.rows);
     } catch (error) {

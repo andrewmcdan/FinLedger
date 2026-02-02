@@ -13,6 +13,121 @@ function isNumericId(value) {
     return false;
 }
 
+const statementTypeMap = {
+    "Income Statement": "IS",
+    "Balance Sheet": "BS",
+    "Retained Earnings Statement": "RE",
+    IS: "IS",
+    BS: "BS",
+    RE: "RE",
+};
+
+const normalizeStatementTypeFilter = (rawValue) => {
+    const trimmed = String(rawValue ?? "").trim();
+    if (!trimmed) {
+        return "";
+    }
+    const upper = trimmed.toUpperCase();
+    return statementTypeMap[trimmed] || statementTypeMap[upper] || trimmed;
+};
+
+const normalizeStatusFilter = (rawValue) => {
+    const normalized = String(rawValue ?? "").trim().toLowerCase();
+    if (!normalized) {
+        return "";
+    }
+    return ["active", "inactive"].includes(normalized) ? normalized : "";
+};
+
+const normalizeNormalSideFilter = (rawValue) => {
+    const normalized = String(rawValue ?? "").trim().toLowerCase();
+    if (!normalized) {
+        return "";
+    }
+    return ["debit", "credit"].includes(normalized) ? normalized : "";
+};
+
+const FILTER_FIELD_MAP = {
+    account_name: { column: "accounts.account_name", type: "contains" },
+    user_id: { column: "accounts.user_id", type: "equals" },
+    status: { column: "accounts.status", type: "equals", normalize: normalizeStatusFilter },
+    account_type: { column: "accounts.normal_side", type: "equals", normalize: normalizeNormalSideFilter },
+    account_category_id: { column: "accounts.account_category_id", type: "equals" },
+    account_subcategory_id: { column: "accounts.account_subcategory_id", type: "equals" },
+    statement_type: { column: "accounts.statement_type", type: "equals", normalize: normalizeStatementTypeFilter },
+    balance: { column: "accounts.balance", type: "range" },
+    account_description: { column: "accounts.account_description", type: "contains" },
+    comment: { column: "accounts.comment", type: "contains" },
+};
+
+const SORT_FIELD_MAP = {
+    account_name: { column: "accounts.account_name" },
+    user_id: { column: "COALESCE(users.username, '')", requiresUserJoin: true },
+    status: { column: "accounts.status" },
+    account_type: { column: "accounts.normal_side" },
+    account_category_id: { column: "accounts.account_category_id" },
+    account_subcategory_id: { column: "accounts.account_subcategory_id" },
+    statement_type: { column: "accounts.statement_type" },
+    balance: { column: "accounts.balance" },
+};
+
+const normalizeQueryValue = (value) => (Array.isArray(value) ? value[0] : value);
+
+const buildAccountFilterClauses = ({ filterField, filterValue, filterMin, filterMax }, params) => {
+    const clauses = [];
+    const normalizedField = normalizeQueryValue(filterField);
+    const config = FILTER_FIELD_MAP[normalizedField];
+    if (!config) {
+        return clauses;
+    }
+    if (config.type === "contains") {
+        const value = String(normalizeQueryValue(filterValue) ?? "").trim();
+        if (!value) {
+            return clauses;
+        }
+        params.push(`%${value}%`);
+        clauses.push(`${config.column} ILIKE $${params.length}`);
+        return clauses;
+    }
+    if (config.type === "equals") {
+        const rawValue = normalizeQueryValue(filterValue);
+        const normalized = config.normalize ? config.normalize(rawValue) : String(rawValue ?? "").trim();
+        if (!normalized) {
+            return clauses;
+        }
+        params.push(normalized);
+        clauses.push(`${config.column} = $${params.length}`);
+        return clauses;
+    }
+    if (config.type === "range") {
+        const minValue = Number.parseFloat(normalizeQueryValue(filterMin));
+        const maxValue = Number.parseFloat(normalizeQueryValue(filterMax));
+        if (Number.isFinite(minValue)) {
+            params.push(minValue);
+            clauses.push(`${config.column} >= $${params.length}`);
+        }
+        if (Number.isFinite(maxValue)) {
+            params.push(maxValue);
+            clauses.push(`${config.column} <= $${params.length}`);
+        }
+    }
+    return clauses;
+};
+
+const resolveAccountSort = (sortField, sortDirection) => {
+    const normalizedField = normalizeQueryValue(sortField);
+    const normalizedDirection = normalizeQueryValue(sortDirection);
+    const config = SORT_FIELD_MAP[normalizedField];
+    if (!config) {
+        return { orderBy: "accounts.account_number ASC", requiresUserJoin: false };
+    }
+    const direction = String(normalizedDirection ?? "").toLowerCase() === "desc" ? "DESC" : "ASC";
+    return {
+        orderBy: `${config.column} ${direction}, accounts.account_number ASC`,
+        requiresUserJoin: Boolean(config.requiresUserJoin),
+    };
+};
+
 async function resolveCategory(client, accountCategory) {
     log("debug", "Resolving account category", { accountCategory }, getCallerInfo());
     const isId = isNumericId(accountCategory);
@@ -48,19 +163,37 @@ async function resolveSubcategory(client, accountSubcategory, categoryId) {
     return subcategory;
 }
 
-async function listAccounts(userId, token, offset = 0, limit = 25) {
-    log("debug", "Listing accounts", { userId, offset, limit }, getCallerInfo(), userId);
+async function listAccounts(userId, token, offset = 0, limit = 25, options = {}) {
+    log("debug", "Listing accounts", { userId, offset, limit, options }, getCallerInfo(), userId);
     sanitizeInput(offset);
     sanitizeInput(limit);
-    let query = "SELECT * FROM accounts";
     const params = [];
+    const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
     if (!isAdminUser && !isManagerUser) {
-        query += " WHERE user_id = $1";
         params.push(userId);
+        whereClauses.push(`accounts.user_id = $${params.length}`);
     }
-    query += " ORDER BY account_number ASC LIMIT $"+(params.length+1)+" OFFSET $"+(params.length+2);
+    const filterClauses = buildAccountFilterClauses(
+        {
+            filterField: options?.filterField,
+            filterValue: options?.filterValue,
+            filterMin: options?.filterMin,
+            filterMax: options?.filterMax,
+        },
+        params,
+    );
+    whereClauses.push(...filterClauses);
+    const sortConfig = resolveAccountSort(options?.sortField, options?.sortDirection);
+    let query = "SELECT accounts.* FROM accounts";
+    if (sortConfig.requiresUserJoin) {
+        query += " LEFT JOIN users ON users.id = accounts.user_id";
+    }
+    if (whereClauses.length > 0) {
+        query += ` WHERE ${whereClauses.join(" AND ")}`;
+    }
+    query += ` ORDER BY ${sortConfig.orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit);
     params.push(offset);
     const result = await db.query(query, params);
@@ -68,17 +201,31 @@ async function listAccounts(userId, token, offset = 0, limit = 25) {
     return result;
 }
 
-async function getAccountCounts(userId, token) {
-    log("debug", "Fetching account counts", { userId }, getCallerInfo(), userId);
+async function getAccountCounts(userId, token, options = {}) {
+    log("debug", "Fetching account counts", { userId, options }, getCallerInfo(), userId);
     sanitizeInput(userId);
     sanitizeInput(token);
-    let query = "SELECT COUNT(*) AS total_accounts FROM accounts";
     const params = [];
+    const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
     if (!isAdminUser && !isManagerUser) {
-        query += " WHERE user_id = $1";
         params.push(userId);
+        whereClauses.push(`accounts.user_id = $${params.length}`);
+    }
+    const filterClauses = buildAccountFilterClauses(
+        {
+            filterField: options?.filterField,
+            filterValue: options?.filterValue,
+            filterMin: options?.filterMin,
+            filterMax: options?.filterMax,
+        },
+        params,
+    );
+    whereClauses.push(...filterClauses);
+    let query = "SELECT COUNT(*) AS total_accounts FROM accounts";
+    if (whereClauses.length > 0) {
+        query += ` WHERE ${whereClauses.join(" AND ")}`;
     }
     const result = await db.query(query, params);
     log("debug", "Account counts fetched", { userId, total: result.rows[0]?.total_accounts, scoped: !(isAdminUser || isManagerUser) }, getCallerInfo(), userId);

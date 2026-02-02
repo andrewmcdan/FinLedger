@@ -483,83 +483,194 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     let currentPage = 1;
     let accountCount = 0;
     let accountsPerPage = accountsPerPageSelect ? parseInt(accountsPerPageSelect.value, 10) : 10;
-
-    try {
-        const response = await fetchWithAuth("/api/accounts/account_count");
-        if (response.ok) {
-            const data = await response.json();
-            accountCount = parseInt(data.total_accounts, 10) || 0;
+    const updateTotalPages = () => {
+        if (!totalPagesEl) {
+            return;
         }
-    } catch (error) {
-        alert("Error fetching account counts: " + error.message);
-    }
-
-    if (totalPagesEl) {
         const totalPages = Math.ceil(accountCount / accountsPerPage);
         totalPagesEl.textContent = totalPages;
-    }
+    };
 
     if (accountsPerPageSelect) {
         accountsPerPageSelect.addEventListener("change", () => {
             accountsPerPage = parseInt(accountsPerPageSelect.value, 10);
             currentPage = 1;
             loadAccountsPage(currentPage);
-            if (totalPagesEl) {
-                const totalPages = Math.ceil(accountCount / accountsPerPage);
-                totalPagesEl.textContent = totalPages;
-            }
+            updateTotalPages();
         });
     }
+
+    const accountsTableBody = document.querySelector("#accounts_table tbody");
+    let activeFilter = null;
+    let activeSort = null;
+    const filterMinInputId = "account_list_filter_min";
+    const filterMaxInputId = "account_list_filter_max";
+    const filterFieldConfig = {
+        account_name: {
+            label: "Account Name",
+            inputType: "text",
+        },
+        user_id: {
+            label: "Account Owner",
+            inputType: "select",
+            options: () => getOwnerOptions(),
+        },
+        status: {
+            label: "Status",
+            inputType: "select",
+            options: () => [
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+            ],
+        },
+        account_type: {
+            label: "Account Type",
+            inputType: "select",
+            options: () => accountTypeOptions,
+        },
+        account_category_id: {
+            label: "Category",
+            inputType: "select",
+            options: () =>
+                categories.map((category) => ({
+                    value: String(category.id),
+                    label: category.name,
+                })),
+        },
+        account_subcategory_id: {
+            label: "Subcategory",
+            inputType: "select",
+            options: () =>
+                subcategories.map((subcategory) => ({
+                    value: String(subcategory.id),
+                    label: `${categoryNameById.get(String(subcategory.account_category_id)) || "Unknown"} - ${subcategory.name}`,
+                })),
+        },
+        statement_type: {
+            label: "Statement Type",
+            inputType: "select",
+            options: () => statementTypeOptions,
+        },
+        balance: {
+            label: "Current Balance",
+            inputType: "range",
+        },
+        account_description: {
+            label: "Description",
+            inputType: "text",
+        },
+        comment: {
+            label: "Comments",
+            inputType: "text",
+        },
+    };
+    const getFilterConfig = (field, fallbackLabel) => {
+        const config = filterFieldConfig[field];
+        if (config) {
+            return config;
+        }
+        return {
+            label: fallbackLabel || field,
+            inputType: "text",
+        };
+    };
+    const buildAccountsQueryParams = () => {
+        const params = new URLSearchParams();
+        if (activeFilter && activeFilter.field) {
+            params.set("filterField", activeFilter.field);
+            if (activeFilter.field === "balance") {
+                const minValue = String(activeFilter.min ?? "").trim();
+                const maxValue = String(activeFilter.max ?? "").trim();
+                if (minValue !== "") {
+                    params.set("filterMin", minValue);
+                }
+                if (maxValue !== "") {
+                    params.set("filterMax", maxValue);
+                }
+            } else {
+                const value = activeFilter.value;
+                if (value !== undefined && value !== null && String(value).trim() !== "") {
+                    params.set("filterValue", value);
+                }
+            }
+        }
+        if (activeSort && activeSort.field && activeSort.direction) {
+            params.set("sortField", activeSort.field);
+            params.set("sortDirection", activeSort.direction);
+        }
+        const queryString = params.toString();
+        return queryString ? `?${queryString}` : "";
+    };
+    const fetchAccountCount = async () => {
+        try {
+            const response = await fetchWithAuth(`/api/accounts/account_count${buildAccountsQueryParams()}`);
+            if (response.ok) {
+                const data = await response.json();
+                accountCount = parseInt(data.total_accounts, 10) || 0;
+            }
+        } catch (error) {
+            alert("Error fetching account counts: " + error.message);
+        } finally {
+            updateTotalPages();
+        }
+    };
+    const renderAccounts = async (accounts) => {
+        if (!accountsTableBody) {
+            return;
+        }
+        accountsTableBody.replaceChildren();
+        for (const account of accounts) {
+            const accountOwner = userNameById.get(String(account.user_id)) || "";
+            const normalSide = account.normal_side ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1) : "";
+            const categoryName = categoryNameById.get(String(account.account_category_id)) || "";
+            const subcategoryName = subcategoryNameById.get(String(account.account_subcategory_id)) || "";
+            const statementType = statementTypeLabels[account.statement_type] || account.statement_type || "";
+            const tr = document.createElement("tr");
+            const status = account.status ? `${account.status.charAt(0).toUpperCase()}${account.status.slice(1)}` : "";
+            tr.appendChild(createCell({ text: account.account_name ?? "", dataAttr: `data-account_name-${account.id}` }));
+            tr.appendChild(createCell({ text: account.account_number ?? "", dataAttr: `data-account_number-${account.id}` }));
+            tr.appendChild(createCell({ text: accountOwner, dataAttr: `data-user_id-${account.id}` }));
+            tr.appendChild(createCell({ text: status }));
+            tr.appendChild(createCell({ text: normalSide, dataAttr: `data-normal_side-${account.id}` }));
+            tr.appendChild(createCell({ text: account.balance ?? "", isCurrency: true }));
+            tr.appendChild(createCell({ text: account.account_description ?? "", dataAttr: `data-account_description-${account.id}`, isLongText: true }));
+            tr.appendChild(createCell({ text: categoryName, dataAttr: `data-account_category_id-${account.id}` }));
+            tr.appendChild(createCell({ text: subcategoryName, dataAttr: `data-account_subcategory_id-${account.id}` }));
+            tr.appendChild(createCell({ text: statementType, dataAttr: `data-statement_type-${account.id}` }));
+            tr.appendChild(createCell({ text: account.comment ?? "", dataAttr: `data-comment-${account.id}`, isLongText: true }));
+            tr.appendChild(createCell({ text: account.initial_balance ?? "", isCurrency: true }));
+            tr.appendChild(createCell({ text: account.account_order ?? "" }));
+            tr.appendChild(createCell({ text: account.total_debits ?? "", isCurrency: true }));
+            tr.appendChild(createCell({ text: account.total_credits ?? "", isCurrency: true }));
+            const actionCell = document.createElement("td");
+            const auditButton = document.createElement("button");
+            auditButton.type = "button";
+            auditButton.className = "button-small account-button";
+            auditButton.setAttribute("data-account-id", account.id);
+            auditButton.setAttribute("data-audit-account-button", "");
+            auditButton.textContent = "Audit";
+            actionCell.appendChild(auditButton);
+            tr.appendChild(actionCell);
+            accountsTableBody.appendChild(tr);
+        }
+        await formatCurrencyEls();
+        formatLongTextEls();
+        setupAccountEditing(accounts);
+    };
 
     const loadAccountsPage = async (page) => {
         showLoadingOverlay();
         try {
             const offset = (page - 1) * accountsPerPage;
-            const response = await fetchWithAuth(`/api/accounts/list/${offset}/${accountsPerPage}`);
+            const response = await fetchWithAuth(`/api/accounts/list/${offset}/${accountsPerPage}${buildAccountsQueryParams()}`);
             if (!response.ok) {
                 throw new Error("Failed to fetch accounts");
             }
             const accounts = await response.json();
-            const tbody = document.querySelector("#accounts_table tbody");
-            tbody.replaceChildren();
-            for (const account of accounts) {
-                const accountOwner = userNameById.get(String(account.user_id)) || "";
-                const normalSide = account.normal_side ? String(account.normal_side).charAt(0).toUpperCase() + String(account.normal_side).slice(1) : "";
-                const categoryName = categoryNameById.get(String(account.account_category_id)) || "";
-                const subcategoryName = subcategoryNameById.get(String(account.account_subcategory_id)) || "";
-                const statementType = statementTypeLabels[account.statement_type] || account.statement_type || "";
-                const tr = document.createElement("tr");
-                const status = account.status ? `${account.status.charAt(0).toUpperCase()}${account.status.slice(1)}` : "";
-                tr.appendChild(createCell({ text: account.account_name ?? "", dataAttr: `data-account_name-${account.id}` }));
-                tr.appendChild(createCell({ text: account.account_number ?? "", dataAttr: `data-account_number-${account.id}` }));
-                tr.appendChild(createCell({ text: accountOwner, dataAttr: `data-user_id-${account.id}` }));
-                tr.appendChild(createCell({ text: status }));
-                tr.appendChild(createCell({ text: normalSide, dataAttr: `data-normal_side-${account.id}` }));
-                tr.appendChild(createCell({ text: account.balance ?? "", isCurrency: true }));
-                tr.appendChild(createCell({ text: account.account_description ?? "", dataAttr: `data-account_description-${account.id}`, isLongText: true }));
-                tr.appendChild(createCell({ text: categoryName, dataAttr: `data-account_category_id-${account.id}` }));
-                tr.appendChild(createCell({ text: subcategoryName, dataAttr: `data-account_subcategory_id-${account.id}` }));
-                tr.appendChild(createCell({ text: statementType, dataAttr: `data-statement_type-${account.id}` }));
-                tr.appendChild(createCell({ text: account.comment ?? "", dataAttr: `data-comment-${account.id}`, isLongText: true }));
-                tr.appendChild(createCell({ text: account.initial_balance ?? "", isCurrency: true }));
-                tr.appendChild(createCell({ text: account.account_order ?? "" }));
-                tr.appendChild(createCell({ text: account.total_debits ?? "", isCurrency: true }));
-                tr.appendChild(createCell({ text: account.total_credits ?? "", isCurrency: true }));
-                const actionCell = document.createElement("td");
-                const auditButton = document.createElement("button");
-                auditButton.type = "button";
-                auditButton.className = "button-small account-button";
-                auditButton.setAttribute("data-account-id", account.id);
-                auditButton.setAttribute("data-audit-account-button", "");
-                auditButton.textContent = "Audit";
-                actionCell.appendChild(auditButton);
-                tr.appendChild(actionCell);
-                tbody.appendChild(tr);
+            await renderAccounts(Array.isArray(accounts) ? accounts : []);
+            if (currentPageEl) {
+                currentPageEl.textContent = page;
             }
-            currentPageEl.textContent = page;
-            await formatCurrencyEls();
-            formatLongTextEls();
-            setupAccountEditing(accounts);
         } catch (error) {
             alert("Error loading accounts: " + error.message);
         } finally {
@@ -586,6 +697,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     }
 
     // Initial load
+    await fetchAccountCount();
     loadAccountsPage(currentPage);
 
     const accountCategorySelect = document.getElementById("account_category");
@@ -717,7 +829,6 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         populateCategorySelect();
     }
     if (addCategoryButton && addCategoryModal) {
-        console.log("Adding event listener to add category button");
         addCategoryButton.addEventListener("click", () => {
             addCategoryModal.classList.add("is-visible");
             addCategoryModal.setAttribute("aria-hidden", "false");
@@ -987,6 +1098,262 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             });
         });
     }
+
+    const accountsHeaderNameEl = document.querySelector("[data-accounts-header-name]");
+    const accountsHeaderNumberEl = document.querySelector("[data-accounts-header-account-number]");
+    const accountsHeaderOwnerEl = document.querySelector("[data-accounts-header-account-owner]");
+    const accountsHeaderStatusEl = document.querySelector("[data-accounts-header-status]");
+    const accountsHeaderNormalSideEl = document.querySelector("[data-accounts-header-account-type]");
+    const accountsHeaderBalanceEl = document.querySelector("[data-accounts-header-balance]");
+    const accountsHeaderDescriptionEl = document.querySelector("[data-accounts-header-description]");
+    const accountsHeaderCategoryEl = document.querySelector("[data-accounts-header-category]");
+    const accountsHeaderSubcategoryEl = document.querySelector("[data-accounts-header-subcategory]");
+    const accountsHeaderStatementTypeEl = document.querySelector("[data-accounts-header-statement-type]");
+    const accountsHeaderCommentEl = document.querySelector("[data-accounts-header-comments]");
+    const accountsHeaderOpeningBalanceEl = document.querySelector("[data-accounts-header-opening-balance]");
+    const accountsHeaderAccountOrderEl = document.querySelector("[data-accounts-header-account-order]");
+    const accountsHeaderTotalDebitsEl = document.querySelector("[data-accounts-header-total-debits]");
+    const accountsHeaderTotalCreditsEl = document.querySelector("[data-accounts-header-total-credits]");
+    const headers = [
+        { el: accountsHeaderNameEl, field: "account_name", filterable: true, sortable: true },
+        { el: accountsHeaderNumberEl, field: "account_number", filterable: false, sortable: false },
+        { el: accountsHeaderOwnerEl, field: "user_id", filterable: true, sortable: true },
+        { el: accountsHeaderStatusEl, field: "status", filterable: true, sortable: true },
+        { el: accountsHeaderNormalSideEl, field: "account_type", filterable: true, sortable: true },
+        { el: accountsHeaderBalanceEl, field: "balance", filterable: true, sortable: true },
+        { el: accountsHeaderDescriptionEl, field: "account_description", filterable: true, sortable: false },
+        { el: accountsHeaderCategoryEl, field: "account_category_id", filterable: true, sortable: true },
+        { el: accountsHeaderSubcategoryEl, field: "account_subcategory_id", filterable: true, sortable: true },
+        { el: accountsHeaderStatementTypeEl, field: "statement_type", filterable: true, sortable: true },
+        { el: accountsHeaderCommentEl, field: "comment", filterable: true, sortable: false },
+        { el: accountsHeaderOpeningBalanceEl, field: "initial_balance", filterable: false, sortable: false },
+        { el: accountsHeaderAccountOrderEl, field: "account_order", filterable: false, sortable: false },
+        { el: accountsHeaderTotalDebitsEl, field: "total_debits", filterable: false, sortable: false },
+        { el: accountsHeaderTotalCreditsEl, field: "total_credits", filterable: false, sortable: false },
+    ];
+
+    const accountListFilterModal = document.getElementById("account_list_filter_modal");
+    const filterModalTitleEl = document.getElementById("account_list_filter_modal_title");
+    const filterFormEl = document.getElementById("account_list_filter_form");
+    const applyFiltersButton = document.getElementById("apply_account_list_filter_button");
+    const sortAscendingButton = document.getElementById("apply_account_list_sort_asc_button");
+    const sortDescendingButton = document.getElementById("apply_account_list_sort_desc_button");
+    const clearFiltersButton = document.getElementById("clear_account_list_filters_button");
+    const closeFiltersModalButton = document.getElementById("close_account_list_filter_modal");
+    if (closeFiltersModalButton && accountListFilterModal) {
+        closeFiltersModalButton.style.cursor = "pointer";
+        closeFiltersModalButton.addEventListener("click", () => {
+            accountListFilterModal.classList.remove("is-visible");
+            accountListFilterModal.setAttribute("aria-hidden", "true");
+        });
+    }
+    const filterLabelEl = document.getElementById("account_list_filter__label");
+    const filterValueEl = document.getElementById("account_list_filter__input");
+    let activeHeaderField = null;
+    let activeHeaderSortable = false;
+    const filterInputId = "account_list_filter_value";
+
+    const closeFilterModal = () => {
+        if (!accountListFilterModal) {
+            return;
+        }
+        accountListFilterModal.classList.remove("is-visible");
+        accountListFilterModal.setAttribute("aria-hidden", "true");
+    };
+    const clearFilters = async () => {
+        activeFilter = null;
+        activeSort = null;
+        currentPage = 1;
+        await fetchAccountCount();
+        await loadAccountsPage(currentPage);
+        closeFilterModal();
+    };
+
+    const buildFilterInput = (config, currentValue) => {
+        if (config.inputType === "select") {
+            const select = document.createElement("select");
+            select.id = filterInputId;
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "All";
+            select.appendChild(placeholder);
+            const options = typeof config.options === "function" ? config.options() : config.options || [];
+            options.forEach((option) => {
+                const opt = document.createElement("option");
+                opt.value = String(option.value);
+                opt.textContent = option.label;
+                select.appendChild(opt);
+            });
+            if (currentValue !== undefined && currentValue !== null && currentValue !== "") {
+                select.value = String(currentValue);
+            } else {
+                placeholder.selected = true;
+            }
+            return select;
+        }
+        if (config.inputType === "range") {
+            const wrapper = document.createElement("div");
+            const minInput = createInput("number", currentValue?.min ?? "");
+            minInput.id = filterMinInputId;
+            minInput.placeholder = "Min";
+            minInput.step = "0.01";
+            const maxInput = createInput("number", currentValue?.max ?? "");
+            maxInput.id = filterMaxInputId;
+            maxInput.placeholder = "Max";
+            maxInput.step = "0.01";
+            const separator = document.createElement("span");
+            separator.textContent = " - ";
+            wrapper.appendChild(minInput);
+            wrapper.appendChild(separator);
+            wrapper.appendChild(maxInput);
+            return wrapper;
+        }
+        const input = createInput("text", currentValue ?? "");
+        input.id = filterInputId;
+        input.placeholder = "Enter filter text";
+        return input;
+    };
+
+    const getActiveFilterValue = () => {
+        if (!filterValueEl) {
+            return {};
+        }
+        const minInput = filterValueEl.querySelector(`#${filterMinInputId}`);
+        const maxInput = filterValueEl.querySelector(`#${filterMaxInputId}`);
+        if (minInput || maxInput) {
+            return {
+                min: minInput ? minInput.value : "",
+                max: maxInput ? maxInput.value : "",
+            };
+        }
+        const input = filterValueEl.querySelector("input, select, textarea");
+        return { value: input ? input.value : "" };
+    };
+
+    const applyFilterFromModal = async () => {
+        if (!activeHeaderField) {
+            closeFilterModal();
+            return;
+        }
+        const { value, min, max } = getActiveFilterValue();
+        if (activeHeaderField === "balance") {
+            const minValue = String(min ?? "").trim();
+            const maxValue = String(max ?? "").trim();
+            if (minValue === "" && maxValue === "") {
+                activeFilter = null;
+            } else {
+                activeFilter = { field: activeHeaderField, min: minValue, max: maxValue };
+            }
+        } else {
+            const normalizedValue = value !== undefined && value !== null ? String(value) : "";
+            if (normalizedValue.trim() === "") {
+                activeFilter = null;
+            } else {
+                activeFilter = { field: activeHeaderField, value: normalizedValue };
+            }
+        }
+        currentPage = 1;
+        await fetchAccountCount();
+        await loadAccountsPage(currentPage);
+        closeFilterModal();
+    };
+
+    const applySortFromModal = async (direction) => {
+        if (!activeHeaderField || !activeHeaderSortable) {
+            closeFilterModal();
+            return;
+        }
+        activeSort = { field: activeHeaderField, direction };
+        currentPage = 1;
+        await loadAccountsPage(currentPage);
+        closeFilterModal();
+    };
+
+    const openFilterModal = (field, label, sortable) => {
+        if (!accountListFilterModal || !filterLabelEl || !filterValueEl) {
+            return;
+        }
+        activeHeaderField = field;
+        activeHeaderSortable = Boolean(sortable);
+        const config = getFilterConfig(field, label || "");
+        const currentFilter = activeFilter && activeFilter.field === field ? activeFilter : null;
+        const currentValue =
+            config.inputType === "range"
+                ? { min: currentFilter?.min ?? "", max: currentFilter?.max ?? "" }
+                : currentFilter?.value ?? "";
+        filterLabelEl.textContent = `${config.label || label || "Filter"}:`;
+        const labelForId = config.inputType === "range" ? filterMinInputId : filterInputId;
+        filterLabelEl.setAttribute("for", labelForId);
+        if (filterModalTitleEl) {
+            filterModalTitleEl.textContent = `Filter Accounts: ${config.label || label || "Column"}`;
+        }
+        const inputEl = buildFilterInput(config, currentValue);
+        filterValueEl.replaceChildren(inputEl);
+        if (sortAscendingButton) {
+            sortAscendingButton.disabled = !activeHeaderSortable;
+        }
+        if (sortDescendingButton) {
+            sortDescendingButton.disabled = !activeHeaderSortable;
+        }
+        accountListFilterModal.classList.add("is-visible");
+        accountListFilterModal.setAttribute("aria-hidden", "false");
+        const focusEl = inputEl.querySelector ? inputEl.querySelector("input, select, textarea") : inputEl;
+        if (focusEl && typeof focusEl.focus === "function") {
+            focusEl.focus();
+        }
+    };
+
+    if (filterFormEl) {
+        filterFormEl.addEventListener("submit", (event) => {
+            event.preventDefault();
+            applyFilterFromModal().catch((error) => {
+                console.error("Failed to apply filter", error);
+            });
+        });
+    }
+    if (clearFiltersButton) {
+        clearFiltersButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            clearFilters().catch((error) => {
+                console.error("Failed to clear filters", error);
+            });
+        });
+    }
+    if (applyFiltersButton) {
+        applyFiltersButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            applyFilterFromModal().catch((error) => {
+                console.error("Failed to apply filter", error);
+            });
+        });
+    }
+    if (sortAscendingButton) {
+        sortAscendingButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            applySortFromModal("asc").catch((error) => {
+                console.error("Failed to apply sort", error);
+            });
+        });
+    }
+    if (sortDescendingButton) {
+        sortDescendingButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            applySortFromModal("desc").catch((error) => {
+                console.error("Failed to apply sort", error);
+            });
+        });
+    }
+
+    headers.forEach(({ el, field, filterable, sortable }) => {
+        if (el && filterable) {
+            el.style.cursor = "pointer";
+            el.addEventListener("click", () => {
+                openFilterModal(field, el.textContent?.trim() || "", sortable);
+            });
+        } else if (el) {
+            el.style.cursor = "default";
+        }
+    });
 }
 
 async function loadNumericHelpers() {

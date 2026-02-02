@@ -15,7 +15,8 @@
     <div class="stack">
         <div class="data-row">
             <p class="value">
-                <span class="span-label">Click a column header to filter the accounts list.</span>
+                <span class="span-label">Click a column header to filter and sort the accounts list.</span>
+                <span class="actions page-navigation"><button class="button-small" id="clear_account_list_filters_button">Remove Filters</button> </span>
                 <span class="actions page-navigation">
                     <select id="accounts_per_page_select" data-accounts-per-page-select>
                         <option value="5">5 per page</option>
@@ -40,22 +41,22 @@
             <table class="table table--wide" id="accounts_table">
                 <thead>
                     <tr>
-                        <th>Account Name</th>
-                        <th>Account Number</th>
-                        <th>Account Owner</th>
-                        <th>Status</th>
-                        <th>Account Type</th>
-                        <th>Balance</th>
-                        <th>Description</th>
-                        <th>Category</th>
-                        <th>Subcategory</th>
-                        <th>Statement Type</th>
-                        <th>Comments</th>
-                        <th>Opening Balance</th>
-                        <th>Account Order</th>
-                        <th>Total Debits</th>
-                        <th>Total Credits</th>
-                        <th>Actions</th>
+                        <th data-accounts-header-name>Account Name</th>
+                        <th data-accounts-header-account-number>Account Number</th>
+                        <th data-accounts-header-account-owner>Account Owner</th>
+                        <th data-accounts-header-status>Status</th>
+                        <th data-accounts-header-account-type>Account Type</th>
+                        <th data-accounts-header-balance>Balance</th>
+                        <th data-accounts-header-description>Description</th>
+                        <th data-accounts-header-category>Category</th>
+                        <th data-accounts-header-subcategory>Subcategory</th>
+                        <th data-accounts-header-statement-type>Statement Type</th>
+                        <th data-accounts-header-comments>Comments</th>
+                        <th data-accounts-header-opening-balance>Opening Balance</th>
+                        <th data-accounts-header-account-order>Account Order</th>
+                        <th data-accounts-header-total-debits>Total Debits</th>
+                        <th data-accounts-header-total-credits>Total Credits</th>
+                        <th data-accounts-header-actions>Actions</th>
                     </tr>
                 </thead>
                 <tbody data-accounts-list></tbody>
@@ -127,6 +128,7 @@
             </div>
         </div>
     </section>
+    <% } %>
     <div id="account_list_filter_modal" class="modal" aria-hidden="true">
         <div class="modal-content">
             <span class="close-button" id="close_account_list_filter_modal" aria-label="Close">&times;</span>
@@ -134,11 +136,14 @@
             <form id="account_list_filter_form">
                 <table>
                     <tr>
-                        <td><label for="account_list_filter__label"></label></td>
-                        <td><input type="text" id="account_list_filter__input" name="account_list_filter__input" /></td>
+                        <td><label for="account_list_filter__label" id="account_list_filter__label"></label></td>
+                        <td id="account_list_filter__input"></td>
                     </tr>
                 </table>
+                <span><p>&nbsp;</p></span>
                 <button type="submit" class="button-primary" id="apply_account_list_filter_button">Apply Filter</button>
+                <button type="submit" class="button-primary" id="apply_account_list_sort_asc_button">Sort Ascending</button>
+                <button type="submit" class="button-primary" id="apply_account_list_sort_desc_button">Sort Descending</button>
             </form>
         </div>
     </div>
@@ -287,7 +292,6 @@
             </form>
         </div>
     </div>
-    <% } %>
     <% } %>
     <script id="accounts-data" type="application/json">
         <%- JSON.stringify({  allCategories, allUsers }).replaceAll("</", "<\\/") %>
