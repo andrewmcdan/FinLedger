@@ -502,10 +502,14 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
 
     const accountsTableBody = document.querySelector("#accounts_table tbody");
     let activeFilter = null;
-    let activeSort = null;
+    let activeSort = { field: "account_number", direction: "asc" };
     const filterMinInputId = "account_list_filter_min";
     const filterMaxInputId = "account_list_filter_max";
     const filterFieldConfig = {
+        account_number: {
+            label: "Account Number",
+            inputType: "text",
+        },
         account_name: {
             label: "Account Name",
             inputType: "text",
@@ -1116,7 +1120,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     const accountsHeaderTotalCreditsEl = document.querySelector("[data-accounts-header-total-credits]");
     const headers = [
         { el: accountsHeaderNameEl, field: "account_name", filterable: true, sortable: true },
-        { el: accountsHeaderNumberEl, field: "account_number", filterable: false, sortable: false },
+        { el: accountsHeaderNumberEl, field: "account_number", filterable: true, sortable: true },
         { el: accountsHeaderOwnerEl, field: "user_id", filterable: true, sortable: true },
         { el: accountsHeaderStatusEl, field: "status", filterable: true, sortable: true },
         { el: accountsHeaderNormalSideEl, field: "account_type", filterable: true, sortable: true },
@@ -1162,7 +1166,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     };
     const clearFilters = async () => {
         activeFilter = null;
-        activeSort = null;
+        activeSort = { field: "account_number", direction: "asc" };
         currentPage = 1;
         await fetchAccountCount();
         await loadAccountsPage(currentPage);

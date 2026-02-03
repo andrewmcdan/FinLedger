@@ -48,6 +48,7 @@ const normalizeNormalSideFilter = (rawValue) => {
 };
 
 const FILTER_FIELD_MAP = {
+    account_number: { column: "accounts.account_number::text", type: "contains" },
     account_name: { column: "accounts.account_name", type: "contains" },
     user_id: { column: "accounts.user_id", type: "equals" },
     status: { column: "accounts.status", type: "equals", normalize: normalizeStatusFilter },
@@ -61,6 +62,7 @@ const FILTER_FIELD_MAP = {
 };
 
 const SORT_FIELD_MAP = {
+    account_number: { column: "accounts.account_number" },
     account_name: { column: "accounts.account_name" },
     user_id: { column: "COALESCE(users.username, '')", requiresUserJoin: true },
     status: { column: "accounts.status" },
