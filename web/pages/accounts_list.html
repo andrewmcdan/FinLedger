@@ -4,8 +4,8 @@
         <p>Manage your accounts</p>
     </header>
     <% if (role === 'administrator') { %>
-    <div class="data-row">
-        <p class="value">
+    <div class="stack">
+        <p class="">
             <span class="span-label">
                 <button type="button-small" class="button-primary" id="add_account_button">Add New Account</button>
             </span>
@@ -15,10 +15,9 @@
     <div class="stack">
         <div class="data-row">
             <p class="value">
-                <span class="span-label">
+                <span class="span-label page-navigation">
                    Click a column header to filter and sort the accounts list. Click a cell to edit.
                 </span>
-
                 <span class="actions page-navigation"><button class="button-small" id="clear_account_list_filters_button">Remove Filters</button> </span>
                 <span class="actions page-navigation">
                     <select id="accounts_per_page_select" data-accounts-per-page-select>
@@ -82,7 +81,7 @@
                     <article class="data-row">
                         <p class="value"><span><%= category.name %></span></p>
                     </article>
-                    <% const subcats = allCategories.subcategories.filter(function(subcat) { return subcat.account_category_id === category.id; }); subcats.forEach(function(subcategory) { %>
+                    <% allCategories.subcategories.filter(function(subcat) { return subcat.account_category_id === category.id; }).forEach(function(subcategory) { %>
                     <article class="data-row" style="margin-left: 20px">&mdash; <%= subcategory.name %></article>
                     <% }); }); %>
                 </article>
