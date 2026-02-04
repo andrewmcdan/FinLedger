@@ -17,7 +17,7 @@ const transporter = nodemailer.createTransport({
 function sendEmail(to, subject, body) {
     logger.log("info", `Sending email to ${to} with subject "${subject}"`, { function: "sendEmail" }, utilities.getCallerInfo());
     const mailOptions = {
-        from: process.env.SMTP_EMAIL_FROM,
+        from: `FinLedger Financial Management System <${process.env.SMTP_EMAIL_FROM}>`,
         to: to,
         subject: subject,
         text: body,
