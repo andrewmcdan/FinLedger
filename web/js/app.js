@@ -188,7 +188,130 @@ function setActiveNav(routeKey) {
     });
 }
 
-function fetchWithAuth(url, options = {}) {
+const SESSION_WARNING_MS = 5 * 60 * 1000;
+let sessionWarningTimeoutId = null;
+let sessionLogoutTimeoutId = null;
+let sessionExpiresAtMs = null;
+let sessionWarnedForExpiresAtMs = null;
+let sessionLogoutInProgress = false;
+
+function clearSessionTimers() {
+    if (sessionWarningTimeoutId) {
+        clearTimeout(sessionWarningTimeoutId);
+        sessionWarningTimeoutId = null;
+    }
+    if (sessionLogoutTimeoutId) {
+        clearTimeout(sessionLogoutTimeoutId);
+        sessionLogoutTimeoutId = null;
+    }
+}
+
+function triggerSessionWarning(timeLeftMs) {
+    if (timeLeftMs <= 0) {
+        return;
+    }
+    const minutesLeft = Math.max(1, Math.round(timeLeftMs / 60000));
+    alert(`Your session will expire in about ${minutesLeft} minute(s). You will be logged out automatically.`);
+}
+
+function performClientLogout() {
+    if (sessionLogoutInProgress) {
+        return;
+    }
+    sessionLogoutInProgress = true;
+    clearSessionTimers();
+
+    const authToken = localStorage.getItem("auth_token") || "";
+    const userId = localStorage.getItem("user_id") || "";
+    if (authToken && userId) {
+        fetch("/api/auth/logout", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${authToken}`,
+                "X-User-Id": `${userId}`,
+            },
+        }).catch(() => {});
+    }
+
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("must_change_password");
+    localStorage.removeItem("full_name");
+    window.location.hash = "#/login";
+    window.location.reload();
+}
+
+function scheduleSessionTimers(expiresAtMs) {
+    if (!Number.isFinite(expiresAtMs)) {
+        return;
+    }
+    sessionExpiresAtMs = expiresAtMs;
+    clearSessionTimers();
+    const timeLeftMs = expiresAtMs - Date.now();
+    if (timeLeftMs <= 0) {
+        performClientLogout();
+        return;
+    }
+    const warningDelay = timeLeftMs - SESSION_WARNING_MS;
+    if (warningDelay <= 0) {
+        if (sessionWarnedForExpiresAtMs !== expiresAtMs) {
+            sessionWarnedForExpiresAtMs = expiresAtMs;
+            triggerSessionWarning(timeLeftMs);
+        }
+    } else {
+        sessionWarningTimeoutId = setTimeout(() => {
+            if (sessionWarnedForExpiresAtMs === expiresAtMs) {
+                return;
+            }
+            sessionWarnedForExpiresAtMs = expiresAtMs;
+            triggerSessionWarning(expiresAtMs - Date.now());
+        }, warningDelay);
+    }
+    sessionLogoutTimeoutId = setTimeout(() => {
+        if (sessionExpiresAtMs !== expiresAtMs) {
+            return;
+        }
+        performClientLogout();
+    }, timeLeftMs);
+}
+
+function applySessionExpiryHeaders(response) {
+    if (!response || !response.headers) {
+        return;
+    }
+    const expiresAtHeader = response.headers.get("X-Session-Expires-At");
+    const expiresInHeader = response.headers.get("X-Session-Expires-In");
+    if (!expiresAtHeader && !expiresInHeader) {
+        return;
+    }
+    let expiresAtMs = Number.NaN;
+    if (expiresAtHeader) {
+        const parsed = Date.parse(expiresAtHeader);
+        if (!Number.isNaN(parsed)) {
+            expiresAtMs = parsed;
+        }
+    }
+    if (!Number.isFinite(expiresAtMs) && expiresInHeader) {
+        const seconds = Number.parseInt(expiresInHeader, 10);
+        if (!Number.isNaN(seconds)) {
+            expiresAtMs = Date.now() + seconds * 1000;
+        }
+    }
+    if (Number.isFinite(expiresAtMs)) {
+        scheduleSessionTimers(expiresAtMs);
+    }
+}
+
+window.FinLedgerSession = {
+    applyExpiryHeaders: applySessionExpiryHeaders,
+    scheduleSessionTimers,
+    clearSessionTimers,
+    performClientLogout,
+};
+
+async function fetchWithAuth(url, options = {}) {
     const authToken = localStorage.getItem("auth_token") || "";
     const userId = localStorage.getItem("user_id") || "";
     const mergedHeaders = {
@@ -197,11 +320,13 @@ function fetchWithAuth(url, options = {}) {
         ...(options.headers || {}),
     };
 
-    return fetch(url, {
+    const response = await fetch(url, {
         ...options,
         credentials: options.credentials || "include",
         headers: mergedHeaders,
     });
+    applySessionExpiryHeaders(response);
+    return response;
 }
 
 async function fetchPageMarkup(pageName) {

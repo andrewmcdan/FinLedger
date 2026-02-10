@@ -6,6 +6,24 @@ const db = require("../db/db.js");
 const non_auth_paths_begin = ["/api/auth/status", "/api/auth/logout", "/public_images", "/js/utils", "/js/app.js", "/js/background", "/css/", "/pages/public", "/js/pages/public", "/api/users/reset-password", "/api/users/security-questions", "/api/users/security-questions-list", "/api/users/verify-security-answers"];
 const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html", "/api/users/register_new_user"];
 
+const setSessionExpiryHeaders = async (res, userId, token) => {
+    try {
+        const sessionResult = await db.query("SELECT logout_at FROM logged_in_users WHERE user_id = $1 AND token = $2", [userId, token]);
+        if (sessionResult.rowCount === 0) {
+            return;
+        }
+        const logoutAt = sessionResult.rows[0]?.logout_at ? new Date(sessionResult.rows[0].logout_at) : null;
+        if (!logoutAt || Number.isNaN(logoutAt.getTime())) {
+            return;
+        }
+        const expiresInSeconds = Math.max(0, Math.floor((logoutAt.getTime() - Date.now()) / 1000));
+        res.set("X-Session-Expires-At", logoutAt.toISOString());
+        res.set("X-Session-Expires-In", String(expiresInSeconds));
+    } catch (error) {
+        log("warn", "Failed to set session expiry headers", { user_id: userId, error: error.message }, utilities.getCallerInfo(), userId);
+    }
+};
+
 const authMiddleware = async (req, res, next) => {
     // If req is for a public route, skip authentication
     if (non_auth_paths_begin.some((publicPath) => req.path.startsWith(publicPath)) || non_auth_paths_full.includes(req.path)) {
@@ -53,6 +71,7 @@ const authMiddleware = async (req, res, next) => {
             return res.status(403).json({ error: "TEMP_PASSWORD_CHANGE_REQUIRED" });
         }
     }
+    await setSessionExpiryHeaders(res, userId, token);
     log("trace", `User ${userId} authenticated successfully`, { user_id: userId }, utilities.getCallerInfo(), req.user.id);
     return next();
 };
