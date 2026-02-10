@@ -380,7 +380,7 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
             event.preventDefault();
             showLoadingOverlay();
             const formData = new FormData(deleteUserForm);
-            const usernameToDelete = formData.get("username");
+            const usernameToDelete = formData.get("delete_username");
             if (!usernameToDelete) {
                 alert("Please enter a username to delete");
                 hideLoadingOverlay();
@@ -433,7 +433,7 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
             event.preventDefault();
             showLoadingOverlay();
             const formData = new FormData(resetPasswordForm);
-            const username = formData.get("username");
+            const username = formData.get("reset_username");
             if (!username) {
                 alert("Please enter a username to reset password");
                 hideLoadingOverlay();

@@ -197,8 +197,13 @@
                     <h2>Delete User</h2>
                     <form id="delete-user-form" class="stack">
                         <div class="field">
-                            <label for="username" title="Enter the username to delete.">Username</label>
-                            <input type="text" id="username" name="username" required title="Enter the username to delete.">
+                            <label for="delete_username" title="Select the user to delete.">Username</label>
+                            <select id="delete_username" name="delete_username" required title="Select the user to delete.">
+                                <option value="" disabled selected>Select a user</option>
+                                <% users.forEach(user => { %>
+                                <option value="<%= user.username %>"><%= user.username %></option>
+                                <% }); %>
+                            </select>
                         </div>
                         <button type="submit" title="Delete the specified user.">Delete User</button>
                     </form>            
@@ -207,8 +212,13 @@
                     <h2>Reset User Password</h2>
                     <form id="reset-password-form" class="stack">
                         <div class="field">
-                            <label for="username" title="Enter the username to reset the password.">Username</label>
-                            <input type="text" id="username" name="username" required title="Enter the username to reset the password.">
+                            <label for="reset_username" title="Select the user to reset the password.">Username</label>
+                            <select id="reset_username" name="reset_username" required title="Select the user to reset the password.">
+                                <option value="" disabled selected>Select a user</option>
+                                <% users.forEach(user => { %>
+                                <option value="<%= user.username %>"><%= user.username %></option>
+                                <% }); %>
+                            </select>
                         </div>
                         <button type="submit" title="Reset the user's password.">Reset Password</button>
                     </form>
