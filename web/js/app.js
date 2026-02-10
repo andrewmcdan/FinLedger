@@ -19,8 +19,8 @@ const navLinks = Array.from(document.querySelectorAll(".app-nav [data-route]"));
 const loadingOverlay = document.getElementById("loading_overlay");
 const loadingLabel = loadingOverlay?.querySelector("[data-loading-label]") || loadingOverlay?.querySelector("div:last-child");
 let loadingCount = 0;
-let profileMenuInitialized = false;
 let userIconBlobUrl = null;
+let userIconOwnerId = null;
 
 async function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -485,37 +485,52 @@ async function renderRoute() {
         }
 
         const userIconTargets = Array.from(document.querySelectorAll("[data-user-icon], [data-user-icon-menu]"));
-        if (userIconTargets.length > 0 && !profileMenuInitialized) {
-            // Use fetch with auth headers to get the user icon
-            fetchWithAuth("/images/user-icon.png")
-                .then((response) => {
-                    if (response.ok) {
-                        return response.blob();
-                    }
-                    // if the response if 401 Unauthorized use the default icon at /public_images/user-icon.png
-                    if (response.status === 401) {
-                        return fetch("/public_images/default.png").then((res) => {
-                            if (res.ok) {
-                                return res.blob();
-                            }
-                            throw new Error("Failed to load default user icon");
-                        });
-                    }
-                    throw new Error("Failed to load user icon");
-                })
-                .then((blob) => {
-                    const objectURL = URL.createObjectURL(blob);
-                    userIconBlobUrl = objectURL;
-                    userIconTargets.forEach((img) => {
-                        img.src = objectURL;
-                    });
-                })
-                .catch((error) => {
-                    console.error("Error loading user icon:", error);
-                });
-        }
-        profileMenuInitialized = true;
+        if (userIconTargets.length > 0) {
+            const currentUserId = localStorage.getItem("user_id");
+            const authToken = localStorage.getItem("auth_token");
+            const shouldReloadIcon = !userIconBlobUrl || userIconOwnerId !== currentUserId;
 
+            if (!authToken || !currentUserId) {
+                if (userIconBlobUrl) {
+                    URL.revokeObjectURL(userIconBlobUrl);
+                    userIconBlobUrl = null;
+                }
+                userIconOwnerId = null;
+                userIconTargets.forEach((img) => {
+                    img.src = "/public_images/default.png";
+                });
+            } else if (shouldReloadIcon) {
+                fetchWithAuth("/images/user-icon.png")
+                    .then((response) => {
+                        if (response.ok) {
+                            return response.blob();
+                        }
+                        if (response.status === 401) {
+                            return fetch("/public_images/default.png").then((res) => {
+                                if (res.ok) {
+                                    return res.blob();
+                                }
+                                throw new Error("Failed to load default user icon");
+                            });
+                        }
+                        throw new Error("Failed to load user icon");
+                    })
+                    .then((blob) => {
+                        if (userIconBlobUrl) {
+                            URL.revokeObjectURL(userIconBlobUrl);
+                        }
+                        const objectURL = URL.createObjectURL(blob);
+                        userIconBlobUrl = objectURL;
+                        userIconOwnerId = currentUserId;
+                        userIconTargets.forEach((img) => {
+                            img.src = objectURL;
+                        });
+                    })
+                    .catch((error) => {
+                        console.error("Error loading user icon:", error);
+                    });
+            }
+        }
         document.title = route ? `FinLedger - ${route.title}` : "FinLedger";
         setActiveNav(route ? routeKey : null);
         if (shouldAnimate) {
