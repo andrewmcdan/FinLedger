@@ -7,7 +7,7 @@
     <div class="stack">
         <p class="">
             <span class="span-label">
-                <button type="button-small" class="button-primary" id="add_account_button">Add New Account</button>
+                <button type="button-small" class="button-primary" id="add_account_button" title="Add a new account to the system.">Add New Account</button>
             </span>
         </p>
     </div>
@@ -18,9 +18,9 @@
                 <span class="span-label page-navigation">
                    Click a column header to filter and sort the accounts list. Double click a cell to edit.
                 </span>
-                <span class="actions page-navigation"><button class="button-small" id="clear_account_list_filters_button">Remove Filters</button> </span>
+                <span class="actions page-navigation"><button class="button-small" id="clear_account_list_filters_button" title="Clear all filters applied to the accounts list.">Remove Filters</button> </span>
                 <span class="actions page-navigation">
-                    <select id="accounts_per_page_select" data-accounts-per-page-select>
+                    <select id="accounts_per_page_select" data-accounts-per-page-select title="Select the number of accounts to display per page.">
                         <option value="5">5 per page</option>
                         <option value="10" selected>10 per page</option>
                         <option value="25">25 per page</option>
@@ -29,12 +29,12 @@
                     </select>
                 </span>
                 <span class="span-actions page-navigation">
-                    <span data-accounts-page-down data-accounts-page-btn>&lt;</span>
+                    <span data-accounts-page-down data-accounts-page-btn title="Go to the previous page of accounts.">&lt;</span>
                     <span>Page: </span>
                     <span data-accounts-current-page>1 </span>
                     <span>of </span>
                     <span data-accounts-total-pages>1</span>
-                    <span data-accounts-page-up data-accounts-page-btn>&gt;</span>
+                    <span data-accounts-page-up data-accounts-page-btn title="Go to the next page of accounts.">&gt;</span>
                     <span>&nbsp;&nbsp;&nbsp;</span>
                 </span>
             </p>
@@ -43,22 +43,22 @@
             <table class="table table--wide" id="accounts_table">
                 <thead>
                     <tr>
-                        <th data-accounts-header-name>Account Name</th>
-                        <th data-accounts-header-account-number>Account Number</th>
-                        <th data-accounts-header-account-owner>Account Owner</th>
-                        <th data-accounts-header-status>Status</th>
-                        <th data-accounts-header-account-type>Account Type</th>
-                        <th data-accounts-header-balance>Balance</th>
-                        <th data-accounts-header-description>Description</th>
-                        <th data-accounts-header-category>Category</th>
-                        <th data-accounts-header-subcategory>Subcategory</th>
-                        <th data-accounts-header-statement-type>Statement Type</th>
-                        <th data-accounts-header-comments>Comments</th>
-                        <th data-accounts-header-opening-balance>Opening Balance</th>
-                        <th data-accounts-header-account-order>Account Order</th>
-                        <th data-accounts-header-total-debits>Total Debits</th>
-                        <th data-accounts-header-total-credits>Total Credits</th>
-                        <th data-accounts-header-actions>Actions</th>
+                        <th data-accounts-header-name title="Account Name. Click to sort or filter.">Account Name</th>
+                        <th data-accounts-header-account-number title="Account Number. Click to sort or filter.">Account Number</th>
+                        <th data-accounts-header-account-owner title="Account Owner. Click to sort or filter.">Account Owner</th>
+                        <th data-accounts-header-status title="Status. Click to sort or filter.">Status</th>
+                        <th data-accounts-header-account-type title="Account Type. Click to sort or filter.">Account Type</th>
+                        <th data-accounts-header-balance title="Balance. Click to sort or filter.">Balance</th>
+                        <th data-accounts-header-description title="Description. Click to sort or filter.">Description</th>
+                        <th data-accounts-header-category title="Category. Click to sort or filter.">Category</th>
+                        <th data-accounts-header-subcategory title="Subcategory. Click to sort or filter.">Subcategory</th>
+                        <th data-accounts-header-statement-type title="Statement Type. Click to sort or filter.">Statement Type</th>
+                        <th data-accounts-header-comments title="Comments. Click to sort or filter.">Comments</th>
+                        <th data-accounts-header-opening-balance title="Opening Balance. Click to sort or filter.">Opening Balance</th>
+                        <th data-accounts-header-account-order title="Account Order. Click to sort or filter.">Account Order</th>
+                        <th data-accounts-header-total-debits title="Total Debits. Click to sort or filter.">Total Debits</th>
+                        <th data-accounts-header-total-credits title="Total Credits. Click to sort or filter.">Total Credits</th>
+                        <th data-accounts-header-actions title="Actions. Click to sort or filter.">Actions</th>
                     </tr>
                 </thead>
                 <tbody data-accounts-list></tbody>
@@ -87,8 +87,8 @@
                 </article>
                 <article class="data-row">
                     <p>
-                        <button type="button" class="button-primary" data-add-category-button>Add Category</button>
-                        <button type="button" class="button-primary" data-delete-category-button>Delete Category</button>
+                        <button type="button" class="button-primary"  data-add-category-button title="Add a new account category.">Add Category</button>
+                        <button type="button" class="button-primary" data-delete-category-button title="Delete an existing account category.">Delete Category</button>
                     </p>
                 </article>
             </article>
@@ -109,7 +109,7 @@
                                 <span class="meta"> (Account #: <%= account.account_number %>, ID: <%= account.id %>)</span>
                             </span>
                             <span class="span-actions">
-                                <button class="button-small" data-account-action="reactivate" data-account-id="<%= account.id %>">Reactivate</button>
+                                <button class="button-small" data-account-action="reactivate" data-account-id="<%= account.id %>" title="Reactivate this inactive account.">Reactivate</button>
                             </span>
                         </p>
                     </article>
@@ -119,12 +119,12 @@
                 <article class="card">
                     <form id="deactivate_account_form" class="stack">
                         <label for="deactivate_account_select">Select Account to Deactivate:</label>
-                        <select id="deactivate_account_select" name="deactivate_account_select" required>
+                        <select id="deactivate_account_select" name="deactivate_account_select" required title="Select an active account to deactivate.">
                             <% accounts.filter(function(account) { return account.status === 'active'; }).forEach(function(account) { %>
                             <option value="<%= account.id %>"><%= account.account_name %> (<%= account.account_number %>)</option>
                             <% }); %>
                         </select>
-                        <button type="button" class="button-primary" id="deactivate_account_button">Deactivate Account</button>
+                        <button type="button" class="button-primary" id="deactivate_account_button" title="Deactivate the selected account.">Deactivate Account</button>
                     </form>
                 </article>
             </div>
@@ -138,14 +138,14 @@
             <form id="account_list_filter_form">
                 <table>
                     <tr>
-                        <td><label for="account_list_filter__label" id="account_list_filter__label"></label></td>
+                        <td><label for="account_list_filter__label" id="account_list_filter__label" title="Select the filter criteria for the accounts list"></label></td>
                         <td id="account_list_filter__input"></td>
                     </tr>
                 </table>
                 <span><p>&nbsp;</p></span>
-                <button type="submit" class="button-primary" id="apply_account_list_filter_button">Apply Filter</button>
-                <button type="submit" class="button-primary" id="apply_account_list_sort_asc_button">Sort Ascending</button>
-                <button type="submit" class="button-primary" id="apply_account_list_sort_desc_button">Sort Descending</button>
+                <button type="submit" class="button-primary" id="apply_account_list_filter_button" title="Apply the selected filter to the accounts list">Apply Filter</button>
+                <button type="submit" class="button-primary" id="apply_account_list_sort_asc_button" title="Sort the accounts list in ascending order">Sort Ascending</button>
+                <button type="submit" class="button-primary" id="apply_account_list_sort_desc_button" title="Sort the accounts list in descending order">Sort Descending</button>
             </form>
         </div>
     </div>
@@ -157,9 +157,9 @@
             <form id="delete_category_form">
                 <table>
                     <tr>
-                        <td><label for="delete_category__category_select">Select Category to Delete:</label></td>
+                        <td><label for="delete_category__category_select" title="Select the category or subcategory to delete">Select Category to Delete:</label></td>
                         <td>
-                            <select id="delete_category__category_select" name="delete_category__category_select" required>
+                            <select id="delete_category__category_select" name="delete_category__category_select" required title="Select the category or subcategory to delete. If you select a category, all subcategories under it will also be deleted. If you select a subcategory, only that subcategory will be deleted.">
                                 <option value="" disabled selected>Select a category or subcategory</option>
                             </select>
                         </td>
@@ -176,43 +176,43 @@
             <form id="category_form">
                 <table>
                     <tr>
-                        <td><label for="is_subcategory">Is subcategory:</label></td>
+                        <td><label for="is_subcategory" title="Check if this is a subcategory">Is subcategory:</label></td>
                         <td><input type="checkbox" id="is_subcategory" name="is_subcategory" /></td>
                     </tr>
                     <tr data-category-name-row>
-                        <td><label for="add_category__category_name">Category Name:</label></td>
+                        <td><label for="add_category__category_name" title="Enter the category name">Category Name:</label></td>
                         <td><input type="text" id="add_category__category_name" name="category_name" required /></td>
                     </tr>
                     <tr data-category-description-row>
-                        <td><label for="add_category__category_description">Category Description:</label></td>
+                        <td><label for="add_category__category_description" title="Enter the category description">Category Description:</label></td>
                         <td><textarea id="add_category__category_description" name="category_description"></textarea></td>
                     </tr>
                     <tr data-category-subcategory-name-row>
-                        <td><label for="add_category__subcategory_name">Initial Subcategory Name:</label></td>
+                        <td><label for="add_category__subcategory_name" title="Enter the initial subcategory name">Initial Subcategory Name:</label></td>
                         <td><input type="text" id="add_category__subcategory_name" name="subcategory_name" /></td>
                     </tr>
                     <tr data-category-subcategory-description-row>
-                        <td><label for="add_category__subcategory_description">Initial Subcategory Description:</label></td>
+                        <td><label for="add_category__subcategory_description" title="Enter the initial subcategory description">Initial Subcategory Description:</label></td>
                         <td><textarea id="add_category__subcategory_description" name="subcategory_description"></textarea></td>
                     </tr>
                     <tr data-category-select-row hidden>
-                        <td><label for="add_category__category_select">Category:</label></td>
+                        <td><label for="add_category__category_select" title="Select a category">Category:</label></td>
                         <td><select id="add_category__category_select"></select></td>
                     </tr>
                     <tr data-subcategory-name-row hidden>
-                        <td><label for="add_category__subcategory_name_existing">Subcategory Name:</label></td>
+                        <td><label for="add_category__subcategory_name_existing" title="Enter the subcategory name">Subcategory Name:</label></td>
                         <td><input type="text" id="add_category__subcategory_name_existing" name="subcategory_name_existing" /></td>
                     </tr>
                     <tr data-subcategory-description-row hidden>
-                        <td><label for="add_category__subcategory_description_existing">Subcategory Description:</label></td>
+                        <td><label for="add_category__subcategory_description_existing" title="Enter the subcategory description">Subcategory Description:</label></td>
                         <td><textarea id="add_category__subcategory_description_existing" name="subcategory_description_existing"></textarea></td>
                     </tr>
                     <tr data-account-prefix-row>
-                        <td><label for="account_number_prefix">Account Number Prefix:</label></td>
+                        <td><label for="account_number_prefix" title="Enter the account number prefix">Account Number Prefix:</label></td>
                         <td><input type="text" id="account_number_prefix" name="account_number_prefix" required /></td>
                     </tr>
                 </table>
-                <button type="submit" class="button-primary" id="save_category_button">Save Category</button>
+                <button type="submit" class="button-primary" id="save_category_button" title="Save the category">Save Category</button>
             </form>
         </div>
     </div>
@@ -223,26 +223,26 @@
             <form id="account_form">
                 <table>
                     <tr>
-                        <td><label for="account_name">Account Name:</label></td>
+                        <td><label for="account_name" title="Enter the account name">Account Name:</label></td>
                         <td><input type="text" id="account_name" name="account_name" required /></td>
                     </tr>
                     <tr>
-                        <td><label for="account_description">Description:</label></td>
+                        <td><label for="account_description" title="Enter the account description">Description:</label></td>
                         <td><textarea id="account_description" name="account_description"></textarea></td>
                     </tr>
                     <tr>
-                        <td><label for="account_type">Normal Side:</label></td>
+                        <td><label for="account_type" title="Select the normal side of the account">Normal Side:</label></td>
                         <td>
-                            <select id="account_type" name="account_type" required>
+                            <select id="account_type" name="account_type" required title="Select the normal side of the account. Debit means the account balance increases with debits and decreases with credits. Credit means the account balance increases with credits and decreases with debits.">
                                 <option value="debit">Debit</option>
                                 <option value="credit">Credit</option>
                             </select>
                         </td>
                     </tr>
                     <tr>
-                        <td><label for="account_category">Category:</label></td>
+                        <td><label for="account_category" title="Select a category">Category:</label></td>
                         <td>
-                            <select id="account_category" name="account_category" required>
+                            <select id="account_category" name="account_category" required title="Select a category for the account. Categories are used to organize accounts. You can manage categories in the System Management section below.">
                                 <% allCategories.categories.forEach(function(category) { %>
                                 <option value="<%= category.id %>"><%= category.name %></option>
                                 <% }); %>
@@ -250,15 +250,15 @@
                         </td>
                     </tr>
                     <tr>
-                        <td><label for="account_subcategory">Subcategory:</label></td>
+                        <td><label for="account_subcategory" title="Select a subcategory">Subcategory:</label></td>
                         <td>
                             <select id="account_subcategory" name="account_subcategory" required></select>
                         </td>
                     </tr>
                     <tr>
-                        <td><label for="account_statement_type">Statement Type:</label></td>
+                        <td><label for="account_statement_type" title="Select the statement type">Statement Type:</label></td>
                         <td>
-                            <select id="account_statement_type" name="account_statement_type" required>
+                            <select id="account_statement_type" name="account_statement_type" required title="Select the statement type. This is used to determine which financial statement(s) the account appears on. Income Statement accounts are typically revenue and expense accounts. Balance Sheet accounts are typically asset, liability, and equity accounts. Retained Earnings Statement accounts are typically equity accounts that roll up into retained earnings.">
                                 <option value="Income Statement">Income Statement</option>
                                 <option value="Balance Sheet">Balance Sheet</option>
                                 <option value="Retained Earnings Statement">Retained Earnings Statement</option>
@@ -266,23 +266,23 @@
                         </td>
                     </tr>
                     <tr>
-                        <td><label for="account_comments">Comments:</label></td>
+                        <td><label for="account_comments" title="Enter any comments about the account">Comments:</label></td>
                         <td><textarea id="account_comments" name="account_comments"></textarea></td>
                     </tr>
                     <tr>
-                        <td><label for="initial_balance">Opening Balance ($):</label></td>
+                        <td><label for="initial_balance" title="Enter the opening balance for the account">Opening Balance ($):</label></td>
                         <td><input type="number" id="initial_balance" name="initial_balance" required data-is-currency /></td>
                     </tr>
                     <tr>
-                        <td><label for="account_order">Account Order:</label></td>
+                        <td><label for="account_order" title="Enter the order in which the account appears">Account Order:</label></td>
                         <td><input type="number" id="account_order" name="account_order" required /></td>
                     </tr>
                     <tr>
                         <td>
-                            <label for="account_owner">Account Owner:</label>
+                            <label for="account_owner" title="Select the owner of the account">Account Owner:</label>
                         </td>
                         <td>
-                            <select id="account_owner" name="account_owner" required>
+                            <select id="account_owner" name="account_owner" required title="Select the owner of the account. The account owner is used to determine which accounts a user has access to. Only administrators can assign account ownership. If you do not select an owner, the account will be owned by the administrator who created it and only that administrator will have access to it.">
                                 <% allUsers.forEach(function(user) { %>
                                 <option value="<%= user.id %>"><%= user.username %> (<%= user.last_name %>, <%= user.first_name %>)</option>
                                 <% }); %>
@@ -290,7 +290,7 @@
                         </td>
                     </tr>
                 </table>
-                <button type="submit" class="button-primary" id="save_account_button">Save Account</button>
+                <button type="submit" class="button-primary" id="save_account_button" title="Save the account with the entered details">Save Account</button>
             </form>
         </div>
     </div>
