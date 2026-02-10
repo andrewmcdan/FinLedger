@@ -1,0 +1,95 @@
+.accordion-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    box-shadow: none;
+    transition: background 0.2s ease;
+}
+
+.accordion-trigger:hover {
+    background: var(--accent-soft);
+    transform: none;
+    box-shadow: none;
+}
+
+.accordion-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.accordion-trigger--section .accordion-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    padding-left: 0.25rem;
+}
+
+.accordion-trigger--sub .accordion-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    padding-left: 0.25rem;
+}
+
+.accordion-trigger:focus {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+    border-radius: 10px;
+}
+
+.accordion-icon {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 8px solid var(--accent);
+    transition: transform 0.2s ease;
+    padding-left: 0.25rem;
+}
+
+.accordion.is-open > .accordion-trigger .accordion-icon,
+.accordion .accordion.is-open > .accordion-trigger .accordion-icon {
+    transform: rotate(90deg);
+}
+
+.accordion-trigger[aria-expanded="true"] .accordion-icon {
+    transform: rotate(90deg);
+}
+
+.accordion-panel {
+    padding-top: 0;
+    overflow: hidden;
+    height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition:
+        height 0.25s ease,
+        opacity 0.2s ease,
+        transform 0.2s ease,
+        padding 0.2s ease;
+}
+
+.accordion-panel.is-open {
+    opacity: 1;
+    transform: translateY(0);
+    padding-top: 0.5rem;
+}
+
+.faq-item.accordion {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.faq-item.accordion:last-child {
+    border-bottom: none;
+}
