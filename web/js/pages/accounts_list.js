@@ -71,8 +71,6 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             const total_credits = 0;
             const accountOwner = document.getElementById("account_owner")?.value;
 
-            // TODO: Add validation for required fields
-
             try {
                 const response = await fetchWithAuth("/api/accounts/create", {
                     method: "POST",

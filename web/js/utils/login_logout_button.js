@@ -26,7 +26,7 @@ export async function updateLoginLogoutButton() {
     }
     if (await isLoggedIn()) {
         login_button.textContent = `Logout`;
-        login_button.href = "#/logout"; // TODO: Implement logout route
+        login_button.href = "#/logout";
     } else {
         login_button.textContent = "Login";
         login_button.href = "#/login";

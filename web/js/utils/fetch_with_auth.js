@@ -1,5 +1,3 @@
-// TODO: Link other files to this so that fetchWithAuth only exists here.
-
 export const fetchWithAuth = async (url, options = {}) => {
     const authToken = localStorage.getItem("auth_token") || "";
     const userId = localStorage.getItem("user_id") || "";
