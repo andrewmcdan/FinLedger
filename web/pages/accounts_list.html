@@ -16,7 +16,7 @@
         <div class="data-row">
             <p class="value">
                 <span class="span-label page-navigation">
-                   Click a column header to filter and sort the accounts list. Double click a cell to edit.
+                   Click a column header to filter and sort the accounts list.<% if (role === 'administrator') { %> Double click a cell to edit.<% } %>
                 </span>
                 <span class="actions page-navigation"><button class="button-small" id="clear_account_list_filters_button" title="Clear all filters applied to the accounts list.">Remove Filters</button> </span>
                 <span class="actions page-navigation">
@@ -69,14 +69,12 @@
     <section class="stack">
         <header class="page-header">
             <h1>System Management</h1>
-            <!-- This section to manage system-wide settings related to accounts. Other system-wide settings can be added to the dashboard page. -->
         </header>
         <div class="grid">
             <article class="card">
                 <h2>Account Categories & Subcategories</h2>
                 <p class="meta">Manage account categories and subcategories used for organizing accounts.</p>
                 <article>
-                    <!-- list out categories and subcategories here -->
                     <% allCategories.categories.forEach(function(category) { %>
                     <article class="data-row">
                         <p class="value"><span><%= category.name %></span></p>

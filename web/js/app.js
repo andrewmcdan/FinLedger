@@ -334,8 +334,6 @@ async function fetchPageMarkup(pageName) {
     if (response.ok) return response.text();
     console.log("Fetch page markup failed:", response.status);
     if (response.status === 401) {
-        // Unauthorized
-        // if the returned content is {"error": "Missing Authorization header"}, then redirect to not_logged_in.html
         let resJson = await response.clone().json();
         if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing X-User-Id header" || resJson.error == "Invalid or expired token") {
             window.location.hash = "#/not_logged_in";
@@ -575,13 +573,9 @@ const prevBtn = document.getElementById("prevBtn");
 const nextBtn = document.getElementById("nextBtn");
 const todayBtn = document.getElementById("todayBtn");
 
-// Build DOW header
 dowRow.innerHTML = dowNames.map((d) => `<div class="dow">${d}</div>`).join("");
-
-// Build month dropdown
 monthSelect.innerHTML = monthNames.map((m, i) => `<option value="${i}">${m}</option>`).join("");
 
-// Build year dropdown (range around current year)
 const now = new Date();
 const currentYear = now.getFullYear();
 const startYear = currentYear - 50;
@@ -593,34 +587,25 @@ for (let y = startYear; y <= endYear; y++) {
 }
 yearSelect.innerHTML = yearOptions;
 
-// Calendar state (first day of displayed month)
 let viewYear = currentYear;
-let viewMonth = now.getMonth(); // 0-11
+let viewMonth = now.getMonth();
 
 function isSameDate(a, b) {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
 function daysInMonth(year, monthIndex) {
-    // monthIndex is 0-11
     return new Date(year, monthIndex + 1, 0).getDate();
 }
 
 function renderCalendar() {
-    // Title
     monthTitle.textContent = `${monthNames[viewMonth]} ${viewYear}`;
     monthSelect.value = String(viewMonth);
     yearSelect.value = String(viewYear);
-
-    // Calculate layout
     const firstOfMonth = new Date(viewYear, viewMonth, 1);
-    const firstDow = firstOfMonth.getDay(); // 0=Sun..6=Sat
+    const firstDow = firstOfMonth.getDay();
     const dim = daysInMonth(viewYear, viewMonth);
-
-    // We will render a 6-week grid (42 cells) so the layout stays stable
     const totalCells = 42;
-
-    // Previous month info for leading muted days
     const prevMonth = (viewMonth + 11) % 12;
     const prevYear = viewMonth === 0 ? viewYear - 1 : viewYear;
     const dimPrev = daysInMonth(prevYear, prevMonth);
@@ -629,25 +614,22 @@ function renderCalendar() {
 
     let html = "";
     for (let cell = 0; cell < totalCells; cell++) {
-        const dayOffset = cell - firstDow; // 0 means the 1st of this month
+        const dayOffset = cell - firstDow;
         let displayNum;
         let muted = false;
         let dateObj;
 
         if (dayOffset < 0) {
-            // Leading days from prev month
             displayNum = dimPrev + dayOffset + 1;
             muted = true;
             dateObj = new Date(prevYear, prevMonth, displayNum);
         } else if (dayOffset >= dim) {
-            // Trailing days from next month
             displayNum = dayOffset - dim + 1;
             muted = true;
             const nextMonth = (viewMonth + 1) % 12;
             const nextYear = viewMonth === 11 ? viewYear + 1 : viewYear;
             dateObj = new Date(nextYear, nextMonth, displayNum);
         } else {
-            // Current month
             displayNum = dayOffset + 1;
             dateObj = new Date(viewYear, viewMonth, displayNum);
         }
@@ -664,40 +646,30 @@ function renderCalendar() {
     }
 
     daysGrid.innerHTML = html;
-
-    // Footer meta
     const first = new Date(viewYear, viewMonth, 1);
     const last = new Date(viewYear, viewMonth, dim);
     meta.textContent = `${first.toDateString()} to ${last.toDateString()}`;
 }
-
 function shiftMonth(delta) {
-    // delta can be +1 or -1 (or more)
     const newMonthIndex = viewMonth + delta;
     viewYear = viewYear + Math.floor(newMonthIndex / 12);
     viewMonth = ((newMonthIndex % 12) + 12) % 12;
     renderCalendar();
 }
-
 prevBtn.addEventListener("click", () => shiftMonth(-1));
 nextBtn.addEventListener("click", () => shiftMonth(1));
-
 todayBtn.addEventListener("click", () => {
     const t = new Date();
     viewYear = t.getFullYear();
     viewMonth = t.getMonth();
     renderCalendar();
 });
-
 monthSelect.addEventListener("change", (e) => {
     viewMonth = Number(e.target.value);
     renderCalendar();
 });
-
 yearSelect.addEventListener("change", (e) => {
     viewYear = Number(e.target.value);
     renderCalendar();
 });
-
-// Initial render
 renderCalendar();
