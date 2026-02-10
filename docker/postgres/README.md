@@ -7,6 +7,18 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 
 ## DB-Structure
 
+### public.account_audits
+- id: bigint
+- account_id: bigint
+- audit_timestamp: timestamp with time zone
+- previous_debit: numeric
+- previous_credit: numeric
+- previous_balance: numeric
+- new_debit: numeric
+- new_credit: numeric
+- new_balance: numeric
+- changed_by: bigint
+
 ### public.account_categories
 - id: integer
 - name: character varying
@@ -14,6 +26,15 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - created_at: timestamp without time zone
 - updated_at: timestamp without time zone
 - account_number_prefix: character varying
+
+### public.account_metadata_edits
+- id: bigint
+- account_id: bigint
+- edit_timestamp: timestamp with time zone
+- field_name: text
+- previous_value: text
+- new_value: text
+- changed_by: bigint
 
 ### public.account_subcategories
 - id: integer

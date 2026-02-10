@@ -86,6 +86,7 @@ router.post("/update-account-field", async (req, res) => {
         return res.status(403).json({ error: "Forbidden. Only Admins can update accounts." });
     }
     try {
+        req.body.user_id = userId;
         log("info", "Updating account field via API", { userId, accountId: req.body?.account_id, field: req.body?.field }, utilities.getCallerInfo(), userId);
         const result = await accountsController.updateAccountField(req.body);
         if (result.success) {
@@ -212,7 +213,7 @@ router.post("/set-account-status", async (req, res) => {
     const { account_id, is_active } = req.body;
     try {
         log("info", "Set account status request received", { userId, account_id, status: is_active ? "active" : "inactive" }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.setAccountStatus(account_id, is_active?"active":"inactive");
+        const result = await accountsController.setAccountStatus(account_id, is_active?"active":"inactive", userId);
         log("info", "Set account status request completed", { userId, account_id, status: is_active ? "active" : "inactive" }, utilities.getCallerInfo(), userId);
         res.json(result);
     } catch (error) {

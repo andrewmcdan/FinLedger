@@ -286,7 +286,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                     continue;
                 }
                 const handleClick = () => {
-                    cell.removeEventListener("click", handleClick);
+                    cell.removeEventListener("dblclick", handleClick);
                     const rawValue = (() => {
                         switch (column) {
                             case "account_name":
@@ -361,7 +361,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                         if (String(newValue ?? "") === String(rawValue ?? "")) {
                             cell.textContent = displayValue;
                             formatLongTextCell(cell);
-                            cell.addEventListener("click", handleClick);
+                            cell.addEventListener("dblclick", handleClick);
                             return;
                         }
                         const payload = {
@@ -456,7 +456,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                             cell.textContent = displayValue;
                         } finally {
                             formatLongTextCell(cell);
-                            cell.addEventListener("click", handleClick);
+                            cell.addEventListener("dblclick", handleClick);
                         }
                     };
                     inputEl.addEventListener("blur", commitChange);
@@ -470,7 +470,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                         event.stopPropagation();
                     });
                 };
-                cell.addEventListener("click", handleClick);
+                cell.addEventListener("dblclick", handleClick);
             }
         }
     }
@@ -655,6 +655,36 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             auditButton.textContent = "Audit";
             actionCell.appendChild(auditButton);
             tr.appendChild(actionCell);
+            let rowClickTimeout = null;
+            const openLedgerForAccount = () => {
+                const accountId = account.id;
+                const url = new URL(window.location.origin + `/#/transactions?account_id=${accountId}`);
+                window.location.href = url.toString();
+            };
+            const isInteractiveTarget = (target) => {
+                if (!target || typeof target.closest !== "function") {
+                    return false;
+                }
+                return Boolean(target.closest("button, a, input, select, textarea, label, [data-prevent-row-click]"));
+            };
+            tr.addEventListener("click", (event) => {
+                if (event.defaultPrevented || event.detail > 1 || isInteractiveTarget(event.target)) {
+                    return;
+                }
+                if (rowClickTimeout) {
+                    clearTimeout(rowClickTimeout);
+                }
+                rowClickTimeout = setTimeout(() => {
+                    rowClickTimeout = null;
+                    openLedgerForAccount();
+                }, 250);
+            });
+            tr.addEventListener("dblclick", () => {
+                if (rowClickTimeout) {
+                    clearTimeout(rowClickTimeout);
+                    rowClickTimeout = null;
+                }
+            });
             accountsTableBody.appendChild(tr);
         }
         await formatCurrencyEls();

@@ -332,11 +332,15 @@ async function listAccountCategories() {
     return result;
 }
 
-async function updateAccountField({ account_id, field, value }) {
-    log("info", "Updating account field", { account_id, field }, getCallerInfo());
+async function updateAccountField({ account_id, field, value, user_id }) {
+    log("info", "Updating account field", { account_id, field, user_id }, getCallerInfo());
     sanitizeInput(account_id);
     sanitizeInput(field);
     sanitizeInput(value);
+    if(!user_id) {
+        log("error", "Missing user ID for account update", { account_id, field }, getCallerInfo());
+        throw new Error("User ID is required for updating account fields.");
+    }
     const allowedFields = [
         "account_name",
         "account_number",
@@ -420,7 +424,7 @@ async function updateAccountField({ account_id, field, value }) {
 
     let query = `UPDATE accounts SET ${field} = $1 WHERE id = $2 RETURNING *`;
     const params = [resolvedValue, account_id];
-    const result = await db.query(query, params);
+    const result = await db.query(query, params, user_id);
     if (result.rows.length === 0) {
         log("warn", "Account not found for update", { account_id, field }, getCallerInfo());
         return {success: false, message: `Account with ID ${account_id} not found.`};
@@ -429,7 +433,7 @@ async function updateAccountField({ account_id, field, value }) {
     return {success: true, message: "Account updated successfully", account: result.rows[0]};
 };
 
-async function deactivateAccount(accountId) {
+async function deactivateAccount(accountId, userId) {
     if (!await isValidAccountId(accountId)) {
         log("warn", "Attempt to deactivate non-existent account", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
@@ -443,7 +447,7 @@ async function deactivateAccount(accountId) {
     }
     const query = `UPDATE accounts SET status = $1 WHERE id = $2 RETURNING *`;
     const params = ['inactive', accountId];
-    const result = await db.query(query, params);
+    const result = await db.query(query, params, userId);
     if (result.rows.length === 0) {
         log("warn", "Account not found for deactivation", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
@@ -452,14 +456,14 @@ async function deactivateAccount(accountId) {
     return result.rows[0];
 }
 
-async function activateAccount(accountId) {
+async function activateAccount(accountId, userId) {
     if (!await isValidAccountId(accountId)) {
         log("warn", "Attempt to activate non-existent account", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
     }
     const query = `UPDATE accounts SET status = $1 WHERE id = $2 RETURNING *`;
     const params = ['active', accountId];
-    const result = await db.query(query, params);
+    const result = await db.query(query, params, userId);
     if (result.rows.length === 0) {
         log("warn", "Account not found for activation", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
@@ -475,8 +479,8 @@ async function isValidAccountId(accountId) {
     return result.rows.length > 0;
 }
 
-async function setAccountStatus(accountId, status) {
-    log("info", "Setting account status", { accountId, status }, getCallerInfo());
+async function setAccountStatus(accountId, status, userId) {
+    log("info", "Setting account status", { accountId, status, userId }, getCallerInfo());
     sanitizeInput(status);
     sanitizeInput(accountId);
     if (!await isValidAccountId(accountId)) {
@@ -484,9 +488,9 @@ async function setAccountStatus(accountId, status) {
         throw new Error(`Account with ID ${accountId} not found.`);
     }
     if (status === 'active') {
-        return activateAccount(accountId);
+        return activateAccount(accountId, userId);
     } else if (status === 'inactive') {
-        return deactivateAccount(accountId);
+        return deactivateAccount(accountId, userId);
     } else {
         log("error", "Invalid account status", { accountId, status }, getCallerInfo());
         throw new Error(`Invalid status: ${status}`);
