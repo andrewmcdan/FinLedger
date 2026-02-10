@@ -155,7 +155,9 @@ const popupCalendarContainer = document.getElementById("popup_calendar_container
 if (popupCalendarContainer) {
     const calendarButton = document.getElementById("calendar_button");
     if (calendarButton) {
-        calendarButton.addEventListener("click", () => {
+        calendarButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
             popupCalendarContainer.classList.toggle("hidden");
             console.log("Toggled calendar visibility");
         });
@@ -419,145 +421,143 @@ import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
 window.addEventListener("hashchange", updateLoginLogoutButton);
 
+const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const dowNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const dowNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const monthTitle = document.getElementById("monthTitle");
+const dowRow = document.getElementById("dowRow");
+const daysGrid = document.getElementById("daysGrid");
+const monthSelect = document.getElementById("monthSelect");
+const yearSelect = document.getElementById("yearSelect");
+const meta = document.getElementById("meta");
 
-    const monthTitle = document.getElementById("monthTitle");
-    const dowRow = document.getElementById("dowRow");
-    const daysGrid = document.getElementById("daysGrid");
-    const monthSelect = document.getElementById("monthSelect");
-    const yearSelect = document.getElementById("yearSelect");
-    const meta = document.getElementById("meta");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const todayBtn = document.getElementById("todayBtn");
 
-    const prevBtn = document.getElementById("prevBtn");
-    const nextBtn = document.getElementById("nextBtn");
-    const todayBtn = document.getElementById("todayBtn");
+// Build DOW header
+dowRow.innerHTML = dowNames.map((d) => `<div class="dow">${d}</div>`).join("");
 
-    // Build DOW header
-    dowRow.innerHTML = dowNames.map((d) => `<div class="dow">${d}</div>`).join("");
+// Build month dropdown
+monthSelect.innerHTML = monthNames.map((m, i) => `<option value="${i}">${m}</option>`).join("");
 
-    // Build month dropdown
-    monthSelect.innerHTML = monthNames.map((m, i) => `<option value="${i}">${m}</option>`).join("");
+// Build year dropdown (range around current year)
+const now = new Date();
+const currentYear = now.getFullYear();
+const startYear = currentYear - 50;
+const endYear = currentYear + 50;
 
-    // Build year dropdown (range around current year)
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const startYear = currentYear - 50;
-    const endYear = currentYear + 50;
+let yearOptions = "";
+for (let y = startYear; y <= endYear; y++) {
+    yearOptions += `<option value="${y}">${y}</option>`;
+}
+yearSelect.innerHTML = yearOptions;
 
-    let yearOptions = "";
-    for (let y = startYear; y <= endYear; y++) {
-        yearOptions += `<option value="${y}">${y}</option>`;
-    }
-    yearSelect.innerHTML = yearOptions;
+// Calendar state (first day of displayed month)
+let viewYear = currentYear;
+let viewMonth = now.getMonth(); // 0-11
 
-    // Calendar state (first day of displayed month)
-    let viewYear = currentYear;
-    let viewMonth = now.getMonth(); // 0-11
+function isSameDate(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
 
-    function isSameDate(a, b) {
-        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-    }
+function daysInMonth(year, monthIndex) {
+    // monthIndex is 0-11
+    return new Date(year, monthIndex + 1, 0).getDate();
+}
 
-    function daysInMonth(year, monthIndex) {
-        // monthIndex is 0-11
-        return new Date(year, monthIndex + 1, 0).getDate();
-    }
+function renderCalendar() {
+    // Title
+    monthTitle.textContent = `${monthNames[viewMonth]} ${viewYear}`;
+    monthSelect.value = String(viewMonth);
+    yearSelect.value = String(viewYear);
 
-    function renderCalendar() {
-        // Title
-        monthTitle.textContent = `${monthNames[viewMonth]} ${viewYear}`;
-        monthSelect.value = String(viewMonth);
-        yearSelect.value = String(viewYear);
+    // Calculate layout
+    const firstOfMonth = new Date(viewYear, viewMonth, 1);
+    const firstDow = firstOfMonth.getDay(); // 0=Sun..6=Sat
+    const dim = daysInMonth(viewYear, viewMonth);
 
-        // Calculate layout
-        const firstOfMonth = new Date(viewYear, viewMonth, 1);
-        const firstDow = firstOfMonth.getDay(); // 0=Sun..6=Sat
-        const dim = daysInMonth(viewYear, viewMonth);
+    // We will render a 6-week grid (42 cells) so the layout stays stable
+    const totalCells = 42;
 
-        // We will render a 6-week grid (42 cells) so the layout stays stable
-        const totalCells = 42;
+    // Previous month info for leading muted days
+    const prevMonth = (viewMonth + 11) % 12;
+    const prevYear = viewMonth === 0 ? viewYear - 1 : viewYear;
+    const dimPrev = daysInMonth(prevYear, prevMonth);
 
-        // Previous month info for leading muted days
-        const prevMonth = (viewMonth + 11) % 12;
-        const prevYear = viewMonth === 0 ? viewYear - 1 : viewYear;
-        const dimPrev = daysInMonth(prevYear, prevMonth);
+    const today = new Date();
 
-        const today = new Date();
+    let html = "";
+    for (let cell = 0; cell < totalCells; cell++) {
+        const dayOffset = cell - firstDow; // 0 means the 1st of this month
+        let displayNum;
+        let muted = false;
+        let dateObj;
 
-        let html = "";
-        for (let cell = 0; cell < totalCells; cell++) {
-            const dayOffset = cell - firstDow; // 0 means the 1st of this month
-            let displayNum;
-            let muted = false;
-            let dateObj;
+        if (dayOffset < 0) {
+            // Leading days from prev month
+            displayNum = dimPrev + dayOffset + 1;
+            muted = true;
+            dateObj = new Date(prevYear, prevMonth, displayNum);
+        } else if (dayOffset >= dim) {
+            // Trailing days from next month
+            displayNum = dayOffset - dim + 1;
+            muted = true;
+            const nextMonth = (viewMonth + 1) % 12;
+            const nextYear = viewMonth === 11 ? viewYear + 1 : viewYear;
+            dateObj = new Date(nextYear, nextMonth, displayNum);
+        } else {
+            // Current month
+            displayNum = dayOffset + 1;
+            dateObj = new Date(viewYear, viewMonth, displayNum);
+        }
 
-            if (dayOffset < 0) {
-                // Leading days from prev month
-                displayNum = dimPrev + dayOffset + 1;
-                muted = true;
-                dateObj = new Date(prevYear, prevMonth, displayNum);
-            } else if (dayOffset >= dim) {
-                // Trailing days from next month
-                displayNum = dayOffset - dim + 1;
-                muted = true;
-                const nextMonth = (viewMonth + 1) % 12;
-                const nextYear = viewMonth === 11 ? viewYear + 1 : viewYear;
-                dateObj = new Date(nextYear, nextMonth, displayNum);
-            } else {
-                // Current month
-                displayNum = dayOffset + 1;
-                dateObj = new Date(viewYear, viewMonth, displayNum);
-            }
+        const classes = ["cell"];
+        if (muted) classes.push("muted");
+        if (isSameDate(dateObj, today)) classes.push("today");
 
-            const classes = ["cell"];
-            if (muted) classes.push("muted");
-            if (isSameDate(dateObj, today)) classes.push("today");
-
-            html += `
+        html += `
             <div class="${classes.join(" ")}" role="gridcell" aria-label="${dateObj.toDateString()}">
               <div class="day-number">${displayNum}</div>
             </div>
           `;
-        }
-
-        daysGrid.innerHTML = html;
-
-        // Footer meta
-        const first = new Date(viewYear, viewMonth, 1);
-        const last = new Date(viewYear, viewMonth, dim);
-        meta.textContent = `${first.toDateString()} to ${last.toDateString()}`;
     }
 
-    function shiftMonth(delta) {
-        // delta can be +1 or -1 (or more)
-        const newMonthIndex = viewMonth + delta;
-        viewYear = viewYear + Math.floor(newMonthIndex / 12);
-        viewMonth = ((newMonthIndex % 12) + 12) % 12;
-        renderCalendar();
-    }
+    daysGrid.innerHTML = html;
 
-    prevBtn.addEventListener("click", () => shiftMonth(-1));
-    nextBtn.addEventListener("click", () => shiftMonth(1));
+    // Footer meta
+    const first = new Date(viewYear, viewMonth, 1);
+    const last = new Date(viewYear, viewMonth, dim);
+    meta.textContent = `${first.toDateString()} to ${last.toDateString()}`;
+}
 
-    todayBtn.addEventListener("click", () => {
-        const t = new Date();
-        viewYear = t.getFullYear();
-        viewMonth = t.getMonth();
-        renderCalendar();
-    });
-
-    monthSelect.addEventListener("change", (e) => {
-        viewMonth = Number(e.target.value);
-        renderCalendar();
-    });
-
-    yearSelect.addEventListener("change", (e) => {
-        viewYear = Number(e.target.value);
-        renderCalendar();
-    });
-
-    // Initial render
+function shiftMonth(delta) {
+    // delta can be +1 or -1 (or more)
+    const newMonthIndex = viewMonth + delta;
+    viewYear = viewYear + Math.floor(newMonthIndex / 12);
+    viewMonth = ((newMonthIndex % 12) + 12) % 12;
     renderCalendar();
+}
 
+prevBtn.addEventListener("click", () => shiftMonth(-1));
+nextBtn.addEventListener("click", () => shiftMonth(1));
+
+todayBtn.addEventListener("click", () => {
+    const t = new Date();
+    viewYear = t.getFullYear();
+    viewMonth = t.getMonth();
+    renderCalendar();
+});
+
+monthSelect.addEventListener("change", (e) => {
+    viewMonth = Number(e.target.value);
+    renderCalendar();
+});
+
+yearSelect.addEventListener("change", (e) => {
+    viewYear = Number(e.target.value);
+    renderCalendar();
+});
+
+// Initial render
+renderCalendar();
