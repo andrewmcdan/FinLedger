@@ -42,10 +42,7 @@ app.get("/pages/dashboard.html", async (req, res, next) => {
 app.get("/pages/accounts_list.html", async (req, res, next) => {
     const user = await usersController.getUserById(req.user.id);
     const role = user ? user.role : "none";
-    let allUsers = [];
-    if(role == "administrator"){
-        allUsers = await usersController.listUsers();;
-    }
+    const allUsers = await usersController.listUsers();
     try {
         logger.log("debug", "Rendering accounts list", { userId: req.user?.id, role }, getCallerInfo(), req.user?.id);
         const result = await accountsController.listAccounts(req.user.id, req.user.token);

@@ -17,11 +17,23 @@ const errorFormatter = (error) => {
     return errors.length > 0 ? errors[errors.length - 1] : "An unknown error occurred.";
 };
 
+const authHelpers = await loadFetchWithAuth();
+const { fetchWithAuth } = authHelpers;
+const domHelpers = await loadDomHelpers();
+const { createCell, createInput, createSelect, createTextarea } = domHelpers;
+
+const getIsAdmin = async () => {
+    const res = await fetchWithAuth("/api/auth/status");
+    if (!res.ok) {
+        return false;
+    }
+    const data = await res.json();
+    return data.is_admin === true;
+};
+
 export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay }) {
-    const authHelpers = await loadFetchWithAuth();
-    const { fetchWithAuth } = authHelpers;
-    const domHelpers = await loadDomHelpers();
-    const { createCell, createInput, createSelect, createTextarea } = domHelpers;
+    const isAdmin = await getIsAdmin();
+
     const add_account_button = document.getElementById("add_account_button");
     const account_modal = document.getElementById("account_modal");
     const close_account_modal_button = document.getElementById("close_account_modal");
@@ -38,8 +50,8 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             account_modal.classList.remove("is-visible");
             account_modal.setAttribute("aria-hidden", "true");
         });
+        close_account_modal_button.style.cursor = "pointer";
     }
-    close_account_modal_button.style.cursor = "pointer";
 
     if (save_account_button) {
         save_account_button.addEventListener("click", async (event) => {
@@ -242,7 +254,6 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             .map((option) => ({ value: String(option.value), label: option.textContent || "" }));
     };
 
-
     const formatLongTextCell = (cell) => {
         if (!cell || !cell.hasAttribute("data-long-text")) {
             return;
@@ -273,7 +284,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     };
 
     function setupAccountEditing(accounts) {
-        if (!Array.isArray(accounts) || accounts.length === 0) {
+        if (!Array.isArray(accounts) || accounts.length === 0 || !isAdmin) {
             return;
         }
         const ownerOptions = getOwnerOptions();
@@ -618,10 +629,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             updateTotalPages();
         }
     };
+
     const renderAccounts = async (accounts) => {
         if (!accountsTableBody) {
             return;
         }
+
         accountsTableBody.replaceChildren();
         for (const account of accounts) {
             const accountOwner = userNameById.get(String(account.user_id)) || "";
@@ -679,12 +692,14 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                     openLedgerForAccount();
                 }, 250);
             });
-            tr.addEventListener("dblclick", () => {
-                if (rowClickTimeout) {
-                    clearTimeout(rowClickTimeout);
-                    rowClickTimeout = null;
-                }
-            });
+            if (!isAdmin) {
+                tr.addEventListener("dblclick", () => {
+                    if (rowClickTimeout) {
+                        clearTimeout(rowClickTimeout);
+                        rowClickTimeout = null;
+                    }
+                });
+            }
             accountsTableBody.appendChild(tr);
         }
         await formatCurrencyEls();
@@ -875,8 +890,8 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             addCategoryModal.classList.remove("is-visible");
             addCategoryModal.setAttribute("aria-hidden", "true");
         });
+        closeCategoryModalButton.style.cursor = "pointer";
     }
-    closeCategoryModalButton.style.cursor = "pointer";
 
     if (addSubcategoryButton && addCategoryModal) {
         addSubcategoryButton.addEventListener("click", () => {
@@ -985,8 +1000,8 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             deleteCategoryModal.classList.remove("is-visible");
             deleteCategoryModal.setAttribute("aria-hidden", "true");
         });
+        closeDeleteCategoryModalButton.style.cursor = "pointer";
     }
-    closeDeleteCategoryModalButton.style.cursor = "pointer";
 
     const confirmDeleteCategoryButton = document.getElementById("confirm_delete_category_button");
     if (confirmDeleteCategoryButton) {
@@ -1311,10 +1326,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         activeHeaderSortable = Boolean(sortable);
         const config = getFilterConfig(field, label || "");
         const currentFilter = activeFilter && activeFilter.field === field ? activeFilter : null;
-        const currentValue =
-            config.inputType === "range"
-                ? { min: currentFilter?.min ?? "", max: currentFilter?.max ?? "" }
-                : currentFilter?.value ?? "";
+        const currentValue = config.inputType === "range" ? { min: currentFilter?.min ?? "", max: currentFilter?.max ?? "" } : (currentFilter?.value ?? "");
         filterLabelEl.textContent = `${config.label || label || "Filter"}:`;
         const labelForId = config.inputType === "range" ? filterMinInputId : filterInputId;
         filterLabelEl.setAttribute("for", labelForId);

@@ -1,5 +1,5 @@
 const express = require("express");
-const { getUserLoggedInStatus, logoutInactiveUsers } = require("../controllers/users.js");
+const { getUserLoggedInStatus, isAdmin } = require("../controllers/users.js");
 const router = express.Router();
 const db = require("../db/db.js");
 const jwt = require("jsonwebtoken");
@@ -27,8 +27,9 @@ router.get("/status", async (req, res) => {
     }
     req.user = { token: token, id: user_id };
     const loggedIn = await getUserLoggedInStatus(user_id, token);
-    log("trace", "Auth status request processed", { user_id, loggedIn }, utilities.getCallerInfo(), user_id);
-    res.json({ ok: true, loggedIn: loggedIn });
+    const isAdminStatus = await isAdmin(user_id, token);
+    log("trace", "Auth status request processed", { user_id, loggedIn, isAdmin: isAdminStatus }, utilities.getCallerInfo(), user_id);
+    res.json({ ok: true, loggedIn: loggedIn, isAdmin: isAdminStatus });
 });
 
 router.post("/login", async (req, res) => {

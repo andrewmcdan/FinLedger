@@ -173,10 +173,10 @@ async function listAccounts(userId, token, offset = 0, limit = 25, options = {})
     const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
-    if (!isAdminUser && !isManagerUser) {
-        params.push(userId);
-        whereClauses.push(`accounts.user_id = $${params.length}`);
-    }
+    // if (!isAdminUser && !isManagerUser) {
+    //     params.push(userId);
+    //     whereClauses.push(`accounts.user_id = $${params.length}`);
+    // }
     const filterClauses = buildAccountFilterClauses(
         {
             filterField: options?.filterField,
@@ -211,10 +211,10 @@ async function getAccountCounts(userId, token, options = {}) {
     const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
-    if (!isAdminUser && !isManagerUser) {
-        params.push(userId);
-        whereClauses.push(`accounts.user_id = $${params.length}`);
-    }
+    // if (!isAdminUser && !isManagerUser) {
+    //     params.push(userId);
+    //     whereClauses.push(`accounts.user_id = $${params.length}`);
+    // }
     const filterClauses = buildAccountFilterClauses(
         {
             filterField: options?.filterField,
