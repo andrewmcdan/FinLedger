@@ -20,11 +20,11 @@ export default function initLogout() {
                 if (!response.ok) {
                     console.error("Logout request failed:", response.statusText);
                 } else {
-                    console.log("Logout successful");
                     localStorage.removeItem("user_id");
                     localStorage.removeItem("auth_token");
                     localStorage.removeItem("username");
                     localStorage.removeItem("must_change_password");
+                    localStorage.removeItem("full_name");
                     // Redirect to the login page
                     window.location.href = "/#/login";
                     // reload the page to clear any cached data

@@ -77,6 +77,26 @@ if (brandLogo) {
     brandLogo.style.cursor = "pointer";
 }
 
+function setUpHeaderUsername(){
+    const headerUsername = document.querySelector("[data-header-username]");
+    const headerUsernameWrapper = document.querySelector("[data-header-user-info]");
+    if(headerUsername && headerUsernameWrapper) {
+        const username = localStorage.getItem("username");
+        const fullName = localStorage.getItem("full_name");
+        let displayName = null;
+        if(fullName && fullName !== "undefined undefined") {
+            displayName = fullName;
+        }else if(username) {
+            displayName = username;
+        }
+        if(displayName) {
+            headerUsername.textContent = `You are logged in as ${displayName}`;
+        }else{
+            headerUsername.textContent = "You are not logged in";
+        }
+    }
+}
+
 function setupProfileMenu() {
     const menuWrapper = document.querySelector("[data-profile-menu]");
     if (!menuWrapper) {
@@ -128,7 +148,7 @@ function setupProfileMenu() {
         if (event.key === "Escape") {
             closeMenu();
         }
-    });
+    });    
 }
 
 function getRouteFromHash() {
@@ -311,20 +331,12 @@ async function renderRoute() {
         }
 
         const profileNameSpan = document.querySelector("[data-profile-name]");
-        if (profileNameSpan && !profileMenuInitialized) {
+        if (profileNameSpan) {
             const username = localStorage.getItem("username") || "None";
             profileNameSpan.textContent = "Profile: " + username;
-            if(username == "None") {
-                // disable the profile hover activation
-                const menuWrapper = document.querySelector("[data-profile-menu]");
-                if (menuWrapper) {
-                    menuWrapper.style.pointerEvents = "none";
-                }
-            }else{
-                const menuWrapper = document.querySelector("[data-profile-menu]");
-                if (menuWrapper) {
-                    menuWrapper.style.pointerEvents = "auto";
-                }
+            const menuWrapper = document.querySelector("[data-profile-menu]");
+            if (menuWrapper) {
+                menuWrapper.style.pointerEvents = username === "None" ? "none" : "auto";
             }
         }
 
@@ -382,10 +394,10 @@ async function renderRoute() {
 window.addEventListener("hashchange", renderRoute);
 window.addEventListener("DOMContentLoaded", renderRoute);
 window.addEventListener("DOMContentLoaded", setupProfileMenu);
+window.addEventListener("DOMContentLoaded", setUpHeaderUsername);
+window.addEventListener("hashchange", setUpHeaderUsername);
 
 import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 
 window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
 window.addEventListener("hashchange", updateLoginLogoutButton);
-
-
