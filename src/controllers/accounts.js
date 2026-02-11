@@ -13,6 +13,123 @@ function isNumericId(value) {
     return false;
 }
 
+const statementTypeMap = {
+    "Income Statement": "IS",
+    "Balance Sheet": "BS",
+    "Retained Earnings Statement": "RE",
+    IS: "IS",
+    BS: "BS",
+    RE: "RE",
+};
+
+const normalizeStatementTypeFilter = (rawValue) => {
+    const trimmed = String(rawValue ?? "").trim();
+    if (!trimmed) {
+        return "";
+    }
+    const upper = trimmed.toUpperCase();
+    return statementTypeMap[trimmed] || statementTypeMap[upper] || trimmed;
+};
+
+const normalizeStatusFilter = (rawValue) => {
+    const normalized = String(rawValue ?? "").trim().toLowerCase();
+    if (!normalized) {
+        return "";
+    }
+    return ["active", "inactive"].includes(normalized) ? normalized : "";
+};
+
+const normalizeNormalSideFilter = (rawValue) => {
+    const normalized = String(rawValue ?? "").trim().toLowerCase();
+    if (!normalized) {
+        return "";
+    }
+    return ["debit", "credit"].includes(normalized) ? normalized : "";
+};
+
+const FILTER_FIELD_MAP = {
+    account_number: { column: "accounts.account_number::text", type: "contains" },
+    account_name: { column: "accounts.account_name", type: "contains" },
+    user_id: { column: "accounts.user_id", type: "equals" },
+    status: { column: "accounts.status", type: "equals", normalize: normalizeStatusFilter },
+    account_type: { column: "accounts.normal_side", type: "equals", normalize: normalizeNormalSideFilter },
+    account_category_id: { column: "accounts.account_category_id", type: "equals" },
+    account_subcategory_id: { column: "accounts.account_subcategory_id", type: "equals" },
+    statement_type: { column: "accounts.statement_type", type: "equals", normalize: normalizeStatementTypeFilter },
+    balance: { column: "accounts.balance", type: "range" },
+    account_description: { column: "accounts.account_description", type: "contains" },
+    comment: { column: "accounts.comment", type: "contains" },
+};
+
+const SORT_FIELD_MAP = {
+    account_number: { column: "accounts.account_number" },
+    account_name: { column: "accounts.account_name" },
+    user_id: { column: "COALESCE(users.username, '')", requiresUserJoin: true },
+    status: { column: "accounts.status" },
+    account_type: { column: "accounts.normal_side" },
+    account_category_id: { column: "accounts.account_category_id" },
+    account_subcategory_id: { column: "accounts.account_subcategory_id" },
+    statement_type: { column: "accounts.statement_type" },
+    balance: { column: "accounts.balance" },
+};
+
+const normalizeQueryValue = (value) => (Array.isArray(value) ? value[0] : value);
+
+const buildAccountFilterClauses = ({ filterField, filterValue, filterMin, filterMax }, params) => {
+    const clauses = [];
+    const normalizedField = normalizeQueryValue(filterField);
+    const config = FILTER_FIELD_MAP[normalizedField];
+    if (!config) {
+        return clauses;
+    }
+    if (config.type === "contains") {
+        const value = String(normalizeQueryValue(filterValue) ?? "").trim();
+        if (!value) {
+            return clauses;
+        }
+        params.push(`%${value}%`);
+        clauses.push(`${config.column} ILIKE $${params.length}`);
+        return clauses;
+    }
+    if (config.type === "equals") {
+        const rawValue = normalizeQueryValue(filterValue);
+        const normalized = config.normalize ? config.normalize(rawValue) : String(rawValue ?? "").trim();
+        if (!normalized) {
+            return clauses;
+        }
+        params.push(normalized);
+        clauses.push(`${config.column} = $${params.length}`);
+        return clauses;
+    }
+    if (config.type === "range") {
+        const minValue = Number.parseFloat(normalizeQueryValue(filterMin));
+        const maxValue = Number.parseFloat(normalizeQueryValue(filterMax));
+        if (Number.isFinite(minValue)) {
+            params.push(minValue);
+            clauses.push(`${config.column} >= $${params.length}`);
+        }
+        if (Number.isFinite(maxValue)) {
+            params.push(maxValue);
+            clauses.push(`${config.column} <= $${params.length}`);
+        }
+    }
+    return clauses;
+};
+
+const resolveAccountSort = (sortField, sortDirection) => {
+    const normalizedField = normalizeQueryValue(sortField);
+    const normalizedDirection = normalizeQueryValue(sortDirection);
+    const config = SORT_FIELD_MAP[normalizedField];
+    if (!config) {
+        return { orderBy: "accounts.account_number ASC", requiresUserJoin: false };
+    }
+    const direction = String(normalizedDirection ?? "").toLowerCase() === "desc" ? "DESC" : "ASC";
+    return {
+        orderBy: `${config.column} ${direction}, accounts.account_number ASC`,
+        requiresUserJoin: Boolean(config.requiresUserJoin),
+    };
+};
+
 async function resolveCategory(client, accountCategory) {
     log("debug", "Resolving account category", { accountCategory }, getCallerInfo());
     const isId = isNumericId(accountCategory);
@@ -48,19 +165,37 @@ async function resolveSubcategory(client, accountSubcategory, categoryId) {
     return subcategory;
 }
 
-async function listAccounts(userId, token, offset = 0, limit = 25) {
-    log("debug", "Listing accounts", { userId, offset, limit }, getCallerInfo(), userId);
+async function listAccounts(userId, token, offset = 0, limit = 25, options = {}) {
+    log("debug", "Listing accounts", { userId, offset, limit, options }, getCallerInfo(), userId);
     sanitizeInput(offset);
     sanitizeInput(limit);
-    let query = "SELECT * FROM accounts";
     const params = [];
+    const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
-    if (!isAdminUser && !isManagerUser) {
-        query += " WHERE user_id = $1";
-        params.push(userId);
+    // if (!isAdminUser && !isManagerUser) {
+    //     params.push(userId);
+    //     whereClauses.push(`accounts.user_id = $${params.length}`);
+    // }
+    const filterClauses = buildAccountFilterClauses(
+        {
+            filterField: options?.filterField,
+            filterValue: options?.filterValue,
+            filterMin: options?.filterMin,
+            filterMax: options?.filterMax,
+        },
+        params,
+    );
+    whereClauses.push(...filterClauses);
+    const sortConfig = resolveAccountSort(options?.sortField, options?.sortDirection);
+    let query = "SELECT accounts.* FROM accounts";
+    if (sortConfig.requiresUserJoin) {
+        query += " LEFT JOIN users ON users.id = accounts.user_id";
     }
-    query += " ORDER BY account_number ASC LIMIT $"+(params.length+1)+" OFFSET $"+(params.length+2);
+    if (whereClauses.length > 0) {
+        query += ` WHERE ${whereClauses.join(" AND ")}`;
+    }
+    query += ` ORDER BY ${sortConfig.orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit);
     params.push(offset);
     const result = await db.query(query, params);
@@ -68,17 +203,31 @@ async function listAccounts(userId, token, offset = 0, limit = 25) {
     return result;
 }
 
-async function getAccountCounts(userId, token) {
-    log("debug", "Fetching account counts", { userId }, getCallerInfo(), userId);
+async function getAccountCounts(userId, token, options = {}) {
+    log("debug", "Fetching account counts", { userId, options }, getCallerInfo(), userId);
     sanitizeInput(userId);
     sanitizeInput(token);
-    let query = "SELECT COUNT(*) AS total_accounts FROM accounts";
     const params = [];
+    const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
-    if (!isAdminUser && !isManagerUser) {
-        query += " WHERE user_id = $1";
-        params.push(userId);
+    // if (!isAdminUser && !isManagerUser) {
+    //     params.push(userId);
+    //     whereClauses.push(`accounts.user_id = $${params.length}`);
+    // }
+    const filterClauses = buildAccountFilterClauses(
+        {
+            filterField: options?.filterField,
+            filterValue: options?.filterValue,
+            filterMin: options?.filterMin,
+            filterMax: options?.filterMax,
+        },
+        params,
+    );
+    whereClauses.push(...filterClauses);
+    let query = "SELECT COUNT(*) AS total_accounts FROM accounts";
+    if (whereClauses.length > 0) {
+        query += ` WHERE ${whereClauses.join(" AND ")}`;
     }
     const result = await db.query(query, params);
     log("debug", "Account counts fetched", { userId, total: result.rows[0]?.total_accounts, scoped: !(isAdminUser || isManagerUser) }, getCallerInfo(), userId);
@@ -183,11 +332,15 @@ async function listAccountCategories() {
     return result;
 }
 
-async function updateAccountField({ account_id, field, value }) {
-    log("info", "Updating account field", { account_id, field }, getCallerInfo());
+async function updateAccountField({ account_id, field, value, user_id }) {
+    log("info", "Updating account field", { account_id, field, user_id }, getCallerInfo());
     sanitizeInput(account_id);
     sanitizeInput(field);
     sanitizeInput(value);
+    if(!user_id) {
+        log("error", "Missing user ID for account update", { account_id, field }, getCallerInfo());
+        throw new Error("User ID is required for updating account fields.");
+    }
     const allowedFields = [
         "account_name",
         "account_number",
@@ -271,7 +424,7 @@ async function updateAccountField({ account_id, field, value }) {
 
     let query = `UPDATE accounts SET ${field} = $1 WHERE id = $2 RETURNING *`;
     const params = [resolvedValue, account_id];
-    const result = await db.query(query, params);
+    const result = await db.query(query, params, user_id);
     if (result.rows.length === 0) {
         log("warn", "Account not found for update", { account_id, field }, getCallerInfo());
         return {success: false, message: `Account with ID ${account_id} not found.`};
@@ -280,7 +433,7 @@ async function updateAccountField({ account_id, field, value }) {
     return {success: true, message: "Account updated successfully", account: result.rows[0]};
 };
 
-async function deactivateAccount(accountId) {
+async function deactivateAccount(accountId, userId) {
     if (!await isValidAccountId(accountId)) {
         log("warn", "Attempt to deactivate non-existent account", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
@@ -294,7 +447,7 @@ async function deactivateAccount(accountId) {
     }
     const query = `UPDATE accounts SET status = $1 WHERE id = $2 RETURNING *`;
     const params = ['inactive', accountId];
-    const result = await db.query(query, params);
+    const result = await db.query(query, params, userId);
     if (result.rows.length === 0) {
         log("warn", "Account not found for deactivation", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
@@ -303,14 +456,14 @@ async function deactivateAccount(accountId) {
     return result.rows[0];
 }
 
-async function activateAccount(accountId) {
+async function activateAccount(accountId, userId) {
     if (!await isValidAccountId(accountId)) {
         log("warn", "Attempt to activate non-existent account", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
     }
     const query = `UPDATE accounts SET status = $1 WHERE id = $2 RETURNING *`;
     const params = ['active', accountId];
-    const result = await db.query(query, params);
+    const result = await db.query(query, params, userId);
     if (result.rows.length === 0) {
         log("warn", "Account not found for activation", { accountId }, getCallerInfo());
         throw new Error(`Account with ID ${accountId} not found.`);
@@ -326,8 +479,8 @@ async function isValidAccountId(accountId) {
     return result.rows.length > 0;
 }
 
-async function setAccountStatus(accountId, status) {
-    log("info", "Setting account status", { accountId, status }, getCallerInfo());
+async function setAccountStatus(accountId, status, userId) {
+    log("info", "Setting account status", { accountId, status, userId }, getCallerInfo());
     sanitizeInput(status);
     sanitizeInput(accountId);
     if (!await isValidAccountId(accountId)) {
@@ -335,9 +488,9 @@ async function setAccountStatus(accountId, status) {
         throw new Error(`Account with ID ${accountId} not found.`);
     }
     if (status === 'active') {
-        return activateAccount(accountId);
+        return activateAccount(accountId, userId);
     } else if (status === 'inactive') {
-        return deactivateAccount(accountId);
+        return deactivateAccount(accountId, userId);
     } else {
         log("error", "Invalid account status", { accountId, status }, getCallerInfo());
         throw new Error(`Invalid status: ${status}`);

@@ -2,7 +2,7 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
     const authHelpers = await loadFetchWithAuth();
     const { fetchWithAuth } = authHelpers;
     const domHelpers = await loadDomHelpers();
-    const { createInput, createSelect } = domHelpers;
+    const { createCell, createInput, createSelect } = domHelpers;
     const stamp = document.querySelector("[data-last-updated]");
     if (stamp) {
         stamp.textContent = new Date().toLocaleString();
@@ -40,17 +40,29 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
         });
     }
 
-    // get list of users
-    const usersDataEl = document.getElementById("users-data");
     let usersData = [];
-    let currentUserId = null;
-    try {
-        let parsed = usersDataEl ? JSON.parse(usersDataEl.textContent) : [];
-        usersData = parsed.users || [];
-        currentUserId = parsed.currentUserId || null;
-    } catch (error) {
-        usersData = [];
-        console.error("Failed to parse users data", error);
+    const currentUserId = Number(localStorage.getItem("user_id")) || null;
+    const shouldLoadUsers = Boolean(document.querySelector("[data-users-list]"));
+    if (shouldLoadUsers) {
+        showLoadingOverlay();
+        try {
+            const response = await fetchWithAuth("/api/users/list-users", {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to fetch users");
+            }
+            usersData = Array.isArray(data.users) ? data.users : [];
+        } catch (error) {
+            alert("Error loading users: " + error.message);
+            usersData = [];
+        } finally {
+            hideLoadingOverlay();
+        }
     }
     const actionButtons = document.querySelectorAll("[data-user-action]");
     if (actionButtons.length) {
@@ -180,12 +192,87 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
             cell.addEventListener("click", handleClick);
         }
     };
-    if (usersData.length) {
-        for (const user of usersData) {
+
+    const usersTableBody = document.querySelector("[data-users-list]");
+    const usersPerPageSelect = document.querySelector("[data-users-per-page-select]");
+    const usersPageDownBtn = document.querySelector("[data-users-page-down]");
+    const usersPageUpBtn = document.querySelector("[data-users-page-up]");
+    const usersCurrentPageEl = document.querySelector("[data-users-current-page]");
+    const usersTotalPagesEl = document.querySelector("[data-users-total-pages]");
+    const userCount = Array.isArray(usersData) ? usersData.length : 0;
+    let currentUsersPage = 1;
+    let usersPerPage = usersPerPageSelect ? parseInt(usersPerPageSelect.value, 10) : 10;
+
+    const updateUsersTotalPages = () => {
+        if (!usersTotalPagesEl) {
+            return;
+        }
+        const totalPages = Math.ceil(userCount / usersPerPage);
+        usersTotalPagesEl.textContent = totalPages;
+    };
+
+    const renderUsersPage = (page) => {
+        if (!usersTableBody) {
+            return;
+        }
+        usersTableBody.replaceChildren();
+        const offset = (page - 1) * usersPerPage;
+        const pageUsers = usersData.slice(offset, offset + usersPerPage);
+        for (const user of pageUsers) {
+            const row = document.createElement("tr");
+            const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+            row.appendChild(createCell({ text: user.username ?? "", dataAttr: `data-username-${user.id}` }));
+            row.appendChild(createCell({ text: fullName, dataAttr: `data-fullname-${user.id}` }));
+            row.appendChild(createCell({ text: user.status ?? "", dataAttr: `data-status-${user.id}` }));
+            row.appendChild(createCell({ text: user.role ?? "", dataAttr: `data-role-${user.id}` }));
+            row.appendChild(createCell({ text: user.created_at ?? "", dataAttr: `data-created_at-${user.id}` }));
+            row.appendChild(createCell({ text: user.last_login_at ?? "", dataAttr: `data-last_login_at-${user.id}` }));
+            row.appendChild(createCell({ text: user.password_expires_at ? user.password_expires_at : "N/A", dataAttr: `data-password_expires_at-${user.id}` }));
+            row.appendChild(createCell({ text: user.suspension_start_at ? user.suspension_start_at : "N/A", dataAttr: `data-suspension_start_at-${user.id}` }));
+            row.appendChild(createCell({ text: user.suspension_end_at ? user.suspension_end_at : "N/A", dataAttr: `data-suspension_end_at-${user.id}` }));
+            row.appendChild(createCell({ text: user.email ?? "", dataAttr: `data-email-${user.id}` }));
+            row.appendChild(createCell({ text: user.date_of_birth ?? "", dataAttr: `data-date_of_birth-${user.id}` }));
+            row.appendChild(createCell({ text: user.address ?? "", dataAttr: `data-address-${user.id}` }));
+            row.appendChild(createCell({ text: user.temp_password ? "True" : "False", dataAttr: `data-temp_password-${user.id}` }));
+            usersTableBody.appendChild(row);
+        }
+        if (usersCurrentPageEl) {
+            usersCurrentPageEl.textContent = page;
+        }
+        for (const user of pageUsers) {
             for (const column of tableColumns) {
                 modifyTableCell(user, column, user[column], dateColumns.includes(column));
             }
         }
+    };
+
+    if (usersTableBody) {
+        updateUsersTotalPages();
+        if (usersPerPageSelect) {
+            usersPerPageSelect.addEventListener("change", () => {
+                usersPerPage = parseInt(usersPerPageSelect.value, 10);
+                currentUsersPage = 1;
+                updateUsersTotalPages();
+                renderUsersPage(currentUsersPage);
+            });
+        }
+        if (usersPageDownBtn) {
+            usersPageDownBtn.addEventListener("click", () => {
+                if (currentUsersPage > 1) {
+                    currentUsersPage -= 1;
+                    renderUsersPage(currentUsersPage);
+                }
+            });
+        }
+        if (usersPageUpBtn) {
+            usersPageUpBtn.addEventListener("click", () => {
+                if (currentUsersPage * usersPerPage < userCount) {
+                    currentUsersPage += 1;
+                    renderUsersPage(currentUsersPage);
+                }
+            });
+        }
+        renderUsersPage(currentUsersPage);
     }
 
     const refreshButton = document.querySelector("[data-refresh]");
@@ -293,7 +380,7 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
             event.preventDefault();
             showLoadingOverlay();
             const formData = new FormData(deleteUserForm);
-            const usernameToDelete = formData.get("username");
+            const usernameToDelete = formData.get("delete_username");
             if (!usernameToDelete) {
                 alert("Please enter a username to delete");
                 hideLoadingOverlay();
@@ -346,7 +433,7 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
             event.preventDefault();
             showLoadingOverlay();
             const formData = new FormData(resetPasswordForm);
-            const username = formData.get("username");
+            const username = formData.get("reset_username");
             if (!username) {
                 alert("Please enter a username to reset password");
                 hideLoadingOverlay();
@@ -384,8 +471,8 @@ export default async function initDashboard({showLoadingOverlay, hideLoadingOver
 async function loadDomHelpers() {
     const moduleUrl = new URL("/js/utils/dom_helpers.js", window.location.origin).href;
     const module = await import(moduleUrl);
-    const { createInput, createSelect } = module;
-    return { createInput, createSelect };
+    const { createCell, createInput, createSelect } = module;
+    return { createCell, createInput, createSelect };
 }
 
 async function loadFetchWithAuth() {

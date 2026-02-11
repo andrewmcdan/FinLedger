@@ -1,5 +1,5 @@
 const express = require("express");
-const { getUserLoggedInStatus, logoutInactiveUsers } = require("../controllers/users.js");
+const { getUserLoggedInStatus, isAdmin } = require("../controllers/users.js");
 const router = express.Router();
 const db = require("../db/db.js");
 const jwt = require("jsonwebtoken");
@@ -27,8 +27,9 @@ router.get("/status", async (req, res) => {
     }
     req.user = { token: token, id: user_id };
     const loggedIn = await getUserLoggedInStatus(user_id, token);
-    log("trace", "Auth status request processed", { user_id, loggedIn }, utilities.getCallerInfo(), user_id);
-    res.json({ ok: true, loggedIn: loggedIn });
+    const isAdminStatus = await isAdmin(user_id, token);
+    log("trace", "Auth status request processed", { user_id, loggedIn, isAdmin: isAdminStatus }, utilities.getCallerInfo(), user_id);
+    res.json({ ok: true, loggedIn: loggedIn, isAdmin: isAdminStatus });
 });
 
 router.post("/login", async (req, res) => {
@@ -50,7 +51,7 @@ router.post("/login", async (req, res) => {
     }
 
     // Now we check the password
-    const userRows = await db.query("SELECT id, profile_image_url, suspension_end_at, status, temp_password FROM users WHERE password_hash = crypt($1, password_hash) AND username = $2", [password, username]);
+    const userRows = await db.query("SELECT id, profile_image_url, suspension_end_at, status, temp_password, first_name, last_name FROM users WHERE password_hash = crypt($1, password_hash) AND username = $2", [password, username]);
     // If the password was correct, we'll have one row in userRows
     const user = userRows.rows[0];
 
@@ -98,7 +99,7 @@ router.post("/login", async (req, res) => {
         return res.status(500).json({ error: "Login failed due to a server error" });
     }
     log("info", `User ${username} (ID: ${user.id}) logged in successfully`, { function: "login" }, utilities.getCallerInfo(), user.id);
-    return res.json({ token: token, user_id: user.id, username: username, must_change_password: user.temp_password === true });
+    return res.json({ token: token, user_id: user.id, username: username, must_change_password: user.temp_password === true, fullName: `${user.first_name} ${user.last_name}` });
 });
 
 router.post("/logout", (req, res) => {

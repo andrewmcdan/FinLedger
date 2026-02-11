@@ -1,6 +1,4 @@
-// TODO: Link other files to this so that fetchWithAuth only exists here.
-
-export const fetchWithAuth = (url, options = {}) => {
+export const fetchWithAuth = async (url, options = {}) => {
     const authToken = localStorage.getItem("auth_token") || "";
     const userId = localStorage.getItem("user_id") || "";
     const mergedHeaders = {
@@ -9,9 +7,13 @@ export const fetchWithAuth = (url, options = {}) => {
         ...(options.headers || {}),
     };
 
-    return fetch(url, {
+    const response = await fetch(url, {
         ...options,
         credentials: options.credentials || "include",
         headers: mergedHeaders,
     });
+    if (window.FinLedgerSession?.applyExpiryHeaders) {
+        window.FinLedgerSession.applyExpiryHeaders(response);
+    }
+    return response;
 };

@@ -24,7 +24,7 @@ function sanitizeInput(input) {
     if (typeof input !== "string") {
         return input;
     }
-    return input.replace(/[<>&"'`]/g, (char) => {
+    let sanitized1 = input.replace(/[<>&"'`]/g, (char) => {
         switch (char) {
             case "<":
                 return "&lt;";
@@ -42,6 +42,9 @@ function sanitizeInput(input) {
                 return char;
         }
     });
+    let sanitized2 = sanitized1.replace(/'/g, "''");
+    let sanitized3 = sanitized2.replace(/[$.]/g, "");
+    return sanitized3;
 }
 
 function generateRandomToken(length = 32) {
@@ -96,8 +99,8 @@ async function cleanupLogs() {
     try {
         const appLogsCutoff = new Date(Date.now() - appLogsRetentionDays * 24 * 60 * 60 * 1000);
         const auditLogsCutoff = new Date(Date.now() - auditLogsRetentionDays * 24 * 60 * 60 * 1000);
-        const appLogsResult = await db.query("DELETE FROM app_logs WHERE log_time < $1 RETURNING *", [appLogsCutoff]);
-        const auditLogsResult = await db.query("DELETE FROM audit_logs WHERE log_time < $1 RETURNING *", [auditLogsCutoff]);
+        const appLogsResult = await db.query("DELETE FROM app_logs WHERE created_at < $1 RETURNING *", [appLogsCutoff]);
+        const auditLogsResult = await db.query("DELETE FROM audit_logs WHERE created_at < $1 RETURNING *", [auditLogsCutoff]);
         log("info", `Cleaned up logs: ${appLogsResult.rowCount} app logs and ${auditLogsResult.rowCount} audit logs deleted`, {}, getCallerInfo());
     } catch (error) {
         log("error", `Error during cleanupLogs: ${error.message}`, {}, getCallerInfo());

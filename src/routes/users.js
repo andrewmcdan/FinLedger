@@ -225,27 +225,6 @@ router.post("/create-user", uploadProfile.single("user_icon"), async (req, res) 
     }
 });
 
-// TODO: Remove maybe?
-// router.post("/changePassword", async (req, res) => {
-//     const requestingUserId = req.user.id;
-//     if (!requestingUserId) {
-//         return res.status(401).json({ error: "Unauthorized" });
-//     }
-//     const { newPassword, securityAnswers } = req.body;
-//     const verified = await verifySecurityAnswers(requestingUserId, securityAnswers);
-//     if (!verified) {
-//         log("warn", `Security answers verification failed for user ID ${requestingUserId} during password change`, { function: "changePassword" }, utilities.getCallerInfo());
-//         return res.status(403).json({ error: "Security answers verification failed" });
-//     }
-//     try {
-//         await changePassword(requestingUserId, newPassword);
-//         return res.json({ message: "Password changed successfully" });
-//     } catch (error) {
-//         log("error", `Error changing password for user ID ${requestingUserId}: ${error}`, { function: "changePassword" }, utilities.getCallerInfo());
-//         return res.status(500).json({ error: "Failed to change password" });
-//     }
-// });
-
 router.post("/change-password", uploadNone.none(), async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {

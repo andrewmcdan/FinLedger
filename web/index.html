@@ -6,7 +6,7 @@
         <title>FinLedger</title>
         <link rel="stylesheet" href="css/base.css" />
         <link rel="stylesheet" href="css/layout.css" />
-        <link rel="icon" type="image/x-icon" href="/public_images/FL-logo.ico">
+        <link rel="icon" type="image/x-icon" href="/public_images/FL-logo.ico" />
     </head>
     <body>
         <canvas id="money-canvas" aria-hidden="true"></canvas>
@@ -19,6 +19,37 @@
                     <div>
                         <div class="brand-name">FinLedger</div>
                         <div class="brand-tag">Financial management system</div>
+                        <hr />
+                        <div class="brand-user-info" data-header-user-info><span data-header-username></span></div>
+                    </div>
+                    <div id="calendar_button">
+                        <img src="public_images/calendar_icon.png" alt="Calendar Icon" />
+                    </div>
+                    <div id="popup_calendar_container" aria-hidden="true" class="hidden">
+                        <div id="popup_calendar">
+                            <div class="calendar" aria-label="Calendar">
+                                <div class="cal-header">
+                                    <div class="cal-title" id="monthTitle">Month YYYY</div>
+
+                                    <div class="cal-controls">
+                                        <button id="prevBtn" type="button" aria-label="Previous month">◀</button>
+                                        <button id="todayBtn" type="button">Today</button>
+                                        <button id="nextBtn" type="button" aria-label="Next month">▶</button>
+
+                                        <select id="monthSelect" aria-label="Select month"></select>
+                                        <select id="yearSelect" aria-label="Select year"></select>
+                                    </div>
+                                </div>
+
+                                <div class="cal-grid" id="dowRow" aria-hidden="true"></div>
+                                <div class="cal-grid" id="daysGrid"></div>
+
+                                <div class="cal-footer">
+                                    <div>Use the arrows or dropdowns to change month and year.</div>
+                                    <div id="meta"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <nav class="app-nav">
@@ -43,7 +74,7 @@
                     </div>
                     <button id="user_profile_button" aria-label="User Profile" aria-expanded="false" data-user-profile-button>
                         <span data-profile-name></span>
-                        <img alt="User Profile" data-user-icon/>
+                        <img alt="User Profile" data-user-icon />
                     </button>
                 </div>
             </header>

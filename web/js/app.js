@@ -19,8 +19,8 @@ const navLinks = Array.from(document.querySelectorAll(".app-nav [data-route]"));
 const loadingOverlay = document.getElementById("loading_overlay");
 const loadingLabel = loadingOverlay?.querySelector("[data-loading-label]") || loadingOverlay?.querySelector("div:last-child");
 let loadingCount = 0;
-let profileMenuInitialized = false;
 let userIconBlobUrl = null;
+let userIconOwnerId = null;
 
 async function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -77,6 +77,26 @@ if (brandLogo) {
     brandLogo.style.cursor = "pointer";
 }
 
+function setUpHeaderUsername() {
+    const headerUsername = document.querySelector("[data-header-username]");
+    const headerUsernameWrapper = document.querySelector("[data-header-user-info]");
+    if (headerUsername && headerUsernameWrapper) {
+        const username = localStorage.getItem("username");
+        const fullName = localStorage.getItem("full_name");
+        let displayName = null;
+        if (fullName && fullName !== "undefined undefined") {
+            displayName = fullName;
+        } else if (username) {
+            displayName = username;
+        }
+        if (displayName) {
+            headerUsername.textContent = `You are logged in as ${displayName}`;
+        } else {
+            headerUsername.textContent = "You are not logged in";
+        }
+    }
+}
+
 function setupProfileMenu() {
     const menuWrapper = document.querySelector("[data-profile-menu]");
     if (!menuWrapper) {
@@ -131,6 +151,25 @@ function setupProfileMenu() {
     });
 }
 
+const popupCalendarContainer = document.getElementById("popup_calendar_container");
+if (popupCalendarContainer) {
+    const calendarButton = document.getElementById("calendar_button");
+    if (calendarButton) {
+        calendarButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            popupCalendarContainer.classList.toggle("hidden");
+            console.log("Toggled calendar visibility");
+        });
+    }
+
+    document.addEventListener("click", (event) => {
+        if (!popupCalendarContainer.contains(event.target) && event.target !== calendarButton && !calendarButton?.contains(event.target)) {
+            popupCalendarContainer.classList.add("hidden");
+        }
+    });
+}
+
 function getRouteFromHash() {
     const hash = window.location.hash.replace(/^#\/?/, "");
     const routeKey = hash.split("?")[0].split("/")[0];
@@ -149,7 +188,130 @@ function setActiveNav(routeKey) {
     });
 }
 
-function fetchWithAuth(url, options = {}) {
+const SESSION_WARNING_MS = 5 * 60 * 1000;
+let sessionWarningTimeoutId = null;
+let sessionLogoutTimeoutId = null;
+let sessionExpiresAtMs = null;
+let sessionWarnedForExpiresAtMs = null;
+let sessionLogoutInProgress = false;
+
+function clearSessionTimers() {
+    if (sessionWarningTimeoutId) {
+        clearTimeout(sessionWarningTimeoutId);
+        sessionWarningTimeoutId = null;
+    }
+    if (sessionLogoutTimeoutId) {
+        clearTimeout(sessionLogoutTimeoutId);
+        sessionLogoutTimeoutId = null;
+    }
+}
+
+function triggerSessionWarning(timeLeftMs) {
+    if (timeLeftMs <= 0) {
+        return;
+    }
+    const minutesLeft = Math.max(1, Math.round(timeLeftMs / 60000));
+    alert(`Your session will expire in about ${minutesLeft} minute(s). You will be logged out automatically.`);
+}
+
+function performClientLogout() {
+    if (sessionLogoutInProgress) {
+        return;
+    }
+    sessionLogoutInProgress = true;
+    clearSessionTimers();
+
+    const authToken = localStorage.getItem("auth_token") || "";
+    const userId = localStorage.getItem("user_id") || "";
+    if (authToken && userId) {
+        fetch("/api/auth/logout", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${authToken}`,
+                "X-User-Id": `${userId}`,
+            },
+        }).catch(() => {});
+    }
+
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("must_change_password");
+    localStorage.removeItem("full_name");
+    window.location.hash = "#/login";
+    window.location.reload();
+}
+
+function scheduleSessionTimers(expiresAtMs) {
+    if (!Number.isFinite(expiresAtMs)) {
+        return;
+    }
+    sessionExpiresAtMs = expiresAtMs;
+    clearSessionTimers();
+    const timeLeftMs = expiresAtMs - Date.now();
+    if (timeLeftMs <= 0) {
+        performClientLogout();
+        return;
+    }
+    const warningDelay = timeLeftMs - SESSION_WARNING_MS;
+    if (warningDelay <= 0) {
+        if (sessionWarnedForExpiresAtMs !== expiresAtMs) {
+            sessionWarnedForExpiresAtMs = expiresAtMs;
+            triggerSessionWarning(timeLeftMs);
+        }
+    } else {
+        sessionWarningTimeoutId = setTimeout(() => {
+            if (sessionWarnedForExpiresAtMs === expiresAtMs) {
+                return;
+            }
+            sessionWarnedForExpiresAtMs = expiresAtMs;
+            triggerSessionWarning(expiresAtMs - Date.now());
+        }, warningDelay);
+    }
+    sessionLogoutTimeoutId = setTimeout(() => {
+        if (sessionExpiresAtMs !== expiresAtMs) {
+            return;
+        }
+        performClientLogout();
+    }, timeLeftMs);
+}
+
+function applySessionExpiryHeaders(response) {
+    if (!response || !response.headers) {
+        return;
+    }
+    const expiresAtHeader = response.headers.get("X-Session-Expires-At");
+    const expiresInHeader = response.headers.get("X-Session-Expires-In");
+    if (!expiresAtHeader && !expiresInHeader) {
+        return;
+    }
+    let expiresAtMs = Number.NaN;
+    if (expiresAtHeader) {
+        const parsed = Date.parse(expiresAtHeader);
+        if (!Number.isNaN(parsed)) {
+            expiresAtMs = parsed;
+        }
+    }
+    if (!Number.isFinite(expiresAtMs) && expiresInHeader) {
+        const seconds = Number.parseInt(expiresInHeader, 10);
+        if (!Number.isNaN(seconds)) {
+            expiresAtMs = Date.now() + seconds * 1000;
+        }
+    }
+    if (Number.isFinite(expiresAtMs)) {
+        scheduleSessionTimers(expiresAtMs);
+    }
+}
+
+window.FinLedgerSession = {
+    applyExpiryHeaders: applySessionExpiryHeaders,
+    scheduleSessionTimers,
+    clearSessionTimers,
+    performClientLogout,
+};
+
+async function fetchWithAuth(url, options = {}) {
     const authToken = localStorage.getItem("auth_token") || "";
     const userId = localStorage.getItem("user_id") || "";
     const mergedHeaders = {
@@ -158,11 +320,13 @@ function fetchWithAuth(url, options = {}) {
         ...(options.headers || {}),
     };
 
-    return fetch(url, {
+    const response = await fetch(url, {
         ...options,
         credentials: options.credentials || "include",
         headers: mergedHeaders,
     });
+    applySessionExpiryHeaders(response);
+    return response;
 }
 
 async function fetchPageMarkup(pageName) {
@@ -170,8 +334,6 @@ async function fetchPageMarkup(pageName) {
     if (response.ok) return response.text();
     console.log("Fetch page markup failed:", response.status);
     if (response.status === 401) {
-        // Unauthorized
-        // if the returned content is {"error": "Missing Authorization header"}, then redirect to not_logged_in.html
         let resJson = await response.clone().json();
         if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing X-User-Id header" || resJson.error == "Invalid or expired token") {
             window.location.hash = "#/not_logged_in";
@@ -181,7 +343,7 @@ async function fetchPageMarkup(pageName) {
             window.location.hash = "#/not_authorized";
             return;
         }
-        if(resJson?.error === "NOT_LOGGED_IN") {
+        if (resJson?.error === "NOT_LOGGED_IN") {
             window.location.hash = "#/not_logged_in";
             return;
         }
@@ -239,7 +401,7 @@ async function loadModule(moduleName) {
         const module = await import(moduleUrl);
         URL.revokeObjectURL(moduleUrl);
         if (typeof module.default === "function") {
-            module.default({showLoadingOverlay, hideLoadingOverlay, userIconBlobUrl});
+            module.default({ showLoadingOverlay, hideLoadingOverlay, userIconBlobUrl });
         }
     } catch (error) {
         console.error(`Failed to load module ${moduleName}`, error);
@@ -311,55 +473,62 @@ async function renderRoute() {
         }
 
         const profileNameSpan = document.querySelector("[data-profile-name]");
-        if (profileNameSpan && !profileMenuInitialized) {
+        if (profileNameSpan) {
             const username = localStorage.getItem("username") || "None";
             profileNameSpan.textContent = "Profile: " + username;
-            if(username == "None") {
-                // disable the profile hover activation
-                const menuWrapper = document.querySelector("[data-profile-menu]");
-                if (menuWrapper) {
-                    menuWrapper.style.pointerEvents = "none";
-                }
-            }else{
-                const menuWrapper = document.querySelector("[data-profile-menu]");
-                if (menuWrapper) {
-                    menuWrapper.style.pointerEvents = "auto";
-                }
+            const menuWrapper = document.querySelector("[data-profile-menu]");
+            if (menuWrapper) {
+                menuWrapper.style.pointerEvents = username === "None" ? "none" : "auto";
             }
         }
 
         const userIconTargets = Array.from(document.querySelectorAll("[data-user-icon], [data-user-icon-menu]"));
-        if (userIconTargets.length > 0 && !profileMenuInitialized) {
-            // Use fetch with auth headers to get the user icon
-            fetchWithAuth("/images/user-icon.png")
-                .then((response) => {
-                    if (response.ok) {
-                        return response.blob();
-                    }
-                    // if the response if 401 Unauthorized use the default icon at /public_images/user-icon.png
-                    if (response.status === 401) {
-                        return fetch("/public_images/default.png").then((res) => {
-                            if (res.ok) {
-                                return res.blob();
-                            }
-                            throw new Error("Failed to load default user icon");
-                        });
-                    }
-                    throw new Error("Failed to load user icon");
-                })
-                .then((blob) => {
-                    const objectURL = URL.createObjectURL(blob);
-                    userIconBlobUrl = objectURL;
-                    userIconTargets.forEach((img) => {
-                        img.src = objectURL;
-                    });
-                })
-                .catch((error) => {
-                    console.error("Error loading user icon:", error);
-                });
-        }
-        profileMenuInitialized = true;
+        if (userIconTargets.length > 0) {
+            const currentUserId = localStorage.getItem("user_id");
+            const authToken = localStorage.getItem("auth_token");
+            const shouldReloadIcon = !userIconBlobUrl || userIconOwnerId !== currentUserId;
 
+            if (!authToken || !currentUserId) {
+                if (userIconBlobUrl) {
+                    URL.revokeObjectURL(userIconBlobUrl);
+                    userIconBlobUrl = null;
+                }
+                userIconOwnerId = null;
+                userIconTargets.forEach((img) => {
+                    img.src = "/public_images/default.png";
+                });
+            } else if (shouldReloadIcon) {
+                fetchWithAuth("/images/user-icon.png")
+                    .then((response) => {
+                        if (response.ok) {
+                            return response.blob();
+                        }
+                        if (response.status === 401) {
+                            return fetch("/public_images/default.png").then((res) => {
+                                if (res.ok) {
+                                    return res.blob();
+                                }
+                                throw new Error("Failed to load default user icon");
+                            });
+                        }
+                        throw new Error("Failed to load user icon");
+                    })
+                    .then((blob) => {
+                        if (userIconBlobUrl) {
+                            URL.revokeObjectURL(userIconBlobUrl);
+                        }
+                        const objectURL = URL.createObjectURL(blob);
+                        userIconBlobUrl = objectURL;
+                        userIconOwnerId = currentUserId;
+                        userIconTargets.forEach((img) => {
+                            img.src = objectURL;
+                        });
+                    })
+                    .catch((error) => {
+                        console.error("Error loading user icon:", error);
+                    });
+            }
+        }
         document.title = route ? `FinLedger - ${route.title}` : "FinLedger";
         setActiveNav(route ? routeKey : null);
         if (shouldAnimate) {
@@ -382,10 +551,125 @@ async function renderRoute() {
 window.addEventListener("hashchange", renderRoute);
 window.addEventListener("DOMContentLoaded", renderRoute);
 window.addEventListener("DOMContentLoaded", setupProfileMenu);
+window.addEventListener("DOMContentLoaded", setUpHeaderUsername);
+window.addEventListener("hashchange", setUpHeaderUsername);
 
 import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 
 window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
 window.addEventListener("hashchange", updateLoginLogoutButton);
 
+const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const dowNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const monthTitle = document.getElementById("monthTitle");
+const dowRow = document.getElementById("dowRow");
+const daysGrid = document.getElementById("daysGrid");
+const monthSelect = document.getElementById("monthSelect");
+const yearSelect = document.getElementById("yearSelect");
+const meta = document.getElementById("meta");
+
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const todayBtn = document.getElementById("todayBtn");
+
+dowRow.innerHTML = dowNames.map((d) => `<div class="dow">${d}</div>`).join("");
+monthSelect.innerHTML = monthNames.map((m, i) => `<option value="${i}">${m}</option>`).join("");
+
+const now = new Date();
+const currentYear = now.getFullYear();
+const startYear = currentYear - 50;
+const endYear = currentYear + 50;
+
+let yearOptions = "";
+for (let y = startYear; y <= endYear; y++) {
+    yearOptions += `<option value="${y}">${y}</option>`;
+}
+yearSelect.innerHTML = yearOptions;
+
+let viewYear = currentYear;
+let viewMonth = now.getMonth();
+
+function isSameDate(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function daysInMonth(year, monthIndex) {
+    return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function renderCalendar() {
+    monthTitle.textContent = `${monthNames[viewMonth]} ${viewYear}`;
+    monthSelect.value = String(viewMonth);
+    yearSelect.value = String(viewYear);
+    const firstOfMonth = new Date(viewYear, viewMonth, 1);
+    const firstDow = firstOfMonth.getDay();
+    const dim = daysInMonth(viewYear, viewMonth);
+    const totalCells = 42;
+    const prevMonth = (viewMonth + 11) % 12;
+    const prevYear = viewMonth === 0 ? viewYear - 1 : viewYear;
+    const dimPrev = daysInMonth(prevYear, prevMonth);
+
+    const today = new Date();
+
+    let html = "";
+    for (let cell = 0; cell < totalCells; cell++) {
+        const dayOffset = cell - firstDow;
+        let displayNum;
+        let muted = false;
+        let dateObj;
+
+        if (dayOffset < 0) {
+            displayNum = dimPrev + dayOffset + 1;
+            muted = true;
+            dateObj = new Date(prevYear, prevMonth, displayNum);
+        } else if (dayOffset >= dim) {
+            displayNum = dayOffset - dim + 1;
+            muted = true;
+            const nextMonth = (viewMonth + 1) % 12;
+            const nextYear = viewMonth === 11 ? viewYear + 1 : viewYear;
+            dateObj = new Date(nextYear, nextMonth, displayNum);
+        } else {
+            displayNum = dayOffset + 1;
+            dateObj = new Date(viewYear, viewMonth, displayNum);
+        }
+
+        const classes = ["cell"];
+        if (muted) classes.push("muted");
+        if (isSameDate(dateObj, today)) classes.push("today");
+
+        html += `
+            <div class="${classes.join(" ")}" role="gridcell" aria-label="${dateObj.toDateString()}">
+              <div class="day-number">${displayNum}</div>
+            </div>
+          `;
+    }
+
+    daysGrid.innerHTML = html;
+    const first = new Date(viewYear, viewMonth, 1);
+    const last = new Date(viewYear, viewMonth, dim);
+    meta.textContent = `${first.toDateString()} to ${last.toDateString()}`;
+}
+function shiftMonth(delta) {
+    const newMonthIndex = viewMonth + delta;
+    viewYear = viewYear + Math.floor(newMonthIndex / 12);
+    viewMonth = ((newMonthIndex % 12) + 12) % 12;
+    renderCalendar();
+}
+prevBtn.addEventListener("click", () => shiftMonth(-1));
+nextBtn.addEventListener("click", () => shiftMonth(1));
+todayBtn.addEventListener("click", () => {
+    const t = new Date();
+    viewYear = t.getFullYear();
+    viewMonth = t.getMonth();
+    renderCalendar();
+});
+monthSelect.addEventListener("change", (e) => {
+    viewMonth = Number(e.target.value);
+    renderCalendar();
+});
+yearSelect.addEventListener("change", (e) => {
+    viewYear = Number(e.target.value);
+    renderCalendar();
+});
+renderCalendar();

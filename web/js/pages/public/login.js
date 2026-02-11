@@ -68,6 +68,7 @@ export default function initLogin() {
                     localStorage.setItem("user_id", data.user_id);
                     localStorage.setItem("auth_token", data.token);
                     localStorage.setItem("username", data.username);
+                    localStorage.setItem("full_name", data.fullName);
                     const mustChangePassword = data.must_change_password === true;
                     if (mustChangePassword) {
                         localStorage.setItem("must_change_password", "true");

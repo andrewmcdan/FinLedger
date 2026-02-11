@@ -4,7 +4,6 @@ const logger = require("../utils/logger");
 const utilities = require("../utils/utilities");
 const nodemailer = require("nodemailer");
 
-// Configure the email transporter
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: process.env.SMTP_PORT,
@@ -16,10 +15,9 @@ const transporter = nodemailer.createTransport({
 });
 
 function sendEmail(to, subject, body) {
-    // Placeholder function to simulate email sending
     logger.log("info", `Sending email to ${to} with subject "${subject}"`, { function: "sendEmail" }, utilities.getCallerInfo());
     const mailOptions = {
-        from: process.env.SMTP_EMAIL_FROM,
+        from: `FinLedger Financial Management System <${process.env.SMTP_EMAIL_FROM}>`,
         to: to,
         subject: subject,
         text: body,

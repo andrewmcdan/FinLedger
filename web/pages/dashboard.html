@@ -31,7 +31,7 @@
             <h1>User Management</h1>
         </header>
         <div>
-            <button type="button" data-refresh>Refresh data</button>
+            <button type="button" data-refresh title="Refresh the user management data.">Refresh data</button>
         </div>
         <div class="grid">
             <article class="card">
@@ -42,10 +42,10 @@
                 <% users.filter(user => user.status === 'pending').forEach(user => { %>
                 <article class="data-row" data-user_id-<%= user.id %>>
                     <p class="value">
-                        <span class="span-label"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
+                        <span class="span-label"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %> . Role: <%= user.role %>.)</span></span>
                         <span class="span-actions">
-                            <button class="button-small" data-user-action="approve" data-user-id="<%= user.id %>">Approve</button>
-                            <button class="button-small" data-user-action="reject" data-user-id="<%= user.id %>">Reject</button>
+                            <button class="button-small" data-user-action="approve" data-user-id="<%= user.id %>" title="Approve this user.">Approve</button>
+                            <button class="button-small" data-user-action="reject" data-user-id="<%= user.id %>" title="Reject this user.">Reject</button>
                         </span>
                     </p>
                     <p class="meta">Pending since <%= user.created_at %></p>
@@ -59,7 +59,7 @@
                 <% } %>
                 <% for (let user of users.filter(user => user.password_expires_at < new Date())) { %>
                 <article class="data-row">
-                    <p class="value"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span><button class="button-small">Suspend User</button></p>
+                    <p class="value"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span><button class="button-small" title="Suspend this user due to an expired password.">Suspend User</button></p>
                     <p class="meta">Password Expired on <%= user.password_expires_at %></p>
                 </article>
                 <% } %>
@@ -76,7 +76,7 @@
                     <p class="value">
                         <span class="span-label"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
                         <span class="span-actions">
-                            <button class="button-small" data-user-action="reinstate" data-user-id="<%= user.id %>">Reinstate</button>
+                            <button class="button-small" data-user-action="reinstate" data-user-id="<%= user.id %>" title="Reinstate this suspended user.">Reinstate</button>
                         </span>
                     </p>
                     <p class="meta">Ends <%= user.suspension_end_at %></p>
@@ -106,45 +106,49 @@
         <div class="grid">
             <article class="card">
                 <h2>All Users</h2>
-                <p class="meta">Click data to edit</p>
+                <div class="data-row">
+                    <p class="value">
+                        <span class="span-label" title="Double click a cell to edit user data.">Click on a cell to edit</span>
+                        <span class="actions page-navigation">
+                            <select id="users_per_page_select" data-users-per-page-select title="Select the number of users to display per page.">
+                                <option value="5">5 per page</option>
+                                <option value="10" selected>10 per page</option>
+                                <option value="25">25 per page</option>
+                                <option value="50">50 per page</option>
+                                <option value="100">100 per page</option>
+                            </select>
+                        </span>
+                        <span class="span-actions page-navigation">
+                            <span data-users-page-down data-users-page-btn title="Go to the previous page of users.">&lt;</span>
+                            <span>Page: </span>
+                            <span data-users-current-page>1 </span>
+                            <span>of </span>
+                            <span data-users-total-pages>1</span>
+                            <span data-users-page-up data-users-page-btn title="Go to the next page of users.">&gt;</span>
+                            <span>&nbsp;&nbsp;&nbsp;</span>
+                        </span>
+                    </p>
+                </div>
                 <div class="table-scroll">
-                    <table class="table table--wide">
+                    <table class="table table--wide" id="users_table">
                         <thead>
                             <tr>
-                                <th>Username</th>
-                                <th>Full Name</th>
-                                <th>Status</th>
-                                <th>Role</th>
-                                <th>Created At</th>
-                                <th>Last Login</th>
-                                <th>Password Expires At</th>
-                                <th>Suspension Starts At</th>
-                                <th>Suspension Ends At</th>
-                                <th>Email</th>
-                                <th>Date of Birth</th>
-                                <th>Address</th>
-                                <th>Temp Password</th>
+                                <th title="Username. Double click to edit.">Username</th>
+                                <th title="Full name. Double click to edit.">Full Name</th>
+                                <th title="Status. Double click to edit.">Status</th>
+                                <th title="Role. Double click to edit.">Role</th>
+                                <th title="Created at.">Created At</th>
+                                <th title="Last login.">Last Login</th>
+                                <th title="Password expiration date. Double click to edit.">Password Expires At</th>
+                                <th title="Suspension start date. Double click to edit.">Suspension Starts At</th>
+                                <th title="Suspension end date. Double click to edit.">Suspension Ends At</th>
+                                <th title="Email address. Double click to edit.">Email</th>
+                                <th title="Date of birth. Double click to edit.">Date of Birth</th>
+                                <th title="Address. Double click to edit.">Address</th>
+                                <th title="Temporary password flag. Double click to edit.">Temp Password</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <% users.forEach(user => { %>
-                            <tr>
-                                <td data-username-<%=user.id%>> <%=user.username%></td>
-                                <td data-fullname-<%= user.id %>> <%= user.first_name %> <%= user.last_name %></td>
-                                <td data-status-<%= user.id %>> <%= user.status %></td>
-                                <td data-role-<%= user.id %>> <%= user.role %></td>
-                                <td data-created-at-<%= user.id %>> <%= user.created_at %></td>
-                                <td data-last_login_at-<%= user.id %>> <%= user.last_login_at %></td>
-                                <td data-password_expires_at-<%= user.id %>> <%= user.password_expires_at ? user.password_expires_at : 'N/A' %></td>
-                                <td data-suspension_start_at-<%= user.id %>> <%= user.suspension_start_at ? user.suspension_start_at : 'N/A' %></td>
-                                <td data-suspension_end_at-<%= user.id %>> <%= user.suspension_end_at ? user.suspension_end_at : 'N/A' %></td>
-                                <td data-email-<%= user.id %>> <%= user.email %></td>
-                                <td data-date_of_birth-<%= user.id %>> <%= user.date_of_birth %></td>
-                                <td data-address-<%= user.id %>> <%= user.address %></td>
-                                <td data-temp_password-<%= user.id %>> <%= user.temp_password  ? 'True' : 'False' %></td>
-                            </tr>
-                            <% }); %>
-                        </tbody>
+                        <tbody data-users-list></tbody>
                     </table>
                 </div>
             </article>
@@ -154,38 +158,38 @@
                 <h2>Create User</h2>
                 <form id="create-user-form" class="stack">
                     <div class="field">
-                        <label for="first_name">First Name</label>
-                        <input type="text" id="first_name" name="first_name" required>
+                        <label for="first_name" title="Enter the user's first name.">First Name</label>
+                        <input type="text" id="first_name" name="first_name" required title="Enter the user's first name.">
                     </div>
                     <div class="field">
-                        <label for="last_name">Last Name</label>
-                        <input type="text" id="last_name" name="last_name" required>
+                        <label for="last_name" title="Enter the user's last name.">Last Name</label>
+                        <input type="text" id="last_name" name="last_name" required title="Enter the user's last name.">
                     </div>
                     <div class="field">
-                        <label for="address">Address</label>
-                        <input type="text" id="address" name="address" required>
+                        <label for="address" title="Enter the user's address.">Address</label>
+                        <input type="text" id="address" name="address" required title="Enter the user's address.">
                     </div>
                     <div class="field">
-                        <label for="date_of_birth">Date of Birth</label>
-                        <input type="date" id="date_of_birth" name="date_of_birth" required>
+                        <label for="date_of_birth" title="Select the user's date of birth.">Date of Birth</label>
+                        <input type="date" id="date_of_birth" name="date_of_birth" required title="Select the user's date of birth.">
                     </div>
                     <div class="field">
-                        <label for="email">Email</label>
-                        <input type="email" id="email" name="email" required>
+                        <label for="email" title="Enter the user's email address.">Email</label>
+                        <input type="email" id="email" name="email" required title="Enter the user's email address.">
                     </div>
                     <div class="field">
-                        <label for="role">Role</label>
-                        <select id="role" name="role" required>
+                        <label for="role" title="Select the user's role.">Role</label>
+                        <select id="role" name="role" required title="Select the user's role.">
                             <option value="administrator">Administrator</option>
                             <option value="manager">Manager</option>
                             <option value="accountant">Accountant</option>
                         </select>
                     </div>
                     <div class="field">
-                        <label for="user_icon">Profile Image</label>
-                        <input type="file" id="user_icon" name="user_icon" accept="image/png, image/jpeg, image/jpg, image/gif">
+                        <label for="user_icon" title="Upload a profile image for the user.">Profile Image</label>
+                        <input type="file" id="user_icon" name="user_icon" accept="image/png, image/jpeg, image/jpg, image/gif" title="Upload a profile image for the user.">
                     </div>
-                    <button type="submit">Create User</button>
+                    <button type="submit" title="Create the user with the entered details.">Create User</button>
                 </form>
             </article>
             <div class="stack">
@@ -193,28 +197,38 @@
                     <h2>Delete User</h2>
                     <form id="delete-user-form" class="stack">
                         <div class="field">
-                            <label for="username">Username</label>
-                            <input type="text" id="username" name="username" required>
+                            <label for="delete_username" title="Select the user to delete.">Username</label>
+                            <select id="delete_username" name="delete_username" required title="Select the user to delete.">
+                                <option value="" disabled selected>Select a user</option>
+                                <% users.forEach(user => { %>
+                                <option value="<%= user.username %>"><%= user.username %></option>
+                                <% }); %>
+                            </select>
                         </div>
-                        <button type="submit">Delete User</button>
+                        <button type="submit" title="Delete the specified user.">Delete User</button>
                     </form>            
                 </article>
                 <article class="card">
                     <h2>Reset User Password</h2>
                     <form id="reset-password-form" class="stack">
                         <div class="field">
-                            <label for="username">Username</label>
-                            <input type="text" id="username" name="username" required>
+                            <label for="reset_username" title="Select the user to reset the password.">Username</label>
+                            <select id="reset_username" name="reset_username" required title="Select the user to reset the password.">
+                                <option value="" disabled selected>Select a user</option>
+                                <% users.forEach(user => { %>
+                                <option value="<%= user.username %>"><%= user.username %></option>
+                                <% }); %>
+                            </select>
                         </div>
-                        <button type="submit">Reset Password</button>
+                        <button type="submit" title="Reset the user's password.">Reset Password</button>
                     </form>
                 </article>
                 <article class="card">
                     <h2>Suspend User Account</h2>
                     <form id="suspend-user-form" class="stack">
                         <div class="field">
-                            <label for="suspend_username">Username</label>
-                            <select id="suspend_username" name="suspend_username" required>
+                            <label for="suspend_username" title="Select a user to suspend.">Username</label>
+                            <select id="suspend_username" name="suspend_username" required title="Select a user to suspend.">
                                 <% if (usersAvailableToSuspend.length === 0) { %>
                                 <option value="" disabled selected>No eligible users</option>
                                 <% } else { %>
@@ -226,14 +240,14 @@
                             </select>
                         </div>
                         <div class="field">
-                            <label for="suspension_start_date">Suspension Start Date/Time</label>
-                            <input type="datetime-local" id="suspension_start_date" name="suspension_start_date" required>
+                            <label for="suspension_start_date" title="Select the suspension start date and time.">Suspension Start Date/Time</label>
+                            <input type="datetime-local" id="suspension_start_date" name="suspension_start_date" required title="Select the suspension start date and time.">
                         </div>
                         <div class="field">
-                            <label for="suspension_end_date">Suspension End Date/Time</label>
-                            <input type="datetime-local" id="suspension_end_date" name="suspension_end_date" required>
+                            <label for="suspension_end_date" title="Select the suspension end date and time.">Suspension End Date/Time</label>
+                            <input type="datetime-local" id="suspension_end_date" name="suspension_end_date" required title="Select the suspension end date and time.">
                         </div>
-                        <button type="submit">Suspend User</button>
+                        <button type="submit" title="Suspend the selected user.">Suspend User</button>
                     </form>
                 </article>
             </div>
@@ -243,8 +257,8 @@
                 <h2>Email User</h2>
                 <form id="email-user-form" class="stack">
                     <div class="field">
-                        <label for="email_username">To</label>
-                        <select id="email_username" name="username" required>
+                        <label for="email_username" title="Select the user to email.">To</label>
+                        <select id="email_username" name="username" required title="Select the user to email.">
                             <option value="" disabled selected>Select a user</option>
                             <% users.forEach(user => { %>
                             <option value="<%= user.username %>"><%= user.username %></option>
@@ -252,14 +266,14 @@
                         </select>
                     </div>
                     <div class="field">
-                        <label for="subject">Subject</label>
-                        <input type="text" id="subject" name="subject" required>
+                        <label for="subject" title="Enter the email subject.">Subject</label>
+                        <input type="text" id="subject" name="subject" required title="Enter the email subject.">
                     </div>
                     <div class="field">
-                        <label for="message">Message</label>
-                        <textarea id="message" name="message" required></textarea>
+                        <label for="message" title="Enter the email message.">Message</label>
+                        <textarea id="message" name="message" required title="Enter the email message."></textarea>
                     </div>
-                    <button type="submit">Send Email</button>
+                    <button type="submit" title="Send the email to the selected user.">Send Email</button>
             </article>
         </div>
     </section>
@@ -273,6 +287,3 @@
     </section>
     <% } %>
 </section>
-<script id="users-data" type="application/json">
-  <%- JSON.stringify({ users, currentUserId }).replaceAll("</", "<\\/") %>
-</script>
