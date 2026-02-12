@@ -1,0 +1,84 @@
+@startuml
+title Frontend Components (web/)
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam shadowing false
+left to right direction
+
+package "Entry" {
+  [index.html] as Index
+  [css/*] as Css
+  [js/app.js] as App
+  [js/background.js] as Background
+}
+
+package "HTML Partials (web/pages)" {
+  [dashboard.html] as DashboardHtml
+  [accounts_list.html] as AccountsListHtml
+  [profile.html] as ProfileHtml
+  [force_password_change.html] as ForcePwHtml
+  [transactions.html] as TransactionsHtml
+  [reports.html] as ReportsHtml
+  [public/*] as PublicHtml
+}
+
+package "Page Modules (web/js/pages)" {
+  [dashboard.js] as Dashboard
+  [accounts_list.js] as AccountsList
+  [profile.js] as Profile
+  [force_password_change.js] as ForcePw
+  [transactions.js] as Transactions
+  [reports.js] as Reports
+  package "public" {
+    [login.js] as Login
+    [logout.js] as Logout
+    [help.js] as Help
+  }
+}
+
+package "Utils (web/js/utils)" {
+  [fetch_with_auth.js] as FetchWithAuth
+  [dom_helpers.js] as DomHelpers
+  [numeric_display.js] as NumericDisplay
+  [url_params.js] as UrlParams
+  [login_logout_button.js] as LoginLogoutButton
+}
+
+Index --> App
+Index --> Background
+Index --> Css
+
+App --> DashboardHtml : fetch
+App --> AccountsListHtml : fetch
+App --> ProfileHtml : fetch
+App --> ForcePwHtml : fetch
+App --> TransactionsHtml : fetch
+App --> ReportsHtml : fetch
+App --> PublicHtml : fetch
+App --> LoginLogoutButton : static import
+App --> Dashboard : dynamic import
+App --> AccountsList : dynamic import
+App --> Profile : dynamic import
+App --> ForcePw : dynamic import
+App --> Transactions : dynamic import
+App --> Reports : dynamic import
+App --> Login : dynamic import
+App --> Logout : dynamic import
+App --> Help : dynamic import
+
+AccountsList ..> FetchWithAuth
+AccountsList ..> DomHelpers
+AccountsList ..> NumericDisplay
+Dashboard ..> FetchWithAuth
+Login ..> UrlParams
+ForcePw ..> FetchWithAuth
+Profile ..> FetchWithAuth
+Logout ..> FetchWithAuth
+
+note right of App
+Exposes globals:
+- window.FinLedgerLoading
+- window.FinLedgerSession
+Routing via hash (#/route)
+end note
+@enduml

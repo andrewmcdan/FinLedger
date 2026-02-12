@@ -270,6 +270,34 @@ async function getDbStructure(client) {
     return tables;
 }
 
+async function getForeignKeyMap(client) {
+    const { rows } = await client.query(`
+        SELECT tc.table_schema,
+               tc.table_name,
+               kcu.column_name,
+               ccu.table_schema AS foreign_table_schema,
+               ccu.table_name AS foreign_table_name,
+               ccu.column_name AS foreign_column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+         AND tc.constraint_schema = kcu.constraint_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name
+         AND ccu.constraint_schema = tc.constraint_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema NOT IN ('information_schema', 'pg_catalog');
+    `);
+
+    const map = new Map();
+    for (const row of rows) {
+        const key = `${row.table_schema}.${row.table_name}.${row.column_name}`;
+        const target = `${row.foreign_table_schema}.${row.foreign_table_name}.${row.foreign_column_name}`;
+        map.set(key, target);
+    }
+    return map;
+}
+
 function replaceSection(content, header, section) {
     const start = content.indexOf(header);
     if (start === -1) {
@@ -289,6 +317,7 @@ function replaceSection(content, header, section) {
 async function updateDbStructureReadme(client) {
     const header = "## DB-Structure";
     const tables = await getDbStructure(client);
+    const foreignKeys = await getForeignKeyMap(client);
     const lines = [header, ""];
 
     if (tables.size === 0) {
@@ -296,8 +325,12 @@ async function updateDbStructureReadme(client) {
     } else {
         for (const [tableName, columns] of tables.entries()) {
             lines.push(`### ${tableName}`);
+            const [schemaName, baseTable] = tableName.split(".");
             for (const column of columns) {
-                lines.push(`- ${column.name}: ${column.type}`);
+                const fkKey = `${schemaName}.${baseTable}.${column.name}`;
+                const fkTarget = foreignKeys.get(fkKey);
+                const suffix = fkTarget ? ` (ref ${fkTarget})` : "";
+                lines.push(`- ${column.name}: ${column.type}${suffix}`);
             }
             lines.push("");
         }
