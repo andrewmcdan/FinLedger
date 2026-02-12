@@ -1,0 +1,100 @@
+@startuml
+title FinLedger Backend Components
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam shadowing false
+left to right direction
+
+package "Express App" {
+  [server.js] as Server
+  [auth middleware] as AuthMW
+  [routes/auth.js] as AuthRoutes
+  [routes/users.js] as UserRoutes
+  [routes/accounts.js] as AccountRoutes
+  [routes/images.js] as ImageRoutes
+  [routes/user_docs.js] as UserDocRoutes
+}
+
+package "Controllers" {
+  [controllers/users.js] as UsersCtrl
+  [controllers/accounts.js] as AccountsCtrl
+}
+
+package "Services" {
+  [services/email.js] as EmailSvc
+}
+
+package "Utils" {
+  [utils/logger.js] as Logger
+  [utils/utilities.js] as Utilities
+}
+
+package "Data" {
+  [data/security_questions.js] as SecurityQuestions
+}
+
+database "PostgreSQL" as DB
+folder "User Icons\nuser-icons/" as Icons
+folder "User Docs\nuser-docs/" as Docs
+cloud "SMTP Server" as SMTP
+
+Server --> AuthRoutes
+Server --> UserRoutes
+Server --> AccountRoutes
+Server --> ImageRoutes
+Server --> UserDocRoutes
+Server --> AuthMW
+Server --> DB
+Server --> Logger
+Server --> Utilities
+Server --> UsersCtrl
+Server --> AccountsCtrl
+Server --> SecurityQuestions
+
+AuthMW ..> UsersCtrl : getUserLoggedInStatus
+AuthMW ..> DB
+AuthMW ..> Logger
+AuthMW ..> Utilities
+
+AuthRoutes ..> UsersCtrl
+AuthRoutes ..> DB
+AuthRoutes ..> Logger
+AuthRoutes ..> Utilities
+
+UserRoutes ..> UsersCtrl
+UserRoutes ..> SecurityQuestions
+UserRoutes ..> EmailSvc
+UserRoutes ..> Logger
+UserRoutes ..> Utilities
+UserRoutes ..> DB
+UserRoutes ..> Icons : upload/move
+
+AccountRoutes ..> AccountsCtrl
+AccountRoutes ..> UsersCtrl : isAdmin
+AccountRoutes ..> Logger
+AccountRoutes ..> Utilities
+
+ImageRoutes ..> UsersCtrl
+ImageRoutes ..> Logger
+ImageRoutes ..> Utilities
+ImageRoutes ..> Icons : read/write
+
+UserDocRoutes ..> Logger
+UserDocRoutes ..> Utilities
+UserDocRoutes ..> Docs : planned
+
+UsersCtrl ..> DB
+UsersCtrl ..> Logger
+UsersCtrl ..> Utilities
+UsersCtrl ..> EmailSvc
+UsersCtrl ..> Icons : move profile images
+
+AccountsCtrl ..> DB
+AccountsCtrl ..> UsersCtrl : isAdmin/isManager
+AccountsCtrl ..> Logger
+AccountsCtrl ..> Utilities
+
+Utilities ..> DB
+Logger ..> DB
+EmailSvc ..> SMTP
+@enduml

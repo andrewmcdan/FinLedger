@@ -1,0 +1,27 @@
+@startuml
+title Frontend Route Map (web/js/app.js)
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+class RouteMap {
+  dashboard : pages/dashboard + js/pages/dashboard
+  transactions : pages/transactions + js/pages/transactions
+  reports : pages/reports + js/pages/reports
+  login : pages/public/login + js/pages/public/login
+  help : pages/public/help + js/pages/public/help
+  logout : pages/public/logout + js/pages/public/logout
+  not_logged_in : pages/public/not_logged_in + (no module)
+  not_found : pages/public/not_found + (no module)
+  not_authorized : pages/public/not_authorized + (no module)
+  profile : pages/profile + js/pages/profile
+  force_password_change : pages/force_password_change + js/pages/force_password_change
+  accounts_list : pages/accounts_list + js/pages/accounts_list
+}
+
+note right of RouteMap
+Default route: dashboard
+Routes are loaded via hash (/#/route)
+HTML is fetched from /pages/*.html
+Modules are loaded via dynamic import
+end note
+@enduml

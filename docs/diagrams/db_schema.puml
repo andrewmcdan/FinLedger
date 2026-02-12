@@ -1,0 +1,334 @@
+@startuml
+title FinLedger Database Schema
+hide circle
+skinparam linetype ortho
+skinparam entityStyle rectangle
+skinparam shadowing false
+left to right direction
+
+package "Users & Auth" {
+  entity "users" as users {
+    *id : BIGSERIAL <<PK>>
+    --
+    username : TEXT <<UQ>>
+    email : TEXT <<UQ>>
+    first_name : TEXT
+    last_name : TEXT
+    address : TEXT
+    date_of_birth : DATE
+    role : TEXT
+    status : TEXT
+    profile_image_url : TEXT
+    user_icon_path : UUID <<UQ>>
+    password_hash : TEXT
+    password_changed_at : TIMESTAMPTZ
+    password_expires_at : TIMESTAMPTZ
+    temp_password : BOOLEAN
+    failed_login_attempts : INTEGER
+    last_login_at : TIMESTAMPTZ
+    suspension_start_at : TIMESTAMPTZ
+    suspension_end_at : TIMESTAMPTZ
+    created_at : TIMESTAMPTZ
+    updated_at : TIMESTAMPTZ
+    security_question_1 : TEXT
+    security_answer_hash_1 : TEXT
+    security_question_2 : TEXT
+    security_answer_hash_2 : TEXT
+    security_question_3 : TEXT
+    security_answer_hash_3 : TEXT
+    reset_token : TEXT
+    reset_token_expires_at : TIMESTAMPTZ
+  }
+
+  entity "password_history" as password_history {
+    *id : BIGSERIAL <<PK>>
+    --
+    user_id : BIGINT <<FK>>
+    password_hash : TEXT
+    changed_at : TIMESTAMPTZ
+  }
+
+  entity "logged_in_users" as logged_in_users {
+    *id : BIGSERIAL <<PK>>
+    --
+    user_id : BIGINT <<FK>>
+    token : TEXT
+    login_at : TIMESTAMPTZ
+    logout_at : TIMESTAMPTZ
+  }
+
+  entity "password_expiry_email_tracking" as password_expiry_email_tracking {
+    *id : BIGSERIAL <<PK>>
+    --
+    user_id : BIGINT <<FK>>
+    email_sent_at : TIMESTAMPTZ
+    email_sent_date : DATE
+    password_expires_at : TIMESTAMPTZ
+  }
+}
+
+package "Documents" {
+  entity "documents" as documents {
+    *id : BIGSERIAL <<PK>>
+    --
+    user_id : BIGINT <<FK>>
+    title : TEXT
+    file_name : UUID <<UQ>>
+    file_extension : TEXT
+    meta_data : JSONB
+    upload_at : TIMESTAMPTZ
+  }
+}
+
+package "Accounts" {
+  entity "account_categories" as account_categories {
+    *id : SERIAL <<PK>>
+    --
+    name : VARCHAR(50) <<UQ>>
+    description : TEXT
+    account_number_prefix : VARCHAR(10) <<UQ>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+  }
+
+  entity "account_subcategories" as account_subcategories {
+    *id : SERIAL <<PK>>
+    --
+    account_category_id : INT <<FK>>
+    name : VARCHAR(50) <<UQ>>
+    description : TEXT
+    order_index : INT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+  }
+
+  entity "accounts" as accounts {
+    *id : BIGSERIAL <<PK>>
+    --
+    account_name : TEXT <<UQ>>
+    account_number : BIGINT <<UQ>>
+    account_description : TEXT
+    normal_side : TEXT
+    initial_balance : NUMERIC
+    total_debits : NUMERIC
+    total_credits : NUMERIC
+    balance : NUMERIC
+    created_at : TIMESTAMPTZ
+    user_id : BIGINT <<FK>>
+    account_order : INTEGER
+    statement_type : TEXT
+    comment : TEXT
+    status : TEXT
+    account_category_id : BIGINT <<FK>>
+    account_subcategory_id : BIGINT <<FK>>
+  }
+
+  entity "account_audits" as account_audits {
+    *id : BIGSERIAL <<PK>>
+    --
+    account_id : BIGINT <<FK>>
+    audit_timestamp : TIMESTAMPTZ
+    previous_debit : NUMERIC
+    previous_credit : NUMERIC
+    previous_balance : NUMERIC
+    new_debit : NUMERIC
+    new_credit : NUMERIC
+    new_balance : NUMERIC
+    changed_by : BIGINT <<FK>>
+  }
+
+  entity "account_metadata_edits" as account_metadata_edits {
+    *id : BIGSERIAL <<PK>>
+    --
+    account_id : BIGINT <<FK>>
+    edit_timestamp : TIMESTAMPTZ
+    field_name : TEXT
+    previous_value : TEXT
+    new_value : TEXT
+    changed_by : BIGINT <<FK>>
+  }
+}
+
+package "Journals & Ledger" {
+  entity "journal_entries" as journal_entries {
+    *id : SERIAL <<PK>>
+    --
+    journal_type : TEXT
+    entry_date : TIMESTAMP
+    description : TEXT
+    status : TEXT
+    total_debits : NUMERIC(18,2)
+    total_credits : NUMERIC(18,2)
+    created_by : INTEGER <<FK>>
+    created_at : TIMESTAMP
+    updated_by : INTEGER <<FK>>
+    updated_at : TIMESTAMP
+    approved_by : INTEGER <<FK>>
+    approved_at : TIMESTAMP
+    posted_at : TIMESTAMP
+  }
+
+  entity "journal_entry_lines" as journal_entry_lines {
+    *id : SERIAL <<PK>>
+    --
+    journal_entry_id : INTEGER <<FK>>
+    line_no : INTEGER
+    account_id : INTEGER <<FK>>
+    dc : TEXT
+    amount : NUMERIC(18,2)
+    line_description : TEXT
+    source_document_id : INTEGER <<FK>>
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+    updated_at : TIMESTAMP
+    updated_by : INTEGER <<FK>>
+  }
+
+  entity "ledger_entries" as ledger_entries {
+    *id : SERIAL <<PK>>
+    --
+    account_id : INTEGER <<FK>>
+    entry_date : TIMESTAMP
+    dc : TEXT
+    amount : NUMERIC(18,2)
+    description : TEXT
+    journal_entry_line_id : INTEGER <<FK>>
+    journal_entry_id : INTEGER <<FK>>
+    pr_journal_ref : TEXT
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+    updated_at : TIMESTAMP
+    updated_by : INTEGER <<FK>>
+    posted_at : TIMESTAMP
+    posted_by : INTEGER <<FK>>
+  }
+}
+
+package "Trial Balance" {
+  entity "trial_balance_runs" as trial_balance_runs {
+    *id : SERIAL <<PK>>
+    --
+    run_type : TEXT
+    as_of_date : TIMESTAMP
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+    total_debits : NUMERIC(18,2)
+    total_credits : NUMERIC(18,2)
+  }
+
+  entity "trial_balance_lines" as trial_balance_lines {
+    *id : SERIAL <<PK>>
+    --
+    trial_balance_run_id : INTEGER <<FK>>
+    account_id : INTEGER <<FK>>
+    debit_balance : NUMERIC(18,2)
+    credit_balance : NUMERIC(18,2)
+    liquidity_order_used : INTEGER
+  }
+}
+
+package "Adjustments" {
+  entity "adjustment_metadata" as adjustment_metadata {
+    *id : SERIAL <<PK>>
+    --
+    journal_entry_id : INTEGER <<FK>>
+    adjustment_reason : TEXT
+    period_end_date : TIMESTAMP
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+    notes : TEXT
+  }
+
+  entity "adjustment_lines" as adjustment_lines {
+    *id : SERIAL <<PK>>
+    --
+    adjustment_metadata_id : INTEGER <<FK>>
+    account_id : INTEGER <<FK>>
+    dc : TEXT
+    amount : NUMERIC(18,2)
+    line_description : TEXT
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+  }
+}
+
+package "Statements" {
+  entity "statement_runs" as statement_runs {
+    *id : SERIAL <<PK>>
+    --
+    statement_type : TEXT
+    company_name : TEXT
+    title_line : TEXT
+    data_line_type : TEXT
+    date_value : TIMESTAMP
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+  }
+}
+
+package "Logging" {
+  entity "app_logs" as app_logs {
+    *id : BIGSERIAL <<PK>>
+    --
+    user_id : BIGINT <<FK>>
+    level : TEXT
+    message : TEXT
+    context : TEXT
+    source : TEXT
+    created_at : TIMESTAMPTZ
+  }
+
+  entity "audit_logs" as audit_logs {
+    *id : BIGSERIAL <<PK>>
+    --
+    event_type : TEXT
+    user_id : BIGINT <<FK>>
+    entity_type : TEXT
+    entity_id : BIGINT
+    changes : TEXT
+    metadata : TEXT
+    created_at : TIMESTAMPTZ
+  }
+}
+
+' Relationships
+users ||--o{ password_history : user_id
+users ||--o{ logged_in_users : user_id
+users ||--o{ password_expiry_email_tracking : user_id
+users ||--o{ documents : user_id
+users ||--o{ accounts : user_id
+users ||--o{ account_audits : changed_by
+users ||--o{ account_metadata_edits : changed_by
+users ||--o{ journal_entries : created/updated/approved
+users ||--o{ journal_entry_lines : created/updated
+users ||--o{ ledger_entries : created/updated/posted
+users ||--o{ trial_balance_runs : created_by
+users ||--o{ adjustment_metadata : created_by
+users ||--o{ adjustment_lines : created_by
+users ||--o{ statement_runs : created_by
+users ||--o{ app_logs : user_id
+users ||--o{ audit_logs : user_id
+
+account_categories ||--o{ account_subcategories : account_category_id
+account_categories ||--o{ accounts : account_category_id
+account_subcategories ||--o{ accounts : account_subcategory_id
+
+accounts ||--o{ account_audits : account_id
+accounts ||--o{ account_metadata_edits : account_id
+accounts ||--o{ journal_entry_lines : account_id
+accounts ||--o{ ledger_entries : account_id
+accounts ||--o{ trial_balance_lines : account_id
+accounts ||--o{ adjustment_lines : account_id
+
+journal_entries ||--o{ journal_entry_lines : journal_entry_id
+journal_entries ||--o{ ledger_entries : journal_entry_id
+journal_entries ||--o{ adjustment_metadata : journal_entry_id
+
+journal_entry_lines ||--o{ ledger_entries : journal_entry_line_id
+
+documents ||--o{ journal_entry_lines : source_document_id
+
+trial_balance_runs ||--o{ trial_balance_lines : trial_balance_run_id
+
+adjustment_metadata ||--o{ adjustment_lines : adjustment_metadata_id
+@enduml

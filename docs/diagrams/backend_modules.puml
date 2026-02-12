@@ -1,0 +1,267 @@
+@startuml
+title Backend Modules (Exports + Routes)
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide empty members
+allowmixing
+left to right direction
+
+class Server <<entrypoint>> {
+  +app : Express
+}
+
+class AuthMiddleware <<middleware>> {
+  +authMiddleware()
+  +setSessionExpiryHeaders()
+}
+
+class AuthRoutes <<route>> {
+  +status()
+  +login()
+  +logout()
+}
+
+class UsersRoutes <<route>> {
+  +securityQuestionsList()
+  +getUser()
+  +listUsers()
+  +getLoggedInUsers()
+  +emailUser()
+  +approveUser()
+  +rejectUser()
+  +createUser()
+  +changePassword()
+  +updateSecurityQuestions()
+  +updateProfile()
+  +changeTempPassword()
+  +registerNewUser()
+  +resetPassword()
+  +securityQuestions()
+  +verifySecurityAnswers()
+  +suspendUser()
+  +reinstateUser()
+  +updateUserField()
+  +deleteUser()
+  +resetUserPassword()
+}
+
+class AccountsRoutes <<route>> {
+  +accountCount()
+  +list()
+  +create()
+  +updateAccountField()
+  +accountCategories()
+  +addCategoryOrSubcategory()
+  +deleteCategory()
+  +deleteSubcategory()
+  +setAccountStatus()
+}
+
+class ImagesRoutes <<route>> {
+  +getUserIcon()
+  +uploadUserIcon()
+}
+
+class UserDocsRoutes <<route>> {
+  +getDocument()
+  +uploadDocument()
+}
+
+class UsersController <<module>> {
+  +getUserLoggedInStatus()
+  +isAdmin()
+  +isManager()
+  +getUserById()
+  +listUsers()
+  +listLoggedInUsers()
+  +approveUser()
+  +createUser()
+  +rejectUser()
+  +suspendUser()
+  +reinstateUser()
+  +changePassword()
+  +changePasswordWithCurrentPassword()
+  +updateSecurityQuestionsWithCurrentPassword()
+  +updateUserProfile()
+  +getUserByEmail()
+  +updateSecurityQuestions()
+  +getSecurityQuestionsForUser()
+  +verifySecurityAnswers()
+  +getUserByResetToken()
+  +logoutInactiveUsers()
+  +unsuspendExpiredSuspensions()
+  +sendPasswordExpiryWarnings()
+  +suspendUsersWithExpiredPasswords()
+  +deleteUserById()
+  +setUserPassword()
+  +getUserByUsername()
+}
+
+class AccountsController <<module>> {
+  +listAccounts()
+  +createAccount()
+  +listAccountCategories()
+  +getAccountCounts()
+  +updateAccountField()
+  +setAccountStatus()
+  +addCategory()
+  +addSubcategory()
+  +deleteCategory()
+  +deleteSubcategory()
+}
+
+class EmailService <<module>> {
+  +sendEmail()
+}
+
+class Logger <<module>> {
+  +log()
+  +logAudit()
+  +queryAppLogs()
+  +queryAuditLogs()
+}
+
+class Utilities <<module>> {
+  +getCallerInfo()
+  +sanitizeInput()
+  +generateRandomToken()
+  +cleanupUserData()
+  +cleanupLogs()
+}
+
+class DB <<module>> {
+  +query()
+  +transaction()
+  +getClient()
+  +closePool()
+}
+
+class SecurityQuestions <<data>> {
+  +SECURITY_QUESTIONS
+}
+
+database "PostgreSQL" as PG
+cloud "SMTP" as SMTP
+
+note right of Server
+Express app config:
+- GET /pages/dashboard.html
+- GET /pages/accounts_list.html
+- GET /pages/public/forgot-password_submit.html
+- GET /pages/profile.html
+- Static /web, /images, /documents
+- API routes: /api/auth, /api/users, /api/accounts
+- Scheduled tasks (10m/1h/24h)
+end note
+
+note right of AuthRoutes
+GET /status
+POST /login
+POST /logout
+end note
+
+note right of UsersRoutes
+GET /security-questions-list
+GET /get-user/:userId
+GET /list-users
+GET /get-logged-in-users
+POST /email-user
+GET /approve-user/:userId
+GET /reject-user/:userId
+POST /create-user
+POST /change-password
+POST /update-security-questions
+POST /update-profile
+POST /change-temp-password
+POST /register_new_user
+GET /reset-password/:email/:userName
+GET /security-questions/:resetToken
+POST /verify-security-answers/:resetToken
+POST /suspend-user
+GET /reinstate-user/:userId
+POST /update-user-field
+POST /delete-user
+GET /reset-user-password/:userId
+end note
+
+note right of AccountsRoutes
+GET /account_count
+GET /list/:offset/:limit
+POST /create
+POST /update-account-field
+GET /account-categories
+POST /add-category
+DELETE /category/:categoryId
+DELETE /subcategory/:subcategoryId
+POST /set-account-status
+end note
+
+note right of ImagesRoutes
+GET /user-icon.png
+POST /upload-user-icon
+end note
+
+note right of UserDocsRoutes
+GET /:filename
+POST /upload
+end note
+
+Server ..> AuthRoutes
+Server ..> UsersRoutes
+Server ..> AccountsRoutes
+Server ..> ImagesRoutes
+Server ..> UserDocsRoutes
+Server ..> AuthMiddleware
+Server ..> UsersController
+Server ..> AccountsController
+Server ..> Logger
+Server ..> Utilities
+Server ..> DB
+Server ..> SecurityQuestions
+
+AuthMiddleware ..> UsersController
+AuthMiddleware ..> DB
+AuthMiddleware ..> Logger
+AuthMiddleware ..> Utilities
+
+AuthRoutes ..> UsersController
+AuthRoutes ..> DB
+AuthRoutes ..> Logger
+AuthRoutes ..> Utilities
+
+UsersRoutes ..> UsersController
+UsersRoutes ..> SecurityQuestions
+UsersRoutes ..> EmailService
+UsersRoutes ..> Logger
+UsersRoutes ..> Utilities
+UsersRoutes ..> DB
+
+AccountsRoutes ..> AccountsController
+AccountsRoutes ..> UsersController
+AccountsRoutes ..> Logger
+AccountsRoutes ..> Utilities
+
+ImagesRoutes ..> UsersController
+ImagesRoutes ..> Logger
+ImagesRoutes ..> Utilities
+
+UserDocsRoutes ..> Logger
+UserDocsRoutes ..> Utilities
+
+UsersController ..> DB
+UsersController ..> Logger
+UsersController ..> Utilities
+UsersController ..> EmailService
+
+AccountsController ..> DB
+AccountsController ..> UsersController
+AccountsController ..> Logger
+AccountsController ..> Utilities
+
+Utilities ..> DB
+Logger ..> DB
+EmailService ..> Logger
+EmailService ..> Utilities
+EmailService ..> SMTP
+DB ..> PG
+@enduml
