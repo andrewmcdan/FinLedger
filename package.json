@@ -10,6 +10,7 @@
     "db-init": "node --env-file=.env scripts/init-db.js",
     "db-reset": "node --env-file=.env scripts/reset-db.js",
     "db-init:test": "node --env-file=.env.test scripts/init-db.js",
+    "manual:pdf": "node scripts/build-user-manual-pdf.js",
     "pretest": "npm run db-init:test",
     "prestart": "npm run db-init",
     "test": "node --env-file=.env.test --test --test-concurrency=1"
@@ -20,6 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.12",
+    "pdfkit": "^0.17.2",
     "pg": "^8.17.2"
   },
   "devDependencies": {
