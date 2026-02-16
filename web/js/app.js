@@ -22,6 +22,28 @@ let loadingCount = 0;
 let userIconBlobUrl = null;
 let userIconOwnerId = null;
 
+let modalApiPromise = null;
+
+function loadModalApi() {
+    if (!modalApiPromise) {
+        modalApiPromise = import("./utils/message_modal.js").then((module) => ({
+            showErrorModal: module.showErrorModal,
+            showMessageModal: module.showMessageModal,
+        }));
+    }
+    return modalApiPromise;
+}
+
+async function showErrorModal(message) {
+    const { showErrorModal: showErrorModalImpl } = await loadModalApi();
+    return showErrorModalImpl(message);
+}
+
+async function showMessageModal(message) {
+    const { showMessageModal: showMessageModalImpl } = await loadModalApi();
+    return showMessageModalImpl(message);
+}
+
 async function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -401,7 +423,7 @@ async function loadModule(moduleName) {
         const module = await import(moduleUrl);
         URL.revokeObjectURL(moduleUrl);
         if (typeof module.default === "function") {
-            module.default({ showLoadingOverlay, hideLoadingOverlay, userIconBlobUrl });
+            module.default({ showLoadingOverlay, hideLoadingOverlay, showErrorModal, showMessageModal, userIconBlobUrl });
         }
     } catch (error) {
         console.error(`Failed to load module ${moduleName}`, error);
@@ -549,14 +571,23 @@ async function renderRoute() {
 }
 
 window.addEventListener("hashchange", renderRoute);
-window.addEventListener("DOMContentLoaded", renderRoute);
-window.addEventListener("DOMContentLoaded", setupProfileMenu);
-window.addEventListener("DOMContentLoaded", setUpHeaderUsername);
+
+const onDomReady = (handler) => {
+    if (document.readyState === "loading") {
+        window.addEventListener("DOMContentLoaded", handler);
+    } else {
+        handler();
+    }
+};
+
+onDomReady(renderRoute);
+onDomReady(setupProfileMenu);
+onDomReady(setUpHeaderUsername);
 window.addEventListener("hashchange", setUpHeaderUsername);
 
 import { updateLoginLogoutButton } from "./utils/login_logout_button.js";
 
-window.addEventListener("DOMContentLoaded", updateLoginLogoutButton);
+onDomReady(updateLoginLogoutButton);
 window.addEventListener("hashchange", updateLoginLogoutButton);
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];

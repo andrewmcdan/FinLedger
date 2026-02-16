@@ -31,7 +31,7 @@ const getIsAdmin = async () => {
     return data.is_admin === true;
 };
 
-export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay }) {
+export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay, showErrorModal }) {
     const isAdmin = await getIsAdmin();
 
     const add_account_button = document.getElementById("add_account_button");
@@ -102,7 +102,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 const newAccount = await response.json();
                 window.location.reload();
             } catch (error) {
-                alert("Error creating account: " + errorFormatter(error.message));
+                showErrorModal("Error creating account: " + errorFormatter(error.message));
             } finally {
                 hideLoadingOverlay();
             }
@@ -406,7 +406,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                                 account.account_category_id = newValue;
                                 const defaultSubcategory = getDefaultSubcategoryForCategory(newValue);
                                 if (!defaultSubcategory) {
-                                    alert("No subcategories found for the selected category.");
+                                    showErrorModal("No subcategories found for the selected category.");
                                     account.account_category_id = previousCategoryId;
                                     cell.textContent = formatDisplayValue(account, "account_category_id");
                                     updateSubcategoryCell(account, previousSubcategoryId);
@@ -431,7 +431,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                                     }
                                     updateSubcategoryCell(account, newSubcategoryId);
                                 } catch (error) {
-                                    alert(error.message || "Error updating account subcategory");
+                                    showErrorModal(error.message || "Error updating account subcategory");
                                     try {
                                         await fetchWithAuth("/api/accounts/update-account-field", {
                                             method: "POST",
@@ -461,7 +461,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                             }
                             cell.textContent = formatDisplayValue(account, column);
                         } catch (error) {
-                            alert(error.message || "Error updating account field");
+                            showErrorModal(error.message || "Error updating account field");
                             cell.textContent = displayValue;
                         } finally {
                             formatLongTextCell(cell);
@@ -622,7 +622,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 accountCount = parseInt(data.total_accounts, 10) || 0;
             }
         } catch (error) {
-            alert("Error fetching account counts: " + error.message);
+            showErrorModal("Error fetching account counts: " + error.message);
         } finally {
             updateTotalPages();
         }
@@ -719,7 +719,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 currentPageEl.textContent = page;
             }
         } catch (error) {
-            alert("Error loading accounts: " + error.message);
+            showErrorModal("Error loading accounts: " + error.message);
         } finally {
             hideLoadingOverlay();
         }
@@ -944,7 +944,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 const result = await response.json();
                 window.location.reload();
             } catch (error) {
-                alert("Error adding category/subcategory: " + errorFormatter(error.message));
+                showErrorModal("Error adding category/subcategory: " + errorFormatter(error.message));
             } finally {
                 hideLoadingOverlay();
             }
@@ -1008,7 +1008,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             showLoadingOverlay();
             const selection = deleteCategorySelect ? deleteCategorySelect.value : "";
             if (!selection || !selection.includes(":")) {
-                alert("Please select a category or subcategory to delete.");
+                showErrorModal("Please select a category or subcategory to delete.");
                 hideLoadingOverlay();
                 return;
             }
@@ -1042,7 +1042,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 }
                 endpoint = `/api/accounts/subcategory/${selectionId}`;
             } else {
-                alert("Invalid selection.");
+                showErrorModal("Invalid selection.");
                 hideLoadingOverlay();
                 return;
             }
@@ -1057,7 +1057,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 const result = await response.json();
                 window.location.reload();
             } catch (error) {
-                alert("Error deleting category: " + errorFormatter(error.message));
+                showErrorModal("Error deleting category: " + errorFormatter(error.message));
             } finally {
                 hideLoadingOverlay();
             }
@@ -1071,7 +1071,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             event.preventDefault();
             const accountId = deactivateAccountSelectEl.value;
             if (!accountId) {
-                alert("Please select an account to deactivate.");
+                showErrorModal("Please select an account to deactivate.");
                 return;
             }
             const confirmDeactivate = confirm("Are you sure you want to deactivate the selected account?");
@@ -1098,7 +1098,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 window.location.reload();
             } catch (error) {
                 console.log(error.message);
-                alert("Error deactivating account: " + errorFormatter(error.message));
+                showErrorModal("Error deactivating account: " + errorFormatter(error.message));
             } finally {
                 hideLoadingOverlay();
             }
@@ -1138,7 +1138,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                         row.remove();
                     }
                 } catch (error) {
-                    alert("Error reactivating account: " + errorFormatter(error.message));
+                    showErrorModal("Error reactivating account: " + errorFormatter(error.message));
                 } finally {
                     hideLoadingOverlay();
                 }

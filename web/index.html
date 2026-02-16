@@ -6,6 +6,7 @@
         <title>FinLedger</title>
         <link rel="stylesheet" href="css/base.css" />
         <link rel="stylesheet" href="css/layout.css" />
+        <link rel="stylesheet" href="css/modal.css" />
         <link rel="icon" type="image/x-icon" href="/public_images/FL-logo.ico" />
     </head>
     <body>
@@ -79,6 +80,22 @@
                 </div>
             </header>
             <main id="app" class="app-main" aria-live="polite"></main>
+        </div>
+        <div id="error_notification_modal" class="modal" aria-hidden="true" style="z-index: 1001;">
+            <div class="modal-content">
+                <h2>Error</h2>
+                <p id="error_notification_message">Test message</p>
+                <p>&nbsp;</p>
+                <button id="error_notification_close_button" class="button-primary" aria-label="Close error notification">Close</button>
+            </div>
+        </div>
+        <div id="message_notification_modal" class="modal" aria-hidden="true" style="z-index: 1001;">
+            <div class="modal-content">
+                <h2>Message</h2>
+                <p id="message_notification_message">Test message</p>
+                <p>&nbsp;</p>
+                <button id="message_notification_close_button" class="button-primary" aria-label="Close message notification">Close</button>
+            </div>
         </div>
         <div id="loading_overlay" aria-hidden="true">
             <div class="loading-spinner"></div>
