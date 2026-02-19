@@ -40,14 +40,34 @@ This page displays the user's profile information and allows them to update thei
             <h2>Change Password</h2>
             <p class="meta">Password expires on: <%= user.password_expires_at ? user.password_expires_at.toDateString() : 'N/A' %></p>
             <form id="change-password-form" class="stack">
-                <label for="current_password">Current Password:</label>
-                <input type="password" id="current_password" name="current_password" required />
+                <div class="field">
+                    <label for="current_password">Current Password:</label>
+                    <input type="password" id="current_password" name="current_password" required />
+                </div>
 
-                <label for="new_password">New Password:</label>
-                <input type="password" id="new_password" name="new_password" required />
+                <div class="field password-field">
+                    <label for="new_password">New Password:</label>
+                    <input type="password" id="new_password" name="new_password" autocomplete="new-password" required />
+                    <div class="password_validation_popup" data-password-requirements>
+                        <h2>Password Requirements</h2>
+                        <ul>
+                            <li id="starts_with_letter" class="invalid">First character must be a letter (A-Z or a-z)</li>
+                            <li id="length" class="invalid">At least 8 characters</li>
+                            <li id="uppercase" class="invalid">At least one uppercase letter</li>
+                            <li id="lowercase" class="invalid">At least one lowercase letter</li>
+                            <li id="number" class="invalid">At least one number</li>
+                            <li id="special" class="invalid">At least one special character</li>
+                        </ul>
+                    </div>
+                </div>
 
-                <label for="confirm_new_password">Confirm New Password:</label>
-                <input type="password" id="confirm_new_password" name="confirm_new_password" required />
+                <div class="field password-field">
+                    <label for="confirm_new_password">Confirm New Password:</label>
+                    <input type="password" id="confirm_new_password" name="confirm_new_password" autocomplete="new-password" required />
+                    <div class="password_validation_popup hidden" data-password-match>
+                        <h2>Passwords do not match</h2>
+                    </div>
+                </div>
 
                 <button type="submit">Change Password</button>
             </form>

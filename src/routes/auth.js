@@ -29,7 +29,7 @@ router.get("/status", async (req, res) => {
     const loggedIn = await getUserLoggedInStatus(user_id, token);
     const isAdminStatus = await isAdmin(user_id, token);
     log("trace", "Auth status request processed", { user_id, loggedIn, isAdmin: isAdminStatus }, utilities.getCallerInfo(), user_id);
-    res.json({ ok: true, loggedIn: loggedIn, isAdmin: isAdminStatus });
+    res.json({ ok: true, loggedIn: loggedIn, isAdmin: isAdminStatus, is_admin: isAdminStatus });
 });
 
 router.post("/login", async (req, res) => {

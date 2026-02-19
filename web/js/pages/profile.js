@@ -62,8 +62,83 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
 
     const changePasswordForm = document.getElementById("change-password-form");
     if (changePasswordForm) {
+        const passwordInput = document.getElementById("new_password");
+        const confirmPasswordInput = document.getElementById("confirm_new_password");
+        const passwordRequirementsContainer = changePasswordForm.querySelector("[data-password-requirements]");
+        const passwordMatchContainer = changePasswordForm.querySelector("[data-password-match]");
+        const requirementItems = {
+            starts_with_letter: changePasswordForm.querySelector("#starts_with_letter"),
+            length: changePasswordForm.querySelector("#length"),
+            uppercase: changePasswordForm.querySelector("#uppercase"),
+            lowercase: changePasswordForm.querySelector("#lowercase"),
+            number: changePasswordForm.querySelector("#number"),
+            special: changePasswordForm.querySelector("#special"),
+        };
+
+        const setRequirementState = (key, met) => {
+            const item = requirementItems[key];
+            if (!item) {
+                return;
+            }
+            item.classList.toggle("valid", met);
+            item.classList.toggle("invalid", !met);
+        };
+
+        const validatePasswords = () => {
+            const password = passwordInput?.value || "";
+            const startsWithLetterMet = /^[A-Za-z]/.test(password);
+            const lengthMet = password.length >= 8;
+            const uppercaseMet = /[A-Z]/.test(password);
+            const lowercaseMet = /[a-z]/.test(password);
+            const numberMet = /[0-9]/.test(password);
+            const specialMet = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/.test(password);
+            const requirementsMet = startsWithLetterMet && lengthMet && uppercaseMet && lowercaseMet && numberMet && specialMet;
+
+            setRequirementState("starts_with_letter", startsWithLetterMet);
+            setRequirementState("length", lengthMet);
+            setRequirementState("uppercase", uppercaseMet);
+            setRequirementState("lowercase", lowercaseMet);
+            setRequirementState("number", numberMet);
+            setRequirementState("special", specialMet);
+
+            if (passwordRequirementsContainer) {
+                passwordRequirementsContainer.classList.toggle("hidden", requirementsMet);
+            }
+
+            return requirementsMet;
+        };
+
+        const validatePasswordMatch = () => {
+            const password = passwordInput?.value || "";
+            const confirmPassword = confirmPasswordInput?.value || "";
+            const matches = password === confirmPassword;
+
+            if (passwordMatchContainer) {
+                passwordMatchContainer.classList.toggle("hidden", matches);
+            }
+
+            return matches;
+        };
+
+        passwordInput?.addEventListener("input", () => {
+            validatePasswords();
+            validatePasswordMatch();
+        });
+        confirmPasswordInput?.addEventListener("input", validatePasswordMatch);
+
         changePasswordForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            const requirementsMet = validatePasswords();
+            const passwordsMatch = validatePasswordMatch();
+            if (!requirementsMet) {
+                alert("New password does not meet all password requirements.");
+                return;
+            }
+            if (!passwordsMatch) {
+                alert("Passwords do not match.");
+                return;
+            }
+
             showOverlay();
             const formData = new FormData(changePasswordForm);
             try {

@@ -195,6 +195,7 @@ let newUserLogic = async function () {
     const passwordRequirementsContainer = document.querySelector("[data-password-requirements]");
     const passwordMatchContainer = document.querySelector("[data-password-match]");
     const requirementItems = {
+        starts_with_letter: document.getElementById("starts_with_letter"),
         length: document.getElementById("length"),
         uppercase: document.getElementById("uppercase"),
         lowercase: document.getElementById("lowercase"),
@@ -216,13 +217,15 @@ let newUserLogic = async function () {
             const password = passwordInput.value;
             const confirmPassword = confirmPasswordInput.value;
             // Check password requirements
+            const startsWithLetterMet = /^[A-Za-z]/.test(password);
             const lengthMet = password.length >= 8;
             const uppercaseMet = /[A-Z]/.test(password);
             const lowercaseMet = /[a-z]/.test(password);
             const numberMet = /[0-9]/.test(password);
             const specialMet = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/.test(password);
-            const requirementsMet = lengthMet && uppercaseMet && lowercaseMet && numberMet && specialMet;
+            const requirementsMet = startsWithLetterMet && lengthMet && uppercaseMet && lowercaseMet && numberMet && specialMet;
 
+            setRequirementState("starts_with_letter", startsWithLetterMet);
             setRequirementState("length", lengthMet);
             setRequirementState("uppercase", uppercaseMet);
             setRequirementState("lowercase", lowercaseMet);

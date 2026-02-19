@@ -28,7 +28,7 @@ const getIsAdmin = async () => {
         return false;
     }
     const data = await res.json();
-    return data.is_admin === true;
+    return data.is_admin === true || data.isAdmin === true;
 };
 
 export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay, showErrorModal }) {
@@ -667,6 +667,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             actionCell.appendChild(auditButton);
             tr.appendChild(actionCell);
             let rowClickTimeout = null;
+            const clearRowClickTimeout = () => {
+                if (rowClickTimeout) {
+                    clearTimeout(rowClickTimeout);
+                    rowClickTimeout = null;
+                }
+            };
             const openLedgerForAccount = () => {
                 const accountId = account.id;
                 const url = new URL(window.location.origin + `/#/transactions?account_id=${accountId}`);
@@ -682,22 +688,16 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 if (event.defaultPrevented || event.detail > 1 || isInteractiveTarget(event.target)) {
                     return;
                 }
-                if (rowClickTimeout) {
-                    clearTimeout(rowClickTimeout);
-                }
+                clearRowClickTimeout();
                 rowClickTimeout = setTimeout(() => {
                     rowClickTimeout = null;
                     openLedgerForAccount();
                 }, 250);
             });
-            if (!isAdmin) {
-                tr.addEventListener("dblclick", () => {
-                    if (rowClickTimeout) {
-                        clearTimeout(rowClickTimeout);
-                        rowClickTimeout = null;
-                    }
-                });
-            }
+            // Double-click should always suppress the pending single-click row navigation.
+            tr.addEventListener("dblclick", () => {
+                clearRowClickTimeout();
+            });
             accountsTableBody.appendChild(tr);
         }
         await formatCurrencyEls();
