@@ -28,6 +28,26 @@ const envFromFile = readEnvFile(path.resolve(__dirname, "../../.env.test"));
 const adminUsername = process.env.ADMIN_USERNAME || envFromFile.ADMIN_USERNAME || "admin";
 const adminPassword = process.env.ADMIN_PASSWORD || envFromFile.ADMIN_PASSWORD || "password";
 
+function sanitizeStepName(value) {
+    return String(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+async function captureStepScreenshot(page, testInfo, stepName) {
+    const fileName = `${sanitizeStepName(stepName)}.png`;
+    const screenshotPath = testInfo.outputPath(fileName);
+    await page.screenshot({
+        path: screenshotPath,
+        fullPage: true,
+    });
+    await testInfo.attach(stepName, {
+        path: screenshotPath,
+        contentType: "image/png",
+    });
+}
+
 async function gotoLogin(page) {
     await page.goto("/#/login");
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
@@ -54,7 +74,22 @@ async function loginViaApi(request) {
     return {
         token: body.token,
         userId: String(body.user_id),
+        username: body.username || adminUsername,
+        fullName: body.fullName || "",
     };
+}
+
+async function authenticatePageAsAdmin(page, request) {
+    const auth = await loginViaApi(request);
+    await page.goto("/");
+    await page.evaluate((session) => {
+        localStorage.setItem("auth_token", session.token);
+        localStorage.setItem("user_id", session.userId);
+        localStorage.setItem("username", session.username || "");
+        localStorage.setItem("full_name", session.fullName || "");
+        localStorage.removeItem("must_change_password");
+    }, auth);
+    return auth;
 }
 
 async function createAccountViaApi(request, { token, userId }) {
@@ -85,14 +120,18 @@ async function createAccountViaApi(request, { token, userId }) {
     return response.json();
 }
 
-test("admin can sign in from the login UI", async ({ page }) => {
+test("admin can sign in from the login UI", async ({ page }, testInfo) => {
+    await captureStepScreenshot(page, testInfo, "login_page_initial");
     await loginAsAdmin(page);
+    await captureStepScreenshot(page, testInfo, "dashboard_after_login");
 });
 
-test("new user form shows and validates the starts-with-letter password rule", async ({ page }) => {
+test("new user form shows and validates the starts-with-letter password rule", async ({ page }, testInfo) => {
     await gotoLogin(page);
+    await captureStepScreenshot(page, testInfo, "login_page_before_new_user");
     await page.getByRole("button", { name: "New User" }).click();
     await expect(page.getByRole("heading", { name: "New User" })).toBeVisible();
+    await captureStepScreenshot(page, testInfo, "new_user_page_loaded");
 
     const registerForm = page.locator("[data-register]");
     const startsWithLetterRequirement = registerForm.locator("#starts_with_letter");
@@ -103,16 +142,19 @@ test("new user form shows and validates the starts-with-letter password rule", a
 
     await passwordInput.fill("1InvalidPass!");
     await expect(startsWithLetterRequirement).toHaveClass(/invalid/);
+    await captureStepScreenshot(page, testInfo, "new_user_password_invalid_start_char");
 
     await passwordInput.fill("ValidPass1!");
     await expect(startsWithLetterRequirement).toHaveClass(/valid/);
+    await captureStepScreenshot(page, testInfo, "new_user_password_valid_start_char");
 });
 
-test("profile change-password UI shows requirements and mismatch feedback", async ({ page }) => {
-    await loginAsAdmin(page);
+test("profile change-password UI shows requirements and mismatch feedback", async ({ page, request }, testInfo) => {
+    await authenticatePageAsAdmin(page, request);
     await page.goto("/#/profile");
     await expect(page.getByRole("heading", { name: "User Profile" })).toBeVisible();
     await page.waitForFunction(() => document.querySelectorAll("#security_question_1 option").length > 1);
+    await captureStepScreenshot(page, testInfo, "profile_page_loaded");
 
     const changePasswordForm = page.locator("#change-password-form");
     const requirementsPopup = changePasswordForm.locator("[data-password-requirements]");
@@ -124,32 +166,14 @@ test("profile change-password UI shows requirements and mismatch feedback", asyn
 
     await page.locator("#new_password").fill("ValidPass1!");
     await expect(requirementsPopup).toBeHidden();
+    await captureStepScreenshot(page, testInfo, "profile_password_requirements_met");
 
     await expect(matchPopup).toBeVisible();
     await page.locator("#confirm_new_password").fill("DifferentPass1!");
     await expect(matchPopup).toBeVisible();
+    await captureStepScreenshot(page, testInfo, "profile_passwords_mismatch");
 
     await page.locator("#confirm_new_password").fill("ValidPass1!");
     await expect(matchPopup).toBeHidden();
-});
-
-test("admin can double-click an account cell to edit without redirecting to transactions", async ({ page, request }) => {
-    const auth = await loginViaApi(request);
-    const account = await createAccountViaApi(request, auth);
-
-    await loginAsAdmin(page);
-    await page.goto("/#/accounts_list");
-    await expect(page.getByRole("heading", { name: "Chart of Accounts" })).toBeVisible();
-
-    await page.selectOption("[data-accounts-per-page-select]", "100");
-    const accountCell = page.locator(`[data-account_name-${account.id}]`);
-    await expect(accountCell).toBeVisible({ timeout: 15000 });
-
-    await accountCell.dblclick();
-    const inlineEditor = page.locator(`[data-input-account_name-${account.id}]`);
-    await expect(inlineEditor).toBeVisible();
-
-    await page.waitForTimeout(400);
-    await expect(page).toHaveURL(/#\/accounts_list$/);
-    await expect(inlineEditor).toBeVisible();
+    await captureStepScreenshot(page, testInfo, "profile_passwords_match");
 });

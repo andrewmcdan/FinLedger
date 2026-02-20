@@ -6,6 +6,10 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${testPort}
 module.exports = defineConfig({
     testDir: "./tests/ui",
     timeout: 30 * 1000,
+    reporter: [
+        ["list"],
+        ["html", { open: "never" }],
+    ],
     expect: {
         timeout: 5 * 1000,
     },
@@ -15,6 +19,7 @@ module.exports = defineConfig({
     use: {
         baseURL,
         trace: "on-first-retry",
+        screenshot: "only-on-failure",
     },
     webServer: {
         command: "npm run db-init:test && node --env-file=.env.test src/server.js",
