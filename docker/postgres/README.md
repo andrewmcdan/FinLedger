@@ -106,9 +106,14 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - user_id: bigint (ref public.users.id)
 - entity_type: text
 - entity_id: bigint
-- changes: text
-- metadata: text
+- changes: jsonb
+- metadata: jsonb
 - created_at: timestamp with time zone
+- action: text
+- changed_by: bigint (ref public.users.id)
+- changed_at: timestamp with time zone
+- b_image: jsonb
+- a_image: jsonb
 
 ### public.documents
 - id: bigint

@@ -81,7 +81,7 @@ router.post("/create", async (req, res) => {
     const { accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, total_debits, total_credits, accountOrder, statementType, comments, accountOwner } = req.body;
     try {
         log("info", "Creating account via API", { userId, accountOwner, accountName, accountCategory, accountSubcategory }, utilities.getCallerInfo(), userId);
-        const newAccount = await accountsController.createAccount(accountOwner, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, total_debits, total_credits, accountOrder, statementType, comments);
+        const newAccount = await accountsController.createAccount(accountOwner, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, total_debits, total_credits, accountOrder, statementType, comments, userId);
         log("info", "Account created via API", { userId, accountId: newAccount?.id, accountOwner }, utilities.getCallerInfo(), userId);
         res.status(201).json(newAccount);
     } catch (error) {
@@ -147,13 +147,13 @@ router.post("/add-category", async (req, res) => {
                 log("warn", "Add subcategory request missing required fields", { userId }, utilities.getCallerInfo(), userId);
                 return sendApiError(res, 400, "ERR_CATEGORY_AND_SUBCATEGORY_REQUIRED");
             }
-            result = await accountsController.addSubcategory(subcategoryName, categoryId, orderIndex, subcategoryDescription);
+            result = await accountsController.addSubcategory(subcategoryName, categoryId, orderIndex, subcategoryDescription, userId);
         } else {
             if (!categoryName || !accountNumberPrefix || !initialSubcategoryName) {
                 log("warn", "Add category request missing required fields", { userId }, utilities.getCallerInfo(), userId);
                 return sendApiError(res, 400, "ERR_CATEGORY_PREFIX_SUBCATEGORY_REQUIRED");
             }
-            result = await accountsController.addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription);
+            result = await accountsController.addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription, userId);
         }
         log("info", "Add category request completed", { userId, isSubcategory }, utilities.getCallerInfo(), userId);
         res.json(result);
@@ -176,7 +176,7 @@ router.delete("/category/:categoryId", async (req, res) => {
     const { categoryId } = req.params;
     try {
         log("info", "Delete category request received", { userId, categoryId }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.deleteCategory(categoryId); 
+        const result = await accountsController.deleteCategory(categoryId, userId); 
         log("info", "Delete category request completed", { userId, categoryId }, utilities.getCallerInfo(), userId);
         res.json(result);
     } catch (error) {
@@ -202,7 +202,7 @@ router.delete("/subcategory/:subcategoryId", async (req, res) => {
     const { subcategoryId } = req.params;
     try {
         log("info", "Delete subcategory request received", { userId, subcategoryId }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.deleteSubcategory(subcategoryId); 
+        const result = await accountsController.deleteSubcategory(subcategoryId, userId); 
         log("info", "Delete subcategory request completed", { userId, subcategoryId }, utilities.getCallerInfo(), userId);
         res.json(result);
     } catch (error) {

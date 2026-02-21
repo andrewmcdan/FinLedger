@@ -75,11 +75,35 @@ const log = async (level, message, context = null, source = "", user_id = null, 
 const logAudit = async (event_type, user_id = null, entity_type = null, entity_id = null, changes = {}, metadata = {}) => {
     const timestamp = new Date().toISOString();
     try {
+        const normalizedChanges = changes === null || changes === undefined
+            ? {}
+            : (typeof changes === "object" ? changes : { value: changes });
+        const normalizedMetadata = metadata === null || metadata === undefined
+            ? {}
+            : (typeof metadata === "object" ? metadata : { value: metadata });
+        const beforeImage = normalizedChanges.before || normalizedChanges.b_image || null;
+        const afterImage = normalizedChanges.after || normalizedChanges.a_image || null;
+        const action = normalizedMetadata.action || event_type;
         const query = `
-            INSERT INTO audit_logs (event_type, user_id, entity_type, entity_id, changes, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO audit_logs (
+                event_type, action, user_id, changed_by, entity_type, entity_id,
+                changes, metadata, b_image, a_image, changed_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         `;
-        const values = [event_type, user_id, entity_type, entity_id, changes, metadata];
+        const values = [
+            event_type,
+            action,
+            user_id,
+            user_id,
+            entity_type,
+            entity_id,
+            normalizedChanges,
+            normalizedMetadata,
+            beforeImage,
+            afterImage,
+            timestamp,
+        ];
         await db.query(query, values);
     }
     catch (error) {
@@ -126,15 +150,31 @@ const queryAuditLogs = async (filters = {}) => {
         query += ` AND user_id = $${index++}`;
         values.push(filters.user_id);
     }
+    if (filters.changed_by) {
+        query += ` AND changed_by = $${index++}`;
+        values.push(filters.changed_by);
+    }
+    if (filters.entity_type) {
+        query += ` AND entity_type = $${index++}`;
+        values.push(filters.entity_type);
+    }
+    if (filters.entity_id) {
+        query += ` AND entity_id = $${index++}`;
+        values.push(filters.entity_id);
+    }
+    if (filters.action) {
+        query += ` AND action = $${index++}`;
+        values.push(filters.action);
+    }
     if (filters.startDate) {
-        query += ` AND created_at >= $${index++}`;
+        query += ` AND changed_at >= $${index++}`;
         values.push(filters.startDate);
     }
     if (filters.endDate) {
-        query += ` AND created_at <= $${index++}`;
+        query += ` AND changed_at <= $${index++}`;
         values.push(filters.endDate);
     }
-    query += " ORDER BY created_at DESC LIMIT 100"; // limit to 100 results
+    query += " ORDER BY changed_at DESC LIMIT 100"; // limit to 100 results
     const result = await db.query(query, values);
     return result.rows;
 }

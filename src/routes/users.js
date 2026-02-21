@@ -165,7 +165,7 @@ router.get("/approve-user/:userId", async (req, res) => {
     if (userData.status !== "pending") {
         return sendApiError(res, 400, "ERR_USER_NOT_PENDING_APPROVAL");
     }
-    await approveUser(userIdToApprove);
+    await approveUser(userIdToApprove, requestingUserId);
     log("info", `User ID ${userIdToApprove} approved by admin user ID ${requestingUserId}`, { function: "approve-user" }, utilities.getCallerInfo(), requestingUserId);
     const loginLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
     const loginLink = `${loginLinkUrlBase}/#/login`;
@@ -200,7 +200,7 @@ router.get("/reject-user/:userId", async (req, res) => {
         log("warn", "Reject-user attempted for non-pending user", { requestingUserId, userIdToReject, status: userData.status }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 400, "ERR_USER_NOT_PENDING_APPROVAL");
     }
-    await rejectUser(userIdToReject);
+    await rejectUser(userIdToReject, requestingUserId);
     log("info", `User ID ${userIdToReject} rejected by admin user ID ${requestingUserId}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
 
     try {
@@ -232,7 +232,7 @@ router.post("/create-user", uploadProfile.single("user_icon"), async (req, res) 
     const { first_name, last_name, email, password, role, address, date_of_birth } = req.body;
     try {
         const user_icon_name = req.file ? req.file.path : null;
-        const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, user_icon_name);
+        const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, user_icon_name, requestingUserId);
         log("info", `New user created with ID ${newUser.id} by admin user ID ${requestingUserId}`, { function: "create-user" }, utilities.getCallerInfo(), requestingUserId);
         return res.json({ user: newUser });
     } catch (error) {
@@ -361,7 +361,7 @@ router.post("/update-profile", uploadProfile.single("profile_image"), async (req
         }
     }
     try {
-        const updatedUser = await updateUserProfile(requestingUserId, profileUpdates);
+        const updatedUser = await updateUserProfile(requestingUserId, profileUpdates, requestingUserId);
         log("info", "Profile updated via API", { requestingUserId }, utilities.getCallerInfo(), requestingUserId);
         return sendApiSuccess(res, "MSG_PROFILE_UPDATED_SUCCESS", { user: updatedUser });
     } catch (error) {
@@ -401,7 +401,7 @@ router.post("/change-temp-password", async (req, res) => {
         return sendApiError(res, 400, "ERR_TEMP_PASSWORD_NOT_REQUIRED");
     }
     try {
-        await updateSecurityQuestions(requestingUserId, securityQuestions);
+        await updateSecurityQuestions(requestingUserId, securityQuestions, requestingUserId);
         await changePassword(requestingUserId, newPassword);
         log("info", "Temp password changed via API", { requestingUserId }, utilities.getCallerInfo(), requestingUserId);
         return sendApiSuccess(res, "MSG_PASSWORD_CHANGED_SUCCESS");
@@ -444,7 +444,7 @@ router.post("/register_new_user", async (req, res) => {
             { question: security_question_1, answer: security_answer_1 },
             { question: security_question_2, answer: security_answer_2 },
             { question: security_question_3, answer: security_answer_3 },
-        ]);
+        ], newUser.id);
         return res.json({ user: newUser });
     } catch (error) {
         log("error", `Error registering new user: ${error}`, { function: "register_new_user" }, utilities.getCallerInfo());
@@ -573,7 +573,7 @@ router.post("/suspend-user", async (req, res) => {
         log("warn", "Suspend user attempted for non-active user", { requestingUserId, userIdToSuspend, status: userData.status }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 400, "ERR_ONLY_ACTIVE_USERS_CAN_BE_SUSPENDED");
     }
-    await suspendUser(userIdToSuspend, suspensionStart, suspensionEnd);
+    await suspendUser(userIdToSuspend, suspensionStart, suspensionEnd, requestingUserId);
     log("info", `User ID ${userIdToSuspend} suspended by admin user ID ${requestingUserId}`, { function: "suspend-user" }, utilities.getCallerInfo(), requestingUserId);
     return sendApiSuccess(res, "MSG_USER_SUSPENDED_SUCCESS");
 });
@@ -599,7 +599,7 @@ router.get("/reinstate-user/:userId", async (req, res) => {
         log("warn", "Reinstate user attempted for non-suspended user", { requestingUserId, userIdToReinstate, status: userData.status }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 400, "ERR_ONLY_SUSPENDED_USERS_CAN_BE_REINSTATED");
     }
-    await reinstateUser(userIdToReinstate);
+    await reinstateUser(userIdToReinstate, requestingUserId);
     log("info", `User ID ${userIdToReinstate} reinstated by admin user ID ${requestingUserId}`, { function: "reinstate-user" }, utilities.getCallerInfo(), requestingUserId);
     return sendApiSuccess(res, "MSG_USER_REINSTATED_SUCCESS");
 });
@@ -633,11 +633,11 @@ router.post("/update-user-field", async (req, res) => {
         const nameParts = newValue.trim().split(" ");
         const firstName = nameParts.shift();
         const lastName = nameParts.join(" ");
-        await updateUserProfile(userId, { first_name: firstName, last_name: lastName });
+        await updateUserProfile(userId, { first_name: firstName, last_name: lastName }, requestingUserId);
     } else {
         const updateData = {};
         updateData[fieldName] = newValue;
-        await updateUserProfile(userId, updateData);
+        await updateUserProfile(userId, updateData, requestingUserId);
     }
     log("info", `User ID ${userId} field ${fieldName} updated by admin user ID ${requestingUserId}`, { function: "update-user-field" }, utilities.getCallerInfo(), requestingUserId);
     return sendApiSuccess(res, "MSG_USER_FIELD_UPDATED_SUCCESS");
@@ -660,7 +660,7 @@ router.post("/delete-user", async (req, res) => {
         log("warn", "Delete user target not found", { requestingUserId, userIdToDelete }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
     }
-    await deleteUserById(userIdToDelete);
+    await deleteUserById(userIdToDelete, requestingUserId);
     log("info", `User ID ${userIdToDelete} deleted by admin user ID ${requestingUserId}`, { function: "delete-user" }, utilities.getCallerInfo(), requestingUserId);
     return sendApiSuccess(res, "MSG_USER_DELETED_SUCCESS");
 });
@@ -685,7 +685,7 @@ router.get("/reset-user-password/:userId", async (req, res) => {
     try {
         // Ensure generated temporary password always satisfies complexity rules.
         const tempPassword = `A${utilities.generateRandomToken(11)}a1!`;
-        await setUserPassword(userIdToReset, tempPassword, true);
+        await setUserPassword(userIdToReset, tempPassword, true, requestingUserId);
         const emailResult = await sendEmail(userData.email, "FinLedger Password Reset by Administrator", `Dear ${userData.first_name},\n\nAn administrator has reset your FinLedger account password. Please use the temporary password below to log in and change your password immediately.\n\nTemporary Password: ${tempPassword}\n\nBest regards,\nThe FinLedger Team\n\n`);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send admin password reset email to ${userData.email} for user ID ${userIdToReset}`, { function: "reset-user-password" }, utilities.getCallerInfo(), userIdToReset);

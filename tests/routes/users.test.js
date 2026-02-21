@@ -395,6 +395,19 @@ test("GET /api/users/reject-user/:userId rejects pending user and sends rejectio
         const status = await db.query("SELECT status FROM users WHERE id = $1", [pending.id]);
         assert.equal(status.rows[0].status, "rejected");
 
+        const auditResult = await db.query(
+            "SELECT action, changed_by, b_image, a_image, changed_at FROM audit_logs WHERE entity_type = 'users' AND entity_id = $1 AND action = 'update' ORDER BY id DESC LIMIT 1",
+            [pending.id],
+        );
+        assert.equal(auditResult.rowCount, 1);
+        assert.equal(auditResult.rows[0].action, "update");
+        assert.equal(String(auditResult.rows[0].changed_by), String(admin.id));
+        assert.equal(auditResult.rows[0].b_image.status, "pending");
+        assert.equal(auditResult.rows[0].a_image.status, "rejected");
+        assert.equal(auditResult.rows[0].b_image.password_hash, undefined);
+        assert.equal(auditResult.rows[0].a_image.password_hash, undefined);
+        assert.ok(auditResult.rows[0].changed_at);
+
         assert.ok(emailCalls.length >= 1);
         assert.equal(emailCalls[0].to, pending.email);
         assert.match(emailCalls[0].body, /not approved/i);

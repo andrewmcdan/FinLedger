@@ -94,7 +94,7 @@ router.post("/login", async (req, res) => {
             await client.query("INSERT INTO logged_in_users (user_id, token) VALUES ($1, $2)", [user.id, token]);
             // reset failed login attempts on successful login
             await client.query("UPDATE users SET failed_login_attempts = 0, suspension_end_at = NULL WHERE id = $1", [user.id]);
-        });
+        }, user.id);
     } catch (error) {
         log("error", `Login transaction failed for username ${username}: ${error}`, { function: "login" }, utilities.getCallerInfo(), user.id);
         return sendApiError(res, 500, "ERR_LOGIN_SERVER");
@@ -121,7 +121,7 @@ router.post("/logout", (req, res) => {
     }
     log("info", `Logout request received for user ID ${user_id}`, { function: "logout" }, utilities.getCallerInfo(), user_id);
     // Set the logout_at column for user to now()
-    db.query("UPDATE logged_in_users SET logout_at = NOW() WHERE user_id = $1 AND token = $2", [user_id, token])
+    db.query("UPDATE logged_in_users SET logout_at = NOW() WHERE user_id = $1 AND token = $2", [user_id, token], user_id)
         .then(() => {
             log("info", `User ID ${user_id} logged out successfully`, { function: "logout" }, utilities.getCallerInfo(), user_id);
             return sendApiSuccess(res, "MSG_LOGGED_OUT_SUCCESS", { ok: true });
@@ -134,4 +134,3 @@ router.post("/logout", (req, res) => {
 });
 
 module.exports = router;
-

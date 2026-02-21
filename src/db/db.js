@@ -56,11 +56,14 @@ const query = async (text, params, user_id = null) => {
     }
 };
 
-const transaction = async (callback) => {
+const transaction = async (callback, user_id = null) => {
     const client = await pool.connect();
     try {
         logDb("debug", "Starting database transaction");
         await client.query("BEGIN");
+        if (user_id) {
+            await client.query("SELECT set_config('app.user_id', $1, true)", [String(user_id)]);
+        }
         const result = await callback(client);
         await client.query("COMMIT");
         logDb("debug", "Committed database transaction");

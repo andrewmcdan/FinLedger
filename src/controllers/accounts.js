@@ -234,7 +234,7 @@ async function getAccountCounts(userId, token, options = {}) {
     return result.rows[0];
 }
 
-async function createAccount(ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, statementType, comments) {
+async function createAccount(ownerId, accountName, accountDescription, normalSide, accountCategory, accountSubcategory, balance, initialBalance, totalDebits, totalCredits, accountOrder, statementType, comments, changedByUserId = null) {
     log("info", "Creating account", { ownerId, accountName, accountCategory, accountSubcategory, accountOrder, statementType }, getCallerInfo(), ownerId);
     const statementTypeMap = {
         "Income Statement": "IS",
@@ -259,7 +259,7 @@ async function createAccount(ownerId, accountName, accountDescription, normalSid
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
         RETURNING *`;
         const params = [ownerId, accountName, accountDescription, normalSide, categoryId, subcategoryId, balance, initialBalance, totalDebits, totalCredits, accountOrder, normalizedStatementType, comments, accountNumber];
-        const result = await db.query(query, params);
+        const result = await db.query(query, params, changedByUserId || ownerId);
         const error = result?.error;
         if (result.rows.length === 0) {
             log("error", "Account creation failed", { ownerId, accountName, error }, getCallerInfo());
@@ -497,7 +497,7 @@ async function setAccountStatus(accountId, status, userId) {
     }
 }
 
-async function addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription) {
+async function addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription, changedByUserId = null) {
     log("info", "Adding account category", { categoryName, accountNumberPrefix, initialSubcategoryName }, getCallerInfo());
     sanitizeInput(categoryName);
     sanitizeInput(accountNumberPrefix);
@@ -540,10 +540,10 @@ async function addCategory(categoryName, accountNumberPrefix, categoryDescriptio
         }
         log("info", "Account category created", { categoryId: category.id, subcategoryId: subcategoryResult.rows[0]?.id }, getCallerInfo());
         return { category, subcategory: subcategoryResult.rows[0] };
-    });
+    }, changedByUserId);
 }
 
-async function addSubcategory(subcategoryName, accountCategoryId, orderIndex, subcategoryDescription) {
+async function addSubcategory(subcategoryName, accountCategoryId, orderIndex, subcategoryDescription, changedByUserId = null) {
     log("info", "Adding account subcategory", { subcategoryName, accountCategoryId, orderIndex }, getCallerInfo());
     sanitizeInput(subcategoryName);
     sanitizeInput(accountCategoryId);
@@ -581,10 +581,10 @@ async function addSubcategory(subcategoryName, accountCategoryId, orderIndex, su
         }
         log("info", "Account subcategory created", { subcategoryId: result.rows[0]?.id, accountCategoryId }, getCallerInfo());
         return result.rows[0];
-    });
+    }, changedByUserId);
 }
 
-async function deleteCategory(categoryId) {
+async function deleteCategory(categoryId, changedByUserId = null) {
     log("info", "Deleting account category", { categoryId }, getCallerInfo());
     sanitizeInput(categoryId);
     return db.transaction(async (client) => {
@@ -605,10 +605,10 @@ async function deleteCategory(categoryId) {
         await client.query("DELETE FROM account_categories WHERE id = $1", [categoryId]);
         log("info", "Account category deleted", { categoryId }, getCallerInfo());
         return { success: true };
-    });
+    }, changedByUserId);
 }
 
-async function deleteSubcategory(subcategoryId) {
+async function deleteSubcategory(subcategoryId, changedByUserId = null) {
     log("info", "Deleting account subcategory", { subcategoryId }, getCallerInfo());
     sanitizeInput(subcategoryId);
     return db.transaction(async (client) => {
@@ -620,7 +620,7 @@ async function deleteSubcategory(subcategoryId) {
         await client.query("DELETE FROM account_subcategories WHERE id = $1", [subcategoryId]);
         log("info", "Account subcategory deleted", { subcategoryId }, getCallerInfo());
         return { success: true };
-    });
+    }, changedByUserId);
 }
 
 module.exports = {

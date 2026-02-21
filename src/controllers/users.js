@@ -223,27 +223,27 @@ const listLoggedInUsers = async () => {
     return loggedInUsers;
 };
 
-const approveUser = async (userId) => {
+const approveUser = async (userId, changedByUserId = null) => {
     logger.log("info", `Approving user with ID ${userId}`, { function: "approveUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET status = 'active', updated_at = now() WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'active', updated_at = now() WHERE id = $1", [userId], changedByUserId);
 };
 
-const rejectUser = async (userId) => {
+const rejectUser = async (userId, changedByUserId = null) => {
     logger.log("info", `Rejecting user with ID ${userId}`, { function: "rejectUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET status = 'rejected', updated_at = now() WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'rejected', updated_at = now() WHERE id = $1", [userId], changedByUserId);
 };
 
-const suspendUser = async (userId, suspensionStart, suspensionEnd) => {
+const suspendUser = async (userId, suspensionStart, suspensionEnd, changedByUserId = null) => {
     logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended', updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId]);
+    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended', updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId], changedByUserId);
 };
 
-const reinstateUser = async (userId) => {
+const reinstateUser = async (userId, changedByUserId = null) => {
     logger.log("info", `Reinstating user with ID ${userId}`, { function: "reinstateUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE id = $1", [userId], changedByUserId);
 };
 
-const changePassword = async (userId, newPassword) => {
+const changePassword = async (userId, newPassword, changedByUserId = userId) => {
     if (decodeURIComponent(newPassword) !== newPassword) {
         newPassword = decodeURIComponent(newPassword);
     }
@@ -266,7 +266,7 @@ const changePassword = async (userId, newPassword) => {
         logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo(), userId);
         const result = await client.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
         await savePasswordToHistory(userId, result.rows[0].password_hash, client);
-    });
+    }, changedByUserId);
     logger.log("info", "Password changed successfully", { userId }, utilities.getCallerInfo(), userId);
 };
 
@@ -286,7 +286,7 @@ const changePasswordWithCurrentPassword = async (userId, currentPassword, newPas
         error.code = "INVALID_CURRENT_PASSWORD";
         throw error;
     }
-    await changePassword(userId, newPassword);
+    await changePassword(userId, newPassword, userId);
 };
 
 const updateSecurityQuestionsWithCurrentPassword = async (userId, currentPassword, securityQuestions) => {
@@ -297,10 +297,10 @@ const updateSecurityQuestionsWithCurrentPassword = async (userId, currentPasswor
         error.code = "INVALID_CURRENT_PASSWORD";
         throw error;
     }
-    await updateSecurityQuestions(userId, securityQuestions);
+    await updateSecurityQuestions(userId, securityQuestions, userId);
 };
 
-const updateUserProfile = async (userId, profileUpdates) => {
+const updateUserProfile = async (userId, profileUpdates, changedByUserId = userId) => {
     const fields = {
         first_name: profileUpdates.first_name,
         last_name: profileUpdates.last_name,
@@ -332,7 +332,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
     values.push(userId);
     updates.push(`updated_at = now()`);
     const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, email, first_name, last_name, address, user_icon_path`;
-    const result = await db.query(query, values);
+    const result = await db.query(query, values, changedByUserId);
     if (result.rowCount === 0) {
         logger.log("warn", `No user found with ID ${userId} to update profile`, { function: "updateUserProfile" }, utilities.getCallerInfo(), userId);
         return null;
@@ -353,7 +353,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
  * @param {String} profileImage - Absolute path to temp profile image
  * @returns
  */
-const createUser = async (firstName, lastName, email, password, role, address, dateOfBirth, profileImage) => {
+const createUser = async (firstName, lastName, email, password, role, address, dateOfBirth, profileImage, createdByUserId = null) => {
     logger.log("info", "Creating user", { email, role }, utilities.getCallerInfo());
     if (role !== "accountant" && role !== "administrator" && role !== "manager") {
         logger.log("error", `Invalid role specified when creating user: ${role}`, { function: "createUser" }, utilities.getCallerInfo());
@@ -384,7 +384,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
                 );
                 await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
                 return result.rows[0];
-            });
+            }, createdByUserId);
             break;
         } catch (error) {
             if (attempt === maxUsernameInsertAttempts || !isUsernameUniqueViolation(error)) {
@@ -420,7 +420,7 @@ const savePasswordToHistory = async (userId, passwordHash, client = null) => {
     await executor.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
 };
 
-const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
+const updateSecurityQuestions = async (userId, questionsAndAnswers, changedByUserId = userId) => {
     // questionsAndAnswers should be an array of objects with 'question' and 'answer' properties
     // The table has rows like this:   security_question_1 TEXT, security_answer_hash_1 TEXT, security_question_2 TEXT, security_answer_hash_2 TEXT, security_question_3 TEXT, security_answer_hash_3 TEXT,
     if (questionsAndAnswers.length !== 3) {
@@ -431,7 +431,7 @@ const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
     }
     const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')), updated_at = now() WHERE id = $7";
     const values = [questionsAndAnswers[0].question, questionsAndAnswers[0].answer, questionsAndAnswers[1].question, questionsAndAnswers[1].answer, questionsAndAnswers[2].question, questionsAndAnswers[2].answer, userId];
-    await db.query(query, values);
+    await db.query(query, values, changedByUserId);
     logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo(), userId);
 };
 
@@ -519,12 +519,12 @@ const suspendUsersWithExpiredPasswords = async () => {
     logger.log("debug", "Expired password suspension complete", { suspendedCount: result.rowCount }, utilities.getCallerInfo());
 };
 
-const deleteUserById = async (userId) => {
+const deleteUserById = async (userId, changedByUserId = null) => {
     logger.log("info", `Deleting user with ID ${userId}`, { function: "deleteUserById" }, utilities.getCallerInfo());
-    await db.query("DELETE FROM users WHERE id = $1", [userId]);
+    await db.query("DELETE FROM users WHERE id = $1", [userId], changedByUserId);
 };
 
-const setUserPassword = async (userId, password, temp = false) => {
+const setUserPassword = async (userId, password, temp = false, changedByUserId = userId) => {
     if (!checkPasswordComplexity(password)) {
         logger.log("warn", "Password complexity check failed for setUserPassword", { userId, temp }, utilities.getCallerInfo(), userId);
         const error = new Error("Password does not meet complexity requirements");
@@ -538,7 +538,7 @@ const setUserPassword = async (userId, password, temp = false) => {
         const result2 = await client.query("UPDATE users SET password_hash = $1, temp_password = $2, password_changed_at = now(), password_expires_at = now() + ($3 * interval '15 minutes'), updated_at = now() WHERE id = $4", [passwordHash, temp, temp ? 1 : 90 * 24 * 60, userId]);
         await savePasswordToHistory(userId, passwordHash, client);
         return result2.rowCount > 0;
-    });
+    }, changedByUserId);
 };
 
 const getUserByUsername = async (username) => {

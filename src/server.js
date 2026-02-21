@@ -10,6 +10,7 @@ const { getCallerInfo, cleanupUserData, cleanupLogs } = require("./utils/utiliti
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
+const auditLogsRoutes = require("./routes/audit_logs");
 const messagesRoutes = require("./routes/messages");
 const { dashboard, accountsList, forgotPasswordSubmit, profile } = require("./routes/rendered_routes");
 
@@ -33,6 +34,7 @@ app.use(express.static("web"));
 app.use("/api/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/accounts", accountsRoutes);
+app.use("/api/audit-logs", auditLogsRoutes);
 app.use("/images", imageRoutes);
 
 // This if statement ensures the server only starts if this file is run directly.
