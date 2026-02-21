@@ -141,17 +141,15 @@ Login must verify:
 A dedicated event log table is mandatory.
 
 Must store:
-- TODO: Before image (B prefix)
-- TODO: After image (A prefix)
+- Before image (B prefix)
+- After image (A prefix)
 - User who made change
 - Timestamp of change
 
 Applies to:
-- TODO: User changes
+- User changes
 - Account changes
-- TODO: Any system data modifications
-
-TODO: Event log must enable full audit trail capability.
+- Any system data modifications
 
 ------------------------------------------------------------
 
