@@ -251,6 +251,6 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - security_answer_hash_3: text
 - reset_token: text
 - reset_token_expires_at: timestamp with time zone
-- user_icon_path: text
+- user_icon_path: uuid
 - temp_password: boolean
 - reset_failed_attempts: integer

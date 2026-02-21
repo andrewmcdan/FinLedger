@@ -115,15 +115,27 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             });
         });
     }
-    const tableColumns = ["fullname", "email", "role", "status", "created_at", "last_login_at", "suspension_start_at", "suspension_end_at", "address", "password_expires_at"];
-    const dateColumns = ["last_login_at", "suspension_start_at", "suspension_end_at", "created_at", "password_expires_at"];
-    const modifyTableCell = (user, column, value, isDate = false) => {
+    const tableColumns = ["fullname", "email", "role", "status", "last_login_at", "suspension_start_at", "suspension_end_at", "address", "password_expires_at"];
+    const dateColumns = ["last_login_at", "suspension_start_at", "suspension_end_at", "password_expires_at"];
+    const nullableDateColumns = new Set(["suspension_start_at", "suspension_end_at", "password_expires_at"]);
+    const getDisplayValue = (user, column) => {
+        if (column === "fullname") {
+            return `${user.first_name || ""} ${user.last_name || ""}`.trim();
+        }
+        if (nullableDateColumns.has(column)) {
+            return user[column] ? user[column] : "N/A";
+        }
+        return user[column] ?? "";
+    };
+    const modifyTableCell = (user, column, isDate = false) => {
         const selector = `[data-${column}-${user.id}]`;
         const cell = document.querySelector(selector);
         if (cell) {
-            let value = column === "fullname" ? `${user.first_name} ${user.last_name}` : user[column];
             const handleClick = () => {
-                cell.removeEventListener("click", handleClick);
+                cell.removeEventListener("dblclick", handleClick);
+                const value = column === "fullname"
+                    ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+                    : (user[column] ?? "");
                 const inputAttr = `data-input-${column}-${user.id}`;
                 if (isDate) {
                     const dateValue = value ? new Date(value).toISOString().slice(0, 16) : "";
@@ -153,10 +165,14 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                 }
                 const inputEl = cell.querySelector(`[data-input-${column}-${user.id}]`);
                 inputEl.focus();
-                inputEl.addEventListener("blur", async () => {
+                const commitChange = async () => {
                     const newValue = inputEl.value;
-                    cell.textContent = newValue;
-                    if (newValue !== value) {
+                    if (String(newValue ?? "") !== String(value ?? "")) {
+                        const previousValues = {
+                            first_name: user.first_name,
+                            last_name: user.last_name,
+                            [column]: user[column],
+                        };
                         const payload = {
                             user_id: user.id,
                             field: column,
@@ -172,15 +188,33 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                             });
                             const data = await response.json().catch(() => ({}));
                             if (!response.ok) {
-                                showErrorModal(data.error || "ERR_FIELD_CANNOT_BE_UPDATED");
-                                cell.textContent = value;
+                                throw new Error(data.error || "ERR_FIELD_CANNOT_BE_UPDATED");
+                            }
+                            if (column === "fullname") {
+                                const nameParts = newValue.trim().split(/\s+/).filter(Boolean);
+                                const firstName = nameParts.shift() || "";
+                                const lastName = nameParts.join(" ");
+                                user.first_name = firstName;
+                                user.last_name = lastName;
+                            } else if (nullableDateColumns.has(column) && newValue === "") {
+                                user[column] = null;
+                            } else {
+                                user[column] = newValue;
                             }
                         } catch (error) {
-                            showErrorModal("ERR_INTERNAL_SERVER");
-                            cell.textContent = value;
+                            showErrorModal(error.message || "ERR_INTERNAL_SERVER");
+                            if (column === "fullname") {
+                                user.first_name = previousValues.first_name;
+                                user.last_name = previousValues.last_name;
+                            } else {
+                                user[column] = previousValues[column];
+                            }
                         }
                     }
-                });
+                    cell.textContent = getDisplayValue(user, column);
+                    cell.addEventListener("dblclick", handleClick);
+                };
+                inputEl.addEventListener("blur", commitChange);
                 inputEl.addEventListener("keydown", (event) => {
                     if (event.key === "Enter") {
                         inputEl.blur();
@@ -190,7 +224,8 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                     event.stopPropagation();
                 });
             };
-            cell.addEventListener("click", handleClick);
+            cell.title = "Double click to edit.";
+            cell.addEventListener("dblclick", handleClick);
         }
     };
 
@@ -242,7 +277,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
         }
         for (const user of pageUsers) {
             for (const column of tableColumns) {
-                modifyTableCell(user, column, user[column], dateColumns.includes(column));
+                modifyTableCell(user, column, dateColumns.includes(column));
             }
         }
     };
@@ -482,4 +517,3 @@ async function loadFetchWithAuth() {
     const { fetchWithAuth } = module;
     return { fetchWithAuth };
 }
-
