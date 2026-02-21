@@ -373,6 +373,36 @@ test("GET /api/users/approve-user/:userId rejects non-pending users", async () =
     }
 });
 
+test("GET /api/users/reject-user/:userId rejects pending user and sends rejection email", async () => {
+    const admin = await insertUser({ username: "admin-reject", email: "admin-reject@example.com", role: "administrator" });
+    const pending = await insertUser({ username: "rejectme", email: "rejectme@example.com", status: "pending", firstName: "Reject" });
+    const token = "admin-reject-token";
+    await insertLoggedInUser({ userId: admin.id, token });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+        const res = await requestJson({
+            port,
+            method: "GET",
+            path: `/api/users/reject-user/${pending.id}`,
+            headers: authHeaders({ userId: admin.id, token }),
+        });
+        assert.equal(res.statusCode, 200);
+        assert.equal(res.body.message, "User rejected successfully");
+
+        const status = await db.query("SELECT status FROM users WHERE id = $1", [pending.id]);
+        assert.equal(status.rows[0].status, "rejected");
+
+        assert.ok(emailCalls.length >= 1);
+        assert.equal(emailCalls[0].to, pending.email);
+        assert.match(emailCalls[0].body, /not approved/i);
+    } finally {
+        server.close();
+    }
+});
+
 test("POST /api/users/change-password updates password with current password (multipart)", async () => {
     const user = await insertUser({ username: "cpw", email: "cpw@example.com", password: "ValidPass1!" });
     const token = "cpw-token";
@@ -437,7 +467,10 @@ test("POST /api/users/update-security-questions rejects invalid current password
     }
 });
 
-test("POST /api/users/register_new_user is public and creates pending user", async () => {
+test("POST /api/users/register_new_user is public, creates pending user, and emails administrators", async () => {
+    await insertUser({ username: "adminreg1", email: "adminreg1@example.com", role: "administrator" });
+    await insertUser({ username: "adminreg2", email: "adminreg2@example.com", role: "administrator" });
+
     const server = app.listen(0);
     await new Promise((resolve) => server.once("listening", resolve));
     try {
@@ -468,7 +501,9 @@ test("POST /api/users/register_new_user is public and creates pending user", asy
         const check = await db.query("SELECT status, email FROM users WHERE id = $1", [res.body.user.id]);
         assert.equal(check.rows[0].status, "pending");
         assert.equal(check.rows[0].email, "newuser@example.com");
-        assert.equal(emailCalls.length, 1);
+        assert.equal(emailCalls.length, 3);
+        const recipients = emailCalls.map((mail) => mail.to).sort();
+        assert.deepEqual(recipients, ["adminreg1@example.com", "adminreg2@example.com", "newuser@example.com"]);
     } finally {
         server.close();
     }

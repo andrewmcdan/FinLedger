@@ -34,6 +34,7 @@ const {
     isAdmin,
     getUserById,
     listUsers,
+    listAdministratorContacts,
     listLoggedInUsers,
     approveUser,
     createUser,
@@ -199,8 +200,22 @@ router.get("/reject-user/:userId", async (req, res) => {
         log("warn", "Reject-user attempted for non-pending user", { requestingUserId, userIdToReject, status: userData.status }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 400, "ERR_USER_NOT_PENDING_APPROVAL");
     }
-    rejectUser(userIdToReject);
+    await rejectUser(userIdToReject);
     log("info", `User ID ${userIdToReject} rejected by admin user ID ${requestingUserId}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
+
+    try {
+        const emailResult = await sendEmail(
+            userData.email,
+            "Your FinLedger Access Request Was Not Approved",
+            `Dear ${userData.first_name},\n\nWe regret to inform you that your FinLedger access request was not approved at this time.\n\nIf you believe this is in error, please contact an administrator for further assistance.\n\nBest regards,\nThe FinLedger Team\n\n`,
+        );
+        if (!emailResult.accepted || emailResult.accepted.length === 0) {
+            log("warn", `Failed to send rejection email to ${userData.email} for user ID ${userIdToReject}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
+        }
+    } catch (emailError) {
+        log("error", `Error sending rejection email to ${userData.email} for user ID ${userIdToReject}: ${emailError}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
+    }
+
     return sendApiSuccess(res, "MSG_USER_REJECTED_SUCCESS");
 });
 
@@ -407,6 +422,24 @@ router.post("/register_new_user", async (req, res) => {
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send registration email to ${email} for new user ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
         }
+
+        const adminResult = await listAdministratorContacts(newUser.id);
+        const adminSubject = "New FinLedger Access Request Pending Approval";
+        const adminNotifyResults = await Promise.allSettled(adminResult.map((adminRow) => {
+            const adminFirstName = adminRow.first_name || "Administrator";
+            const adminBody = `Dear ${adminFirstName},\n\nA new user has requested access to FinLedger and is pending approval.\n\nName: ${first_name} ${last_name}\nEmail: ${email}\nRequested Role: ${role}\n\nPlease review this request in the user management area.\n\nBest regards,\nThe FinLedger Team\n\n`;
+            return sendEmail(adminRow.email, adminSubject, adminBody);
+        }));
+        for (let i = 0; i < adminNotifyResults.length; i += 1) {
+            const result = adminNotifyResults[i];
+            const adminEmail = adminResult[i]?.email;
+            if (result.status === "fulfilled") {
+                log("info", `Access request email sent to administrator ${adminEmail}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
+            } else {
+                log("error", `Failed to send access request email to administrator ${adminEmail}: ${result.reason}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
+            }
+        }
+
         await updateSecurityQuestions(newUser.id, [
             { question: security_question_1, answer: security_answer_1 },
             { question: security_question_2, answer: security_answer_2 },

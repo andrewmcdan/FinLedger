@@ -93,11 +93,10 @@ Must require:
 
 - User clicks Request Access
 - User enters required personal data
-- TODO: Submission sends email notification to admin
-- TODO: Admin sees pending message count on login
+- Submission sends email notification to admin
 - Admin may approve or reject
 - Approval triggers welcome email with login link
-- TODO: Rejection triggers notification email
+- Rejection triggers notification email
 
 ------------------------------------------------------------
 

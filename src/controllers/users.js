@@ -193,6 +193,19 @@ const listUsers = async () => {
     return usersResult.rows;
 };
 
+const listAdministratorContacts = async (excludeUserId = null) => {
+    logger.log("debug", "Listing administrator contacts", { excludeUserId }, utilities.getCallerInfo());
+    const values = [];
+    let whereClause = "role = 'administrator' AND email IS NOT NULL AND email <> ''";
+    if (excludeUserId !== null && excludeUserId !== undefined) {
+        values.push(excludeUserId);
+        whereClause += " AND id <> $1";
+    }
+    const adminResult = await db.query(`SELECT id, email, first_name FROM users WHERE ${whereClause} ORDER BY id ASC`, values);
+    logger.log("debug", "Administrator contacts listed", { count: adminResult.rowCount }, utilities.getCallerInfo());
+    return adminResult.rows;
+};
+
 const listLoggedInUsers = async () => {
     logger.log("debug", "Listing logged-in users", {}, utilities.getCallerInfo());
     const loggedInUsersResult = await db.query("SELECT id, user_id, login_at, logout_at FROM logged_in_users ORDER BY id ASC");
@@ -544,6 +557,7 @@ module.exports = {
     isManager,
     getUserById,
     listUsers,
+    listAdministratorContacts,
     listLoggedInUsers,
     approveUser,
     createUser,
