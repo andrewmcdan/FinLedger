@@ -279,6 +279,15 @@ test("createUser creates user and sends temp password email when needed", async 
     assert.equal(emailCalls.length, 1);
 });
 
+test("createUser appends serial suffix for duplicate generated usernames", async () => {
+    const first = await usersController.createUser("John", "Doe", "john@example.com", "ValidPass1!", "accountant", "123 Main", new Date("1990-01-01"), null);
+    const second = await usersController.createUser("Jane", "Doe", "jane@example.com", "ValidPass1!", "accountant", "124 Main", new Date("1991-01-01"), null);
+    const third = await usersController.createUser("Jill", "Doe", "jill@example.com", "ValidPass1!", "accountant", "125 Main", new Date("1992-01-01"), null);
+
+    assert.equal(second.username, `${first.username}-01`);
+    assert.equal(third.username, `${first.username}-02`);
+});
+
 test("createUser rejects invalid role and missing required fields", async () => {
     await assert.rejects(() => usersController.createUser("Role", "Bad", "badrole@example.com", "ValidPass1!", "invalid", "1 Main", new Date("1990-01-01"), null), /Invalid role/);
 

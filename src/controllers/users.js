@@ -24,6 +24,51 @@ function checkPasswordComplexity(password) {
     return true;
 }
 
+const buildUsernameBase = (firstName, lastName, date = new Date()) => {
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = String(date.getFullYear()).slice(-2);
+    return `${firstName.charAt(0)}${lastName}${month}${year}`;
+};
+
+const generateUniqueUsername = async (client, firstName, lastName) => {
+    const baseUsername = buildUsernameBase(firstName, lastName);
+    const suffixResult = await client.query(
+        `SELECT
+            BOOL_OR(username = $1) AS base_taken,
+            MAX(
+                CASE
+                    WHEN LEFT(username, LENGTH($1) + 1) = $1 || '-'
+                      AND SUBSTRING(username FROM LENGTH($1) + 2) ~ '^[0-9]+$'
+                    THEN CAST(SUBSTRING(username FROM LENGTH($1) + 2) AS INT)
+                    ELSE NULL
+                END
+            ) AS max_suffix
+        FROM users
+        WHERE username = $1
+           OR LEFT(username, LENGTH($1) + 1) = $1 || '-'`,
+        [baseUsername],
+    );
+
+    const baseTaken = Boolean(suffixResult.rows[0]?.base_taken);
+    if (!baseTaken) {
+        return baseUsername;
+    }
+
+    const maxSuffixRaw = suffixResult.rows[0]?.max_suffix;
+    const nextSuffix = maxSuffixRaw === null || maxSuffixRaw === undefined ? 1 : Number(maxSuffixRaw) + 1;
+    return `${baseUsername}-${String(nextSuffix).padStart(2, "0")}`;
+};
+
+const isUsernameUniqueViolation = (error) => {
+    if (error?.code !== "23505") {
+        return false;
+    }
+    if (error?.constraint === "users_username_key") {
+        return true;
+    }
+    return typeof error?.detail === "string" && error.detail.includes("(username)=");
+};
+
 const getUserLoggedInStatus = async (user_id, token) => {
     logger.log("trace", "Checking logged-in status", { user_id }, utilities.getCallerInfo(), user_id);
     const result = await db.query("SELECT * FROM logged_in_users WHERE user_id = $1 AND token = $2", [user_id, token]);
@@ -256,8 +301,6 @@ const updateUserProfile = async (userId, profileUpdates) => {
  */
 const createUser = async (firstName, lastName, email, password, role, address, dateOfBirth, profileImage) => {
     logger.log("info", "Creating user", { email, role }, utilities.getCallerInfo());
-    // username should be made of the first name initial, the full last name, and a four digit (two-digit month and two-digit year) of when the account is created
-    const username = `${firstName.charAt(0)}${lastName}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`;
     if (role !== "accountant" && role !== "administrator" && role !== "manager") {
         logger.log("error", `Invalid role specified when creating user: ${role}`, { function: "createUser" }, utilities.getCallerInfo());
         throw new Error("Invalid role specified");
@@ -275,14 +318,32 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const createdUser = await db.transaction(async (client) => {
-        const result = await client.query(
-            "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
-            [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
-        );
-        await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
-        return result.rows[0];
-    });
+    let createdUser = null;
+    const maxUsernameInsertAttempts = 5;
+    for (let attempt = 1; attempt <= maxUsernameInsertAttempts; attempt += 1) {
+        try {
+            createdUser = await db.transaction(async (client) => {
+                const username = await generateUniqueUsername(client, firstName, lastName);
+                const result = await client.query(
+                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
+                    [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
+                );
+                await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
+                return result.rows[0];
+            });
+            break;
+        } catch (error) {
+            if (attempt === maxUsernameInsertAttempts || !isUsernameUniqueViolation(error)) {
+                throw error;
+            }
+            logger.log("warn", "Username collision detected during user creation; retrying", { email, attempt }, utilities.getCallerInfo());
+        }
+    }
+
+    if (!createdUser) {
+        throw new Error("Failed to generate a unique username");
+    }
+
     logger.log("info", "User created", { userId: createdUser.id, username: createdUser.username, role }, utilities.getCallerInfo(), createdUser.id);
     const userIconPath = createdUser.user_icon_path;
     if (profileImage && profileImage != null && profileImage !== "" && profileImage !== "null" && userIconPath) {
@@ -293,7 +354,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     }
     if (tempPasswordFlag) {
         const emailSubject = "Your FinLedger Account Has Been Created";
-        const emailBody = `Dear ${firstName} ${lastName},\n\nYour FinLedger account has been created successfully.\n\nUsername: ${username}\nTemporary Password: ${password}\n\nPlease log in and change your password at your earliest convenience.\n\nBest regards,\nFinLedger Team`;
+        const emailBody = `Dear ${firstName} ${lastName},\n\nYour FinLedger account has been created successfully.\n\nUsername: ${createdUser.username}\nTemporary Password: ${password}\n\nPlease log in and change your password at your earliest convenience.\n\nBest regards,\nFinLedger Team`;
         let result = await sendEmail(email, emailSubject, emailBody);
         logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
     }
