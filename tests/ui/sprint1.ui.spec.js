@@ -126,12 +126,12 @@ test("admin can sign in from the login UI", async ({ page }, testInfo) => {
     await captureStepScreenshot(page, testInfo, "dashboard_after_login");
 });
 
-test("new user form shows and validates the starts-with-letter password rule", async ({ page }, testInfo) => {
+test("request access form shows and validates the starts-with-letter password rule", async ({ page }, testInfo) => {
     await gotoLogin(page);
-    await captureStepScreenshot(page, testInfo, "login_page_before_new_user");
-    await page.getByRole("button", { name: "New User" }).click();
-    await expect(page.getByRole("heading", { name: "New User" })).toBeVisible();
-    await captureStepScreenshot(page, testInfo, "new_user_page_loaded");
+    await captureStepScreenshot(page, testInfo, "login_page_before_request_access");
+    await page.getByRole("button", { name: "Request Access" }).click();
+    await expect(page.getByRole("heading", { name: "Request Access" })).toBeVisible();
+    await captureStepScreenshot(page, testInfo, "request_access_page_loaded");
 
     const registerForm = page.locator("[data-register]");
     const startsWithLetterRequirement = registerForm.locator("#starts_with_letter");
