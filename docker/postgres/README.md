@@ -248,3 +248,4 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - reset_token_expires_at: timestamp with time zone
 - user_icon_path: text
 - temp_password: boolean
+- reset_failed_attempts: integer

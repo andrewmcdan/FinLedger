@@ -517,6 +517,7 @@ test("Password reset flow: GET /reset-password issues token, then /security-ques
             body: { securityAnswers: ["bad", "A2", "A3"], newPassword: "NewPass9!" },
         });
         assert.equal(bad.statusCode, 403);
+        assert.equal(bad.body.errorCode, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
 
         const ok = await requestJson({
             port,
@@ -532,6 +533,98 @@ test("Password reset flow: GET /reset-password issues token, then /security-ques
 
     // Keep linter happy about unused local in case of future edits.
     assert.equal(typeof token, "string");
+});
+
+test("Password reset flow locks after three incorrect security-answer attempts", async () => {
+    const user = await insertUser({
+        username: "resetlock",
+        email: "resetlock@example.com",
+        password: "ValidPass1!",
+        security: [
+            { question: "Q1?", answer: "A1" },
+            { question: "Q2?", answer: "A2" },
+            { question: "Q3?", answer: "A3" },
+        ],
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+
+        const issue = await requestJson({
+            port,
+            method: "GET",
+            path: `/api/users/reset-password/${encodeURIComponent(user.email)}/${encodeURIComponent(user.username)}`,
+        });
+        assert.equal(issue.statusCode, 200);
+
+        const firstTokenResult = await db.query("SELECT reset_token FROM users WHERE id = $1", [user.id]);
+        const firstResetToken = firstTokenResult.rows[0].reset_token;
+        assert.ok(firstResetToken);
+
+        const bad1 = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${firstResetToken}`,
+            body: { securityAnswers: ["bad", "A2", "A3"], newPassword: "NewPass9!" },
+        });
+        assert.equal(bad1.statusCode, 403);
+        assert.equal(bad1.body.errorCode, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
+
+        const bad2 = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${firstResetToken}`,
+            body: { securityAnswers: ["bad", "A2", "A3"], newPassword: "NewPass9!" },
+        });
+        assert.equal(bad2.statusCode, 403);
+        assert.equal(bad2.body.errorCode, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
+
+        const bad3 = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${firstResetToken}`,
+            body: { securityAnswers: ["bad", "A2", "A3"], newPassword: "NewPass9!" },
+        });
+        assert.equal(bad3.statusCode, 403);
+        assert.equal(bad3.body.errorCode, "ERR_PASSWORD_RESET_LOCKED_DUE_TO_ATTEMPTS");
+
+        const stillLocked = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${firstResetToken}`,
+            body: { securityAnswers: ["A1", "A2", "A3"], newPassword: "NewPass9!" },
+        });
+        assert.equal(stillLocked.statusCode, 403);
+        assert.equal(stillLocked.body.errorCode, "ERR_PASSWORD_RESET_LOCKED_DUE_TO_ATTEMPTS");
+
+        const lockedState = await db.query("SELECT reset_failed_attempts FROM users WHERE id = $1", [user.id]);
+        assert.equal(lockedState.rows[0].reset_failed_attempts, 3);
+
+        const reissue = await requestJson({
+            port,
+            method: "GET",
+            path: `/api/users/reset-password/${encodeURIComponent(user.email)}/${encodeURIComponent(user.username)}`,
+        });
+        assert.equal(reissue.statusCode, 200);
+
+        const secondTokenResult = await db.query("SELECT reset_token, reset_failed_attempts FROM users WHERE id = $1", [user.id]);
+        const secondResetToken = secondTokenResult.rows[0].reset_token;
+        assert.ok(secondResetToken);
+        assert.equal(secondTokenResult.rows[0].reset_failed_attempts, 0);
+
+        const ok = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${secondResetToken}`,
+            body: { securityAnswers: ["A1", "A2", "A3"], newPassword: "NewPass9!" },
+        });
+        assert.equal(ok.statusCode, 200);
+        assert.equal(ok.body.messageCode, "MSG_PASSWORD_RESET_SUCCESS");
+    } finally {
+        server.close();
+    }
 });
 
 test("Admin user management endpoints: suspend, reinstate, update-user-field, delete-user, reset-user-password", async () => {

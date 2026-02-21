@@ -175,7 +175,10 @@ const getUserByEmail = async (email) => {
 
 const getUserByResetToken = async (resetToken) => {
     logger.log("debug", "Fetching user by reset token", {}, utilities.getCallerInfo());
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()", [resetToken]);
+    const userResult = await db.query(
+        "SELECT id, username, email, first_name, last_name, reset_failed_attempts FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()",
+        [resetToken],
+    );
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by reset token", {}, utilities.getCallerInfo());
         return null;

@@ -73,7 +73,7 @@ Passwords must:
 Must require:
 - Email and user ID
 - Three security questions
-- TODO: Lockout after three incorrect attempts
+- Lockout after three incorrect attempts
 
 ------------------------------------------------------------
 

@@ -444,7 +444,10 @@ router.get("/reset-password/:email/:userName", async (req, res) => {
     const resetLink = `${resetLinkUrlBase}/#/login?userId=${userData2.id}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
-    await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2, updated_at = now() WHERE id = $3", [resetToken, tokenExpiry, userData2.id]);
+    await db.query(
+        "UPDATE users SET reset_token = $1, reset_token_expires_at = $2, reset_failed_attempts = 0, updated_at = now() WHERE id = $3",
+        [resetToken, tokenExpiry, userData2.id],
+    );
     const emailResult = await sendEmail(
         userData2.email,
         "FinLedger Password Reset Request",
@@ -478,14 +481,30 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
         log("warn", "Verify security answers invalid reset token", {}, utilities.getCallerInfo());
         return sendApiError(res, 404, "ERR_INVALID_OR_EXPIRED_RESET_TOKEN");
     }
+    if (Number(userData.reset_failed_attempts || 0) >= 3) {
+        log("warn", `Password reset verification locked due to failed attempts for user ID ${userData.id}`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
+        return sendApiError(res, 403, "ERR_PASSWORD_RESET_LOCKED_DUE_TO_ATTEMPTS");
+    }
     const verified = await verifySecurityAnswers(userData.id, securityAnswers);
     if (!verified) {
         log("warn", `Security answers verification failed for user ID ${userData.id} during password reset`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
+        const attemptResult = await db.query(
+            "UPDATE users SET reset_failed_attempts = LEAST(reset_failed_attempts + 1, 3), updated_at = now() WHERE id = $1 RETURNING reset_failed_attempts",
+            [userData.id],
+        );
+        const failedAttempts = Number(attemptResult.rows[0]?.reset_failed_attempts || 0);
+        if (failedAttempts >= 3) {
+            log("warn", `Password reset verification locked after max attempts for user ID ${userData.id}`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
+            return sendApiError(res, 403, "ERR_PASSWORD_RESET_LOCKED_DUE_TO_ATTEMPTS");
+        }
         return sendApiError(res, 403, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
     }
     try {
         await changePassword(userData.id, newPassword);
-        await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, updated_at = now() WHERE id = $1", [userData.id]);
+        await db.query(
+            "UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, reset_failed_attempts = 0, updated_at = now() WHERE id = $1",
+            [userData.id],
+        );
         log("info", "Password reset successful via security answers", { userId: userData.id }, utilities.getCallerInfo(), userData.id);
         return sendApiSuccess(res, "MSG_PASSWORD_RESET_SUCCESS");
     } catch (error) {
