@@ -30,33 +30,67 @@ const buildUsernameBase = (firstName, lastName, date = new Date()) => {
     return `${firstName.charAt(0)}${lastName}${month}${year}`;
 };
 
+const alphaSuffixToNumber = (suffix) => {
+    if (!suffix || !/^[A-Z]+$/.test(suffix)) {
+        return null;
+    }
+    let value = 0;
+    for (const char of suffix) {
+        value = value * 26 + (char.charCodeAt(0) - 64);
+    }
+    return value;
+};
+
+const numberToAlphaSuffix = (value) => {
+    let nextValue = Number(value);
+    if (!Number.isInteger(nextValue) || nextValue <= 0) {
+        throw new Error(`Invalid suffix value: ${value}`);
+    }
+    let suffix = "";
+    while (nextValue > 0) {
+        nextValue -= 1;
+        suffix = String.fromCharCode(65 + (nextValue % 26)) + suffix;
+        nextValue = Math.floor(nextValue / 26);
+    }
+    return suffix;
+};
+
 const generateUniqueUsername = async (client, firstName, lastName) => {
     const baseUsername = buildUsernameBase(firstName, lastName);
     const suffixResult = await client.query(
-        `SELECT
-            BOOL_OR(username = $1) AS base_taken,
-            MAX(
-                CASE
-                    WHEN LEFT(username, LENGTH($1) + 1) = $1 || '-'
-                      AND SUBSTRING(username FROM LENGTH($1) + 2) ~ '^[0-9]+$'
-                    THEN CAST(SUBSTRING(username FROM LENGTH($1) + 2) AS INT)
-                    ELSE NULL
-                END
-            ) AS max_suffix
-        FROM users
-        WHERE username = $1
-           OR LEFT(username, LENGTH($1) + 1) = $1 || '-'`,
+        `SELECT username
+         FROM users
+         WHERE username = $1
+            OR LEFT(username, LENGTH($1)) = $1`,
         [baseUsername],
     );
 
-    const baseTaken = Boolean(suffixResult.rows[0]?.base_taken);
+    let baseTaken = false;
+    let maxSuffixNumber = 0;
+    for (const row of suffixResult.rows) {
+        const username = row.username || "";
+        if (username === baseUsername) {
+            baseTaken = true;
+            continue;
+        }
+        if (!username.startsWith(baseUsername)) {
+            continue;
+        }
+        const suffix = username.slice(baseUsername.length);
+        if (!suffix) {
+            continue;
+        }
+        const suffixNumber = alphaSuffixToNumber(String(suffix).toUpperCase());
+        if (suffixNumber) {
+            maxSuffixNumber = Math.max(maxSuffixNumber, suffixNumber);
+        }
+    }
+
     if (!baseTaken) {
         return baseUsername;
     }
 
-    const maxSuffixRaw = suffixResult.rows[0]?.max_suffix;
-    const nextSuffix = maxSuffixRaw === null || maxSuffixRaw === undefined ? 1 : Number(maxSuffixRaw) + 1;
-    return `${baseUsername}-${String(nextSuffix).padStart(2, "0")}`;
+    return `${baseUsername}${numberToAlphaSuffix(maxSuffixNumber + 1)}`;
 };
 
 const isUsernameUniqueViolation = (error) => {

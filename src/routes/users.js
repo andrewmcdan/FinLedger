@@ -631,7 +631,8 @@ router.get("/reset-user-password/:userId", async (req, res) => {
         return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
     }
     try {
-        const tempPassword = utilities.generateRandomToken(12) + "aA1!";
+        // Ensure generated temporary password always satisfies complexity rules.
+        const tempPassword = `A${utilities.generateRandomToken(11)}a1!`;
         await setUserPassword(userIdToReset, tempPassword, true);
         const emailResult = await sendEmail(userData.email, "FinLedger Password Reset by Administrator", `Dear ${userData.first_name},\n\nAn administrator has reset your FinLedger account password. Please use the temporary password below to log in and change your password immediately.\n\nTemporary Password: ${tempPassword}\n\nBest regards,\nThe FinLedger Team\n\n`);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {

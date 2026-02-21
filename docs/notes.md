@@ -40,10 +40,11 @@ The system must:
 - Username input field
 - Password input field (masked)
 - Submit button
-- Reset button
+- TODO: Reset button
 - Forgot username/password option
 - New user request access option
 - Logged in username and picture displayed in top right corner after login
+- TODO: Forgot username flow (separate from forgot password) is not implemented.
 
 ## 2.2 Login Validation
 The system must:
@@ -72,7 +73,7 @@ Passwords must:
 Must require:
 - Email and user ID
 - Three security questions
-- Lockout after three incorrect attempts
+- TODO: Lockout after three incorrect attempts
 
 ------------------------------------------------------------
 
@@ -84,6 +85,7 @@ Must require:
 - Messages must be short and clear
 - A designated message line must display system messages
 - Message must disappear once issue is corrected
+- TODO: Do a full-codebase audit to eliminate remaining hardcoded/legacy error text and enforce message-catalog usage everywhere.
 
 ------------------------------------------------------------
 
@@ -91,11 +93,11 @@ Must require:
 
 - User clicks Request Access
 - User enters required personal data
-- Submission sends email notification to admin
-- Admin sees pending message count on login
+- TODO: Submission sends email notification to admin
+- TODO: Admin sees pending message count on login
 - Admin may approve or reject
 - Approval triggers welcome email with login link
-- Rejection triggers notification email
+- TODO: Rejection triggers notification email
 
 ------------------------------------------------------------
 
@@ -104,27 +106,28 @@ Must require:
 Admin may:
 - Create users
 - Assign roles
-- Activate users (immediate or future date)
+- TODO: Activate users (immediate or future date)
 - Deactivate users
 - Suspend users (with date range)
 - Edit users
-- Generate reports
+- TODO: Generate reports
 - Send emails to users
 
 Admin may not:
 - Create journal entries
 - View detailed journal entries
 - View financial statements
+- TODO: Enforce these role restrictions once journal and financial statement modules are implemented.
 
 ------------------------------------------------------------
 
 # 6. User Status Management
 
 User table must include:
-- Active flag
-- Suspended flag
+- TODO: Active flag (currently represented by `status` enum, not a dedicated flag column)
+- TODO: Suspended flag (currently represented by `status` + suspension dates, not a dedicated flag column)
 - Suspension date range
-- Created by
+- TODO: Created by
 - Date created
 
 Login must verify:
@@ -139,47 +142,48 @@ Login must verify:
 A dedicated event log table is mandatory.
 
 Must store:
-- Before image (B prefix)
-- After image (A prefix)
+- TODO: Before image (B prefix)
+- TODO: After image (A prefix)
 - User who made change
 - Timestamp of change
 
 Applies to:
-- User changes
+- TODO: User changes
 - Account changes
-- Any system data modifications
+- TODO: Any system data modifications
 
-Event log must enable full audit trail capability.
+TODO: Event log must enable full audit trail capability.
 
 ------------------------------------------------------------
 
 # 8. Chart of Accounts Requirements
 
 ## 8.1 Account Numbering
-- Must be 10 digits
+- TODO: Must be 10 digits
 - Must leave gaps for expansion
 - Sequential numbering not allowed
 
 ## 8.2 Account Fields
 - Account number (clickable)
 - Account name (clickable)
-- Type (dropdown): Asset, Liability, Equity, Revenue, Expense
-- Category: Current or Long Term
+- TODO: Type (dropdown): Asset, Liability, Equity, Revenue, Expense
+- TODO: Category: Current or Long Term
 - Balance
-- Date created
-- Created by
+- TODO: Date created
+- TODO: Created by
 
 ## 8.3 Restrictions
 - Accounts cannot be deleted
 - Accounts with balance greater than zero cannot be deactivated
 - Only admin may edit accounts
-- Dollar amounts must be right justified
+- TODO: Dollar amounts must be right justified
 - Two decimal places required
 - Column headers bold
 
 ------------------------------------------------------------
 
 # 9. Journal Entry System Requirements
+- TODO: Journal entry system is not implemented end-to-end; requirements in this section remain open.
 
 ## 9.1 Required Fields
 - Journal ID
@@ -214,6 +218,7 @@ Event log must enable full audit trail capability.
 ------------------------------------------------------------
 
 # 10. Journal Approval Workflow
+- TODO: Journal approval workflow is not implemented; requirements in this section remain open.
 
 - Only manager can approve or reject
 - Accountant can create entries
@@ -226,6 +231,7 @@ Event log must enable full audit trail capability.
 ------------------------------------------------------------
 
 # 11. Financial Statements Requirements
+- TODO: Financial statement generation/formatting is not implemented end-to-end; requirements in this section remain open.
 
 ## 11.1 General Formatting
 Each statement must include:
@@ -260,7 +266,7 @@ Formatting rules:
 
 # 12. Reports
 
-Admin must be able to generate reports without direct database access.
+TODO: Admin must be able to generate reports without direct database access.
 
 Examples:
 - All users
@@ -291,12 +297,12 @@ Teams are expected to design additional useful reports.
 # 14. System Integrity Rules
 
 - No deleting accounts
-- No deleting journal entries
-- All changes logged
+- TODO: No deleting journal entries
+- TODO: All changes logged
 - All numeric fields properly formatted
-- Use provided accounting problem for validation
-- System must obey accounting equation
-- Domain knowledge must be reflected correctly in implementation
+- TODO: Use provided accounting problem for validation
+- TODO: System must obey accounting equation
+- TODO: Domain knowledge must be reflected correctly in implementation
 
 ------------------------------------------------------------
 
@@ -307,7 +313,7 @@ Sprint 1 must include:
 - Role assignment
 - Login system
 - Password management
-- Activation and deactivation
+- TODO: Activation and deactivation
 - Suspension handling
-- Event logging
+- TODO: Event logging
 - Email notification functionality
