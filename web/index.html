@@ -79,6 +79,10 @@
                     </button>
                 </div>
             </header>
+            <div id="global_message_line" class="message-line" aria-live="assertive" role="status">
+                <span id="global_message_text" class="message-line__text"></span>
+                <button id="global_message_close" class="message-line__close" type="button" aria-label="Dismiss message">&times;</button>
+            </div>
             <main id="app" class="app-main" aria-live="polite"></main>
         </div>
         <div id="error_notification_modal" class="modal" aria-hidden="true" style="z-index: 1001;">

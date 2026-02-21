@@ -27,6 +27,7 @@ function setMessage(text) {
 }
 
 let getUrlParamFn = null;
+let getMessageFn = null;
 
 async function loadUrlParamHelper() {
     if (getUrlParamFn) {
@@ -39,6 +40,22 @@ async function loadUrlParamHelper() {
     return getUrlParamFn;
 }
 
+async function loadMessageHelper() {
+    if (getMessageFn) {
+        return getMessageFn;
+    }
+    const moduleUrl = new URL("/js/utils/messages.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    getMessageFn = module.getMessage;
+    return getMessageFn;
+}
+
+async function setMessageFromCode(code, replacements = {}, fallback = "") {
+    const getMessage = await loadMessageHelper();
+    const text = await getMessage(code, replacements, fallback);
+    setMessage(text);
+}
+
 export default function initLogin() {
     const form = document.querySelector("[data-login]");
     const container = document.querySelector("[data-login-container]");
@@ -47,6 +64,7 @@ export default function initLogin() {
     }
 
     setMessage(); // Clear any existing messages
+    form.addEventListener("input", () => setMessage());
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -61,9 +79,9 @@ export default function initLogin() {
             body: JSON.stringify({ username, password }),
         })
             .then((response) => response.json())
-            .then((data) => {
+            .then(async (data) => {
                 if (data.token) {
-                    setMessage("Login successful!");
+                    await setMessageFromCode("MSG_LOGIN_SUCCESS");
                     // You might want to store the token and user info here
                     localStorage.setItem("user_id", data.user_id);
                     localStorage.setItem("auth_token", data.token);
@@ -79,11 +97,11 @@ export default function initLogin() {
                     // Redirect to the main app page or refresh
                     window.location.href = "/#/dashboard";
                 } else {
-                    setMessage("Login failed: " + (data.error || "Unknown error"));
+                    setMessage(data.error || "");
                 }
             })
-            .catch((error) => {
-                setMessage("An error occurred: " + error.message);
+            .catch(async (error) => {
+                await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
             });
     });
 
@@ -146,6 +164,7 @@ let newUserLogic = async function () {
 
     const form = document.querySelector("[data-register]");
     if (form) {
+        form.addEventListener("input", () => setMessage());
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             const formData = new FormData(form);
@@ -170,22 +189,22 @@ let newUserLogic = async function () {
                 body: JSON.stringify({ first_name, last_name, email, password, address, date_of_birth, role, security_question_1, security_answer_1, security_question_2, security_answer_2, security_question_3, security_answer_3 }),
             })
                 .then((response) => response.json())
-                .then((data) => {
+                .then(async (data) => {
                     form.reset();
                     if (data.user) {
-                        alert("Registration successful! Check your email for further instructions. Redirecting to login page...");
+                        await setMessageFromCode("MSG_REGISTRATION_SUCCESS_REDIRECT");
                         setTimeout(async () => {
                             await replacePageContent("public/login");
                             initLogin();
                             history.pushState({ page: "login" }, "");
                         }, 3000);
                     } else {
-                        setMessage("Registration failed: " + (data.error || "Unknown error"));
+                        setMessage(data.error || "");
                     }
                 })
-                .catch((error) => {
+                .catch(async (error) => {
                     form.reset();
-                    setMessage("An error occurred: " + error.message);
+                    await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
                 });
         });
     }
@@ -266,6 +285,7 @@ let forgotPasswordLogic = async function () {
 
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
+        form.addEventListener("input", () => setMessage());
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             const formData = new FormData(form);
@@ -278,15 +298,15 @@ let forgotPasswordLogic = async function () {
                 },
             })
                 .then((response) => response.json())
-                .then((data) => {
+                .then(async (data) => {
                     if (data.message) {
                         setMessage(data.message);
                     } else {
-                        setMessage("Password reset request failed: " + (data.error || "Unknown error"));
+                        setMessage(data.error || "");
                     }
                 })
-                .catch((error) => {
-                    setMessage("An error occurred: " + error.message);
+                .catch(async (error) => {
+                    await setMessageFromCode("ERR_PASSWORD_RESET_REQUEST_FAILED", {}, error.message || "");
                 });
         });
     }
@@ -296,6 +316,7 @@ let newPasswordLogic = async function (resetToken) {
     setMessage();
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
+        form.addEventListener("input", () => setMessage());
         const passwordInput = document.getElementById("password");
         const confirmPasswordInput = document.getElementById("password_confirmation");
         const passwordRequirementsContainer = document.querySelector("[data-password-requirements]");
@@ -369,7 +390,7 @@ let newPasswordLogic = async function (resetToken) {
             });
             const data = await response.json();
             if (data.error) {
-                setMessage("Failed to load security questions: " + data.error);
+                setMessage(data.error);
                 return;
             }
 
@@ -394,7 +415,7 @@ let newPasswordLogic = async function (resetToken) {
             const confirmPassword = formData.get("password_confirmation");
 
             if (newPassword !== confirmPassword) {
-                setMessage("Passwords do not match.");
+                setMessageFromCode("ERR_PASSWORDS_DO_NOT_MATCH");
                 return;
             }
 
@@ -406,19 +427,19 @@ let newPasswordLogic = async function (resetToken) {
                 body: JSON.stringify({ securityAnswers, newPassword }),
             })
                 .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
-                .then(({ ok, data }) => {
+                .then(async ({ ok, data }) => {
                     if (!ok) {
-                        setMessage(data.error || "Password reset failed.");
+                        setMessage(data.error || "");
                         return;
                     }
-                    setMessage("Password has been reset. You can now log in with your new password.");
+                    await setMessageFromCode("MSG_PASSWORD_RESET_SUCCESS");
                     setTimeout(async () => {
                         const loginUrl = `${window.location.pathname}?reload=${Date.now()}#/login`;
                         window.location.href = loginUrl;
                     }, 1500);
                 })
-                .catch((error) => {
-                    setMessage("An error occurred: " + error.message);
+                .catch(async (error) => {
+                    await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
                 });
         });
     }

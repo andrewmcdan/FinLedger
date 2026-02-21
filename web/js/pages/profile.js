@@ -1,6 +1,8 @@
-export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, userIconBlobUrl } = {}) {
+export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, showErrorModal, showMessageModal, userIconBlobUrl } = {}) {
     const showOverlay = typeof showLoadingOverlay === "function" ? showLoadingOverlay : () => {};
     const hideOverlay = typeof hideLoadingOverlay === "function" ? hideLoadingOverlay : () => {};
+    const showError = typeof showErrorModal === "function" ? showErrorModal : async () => {};
+    const showMessage = typeof showMessageModal === "function" ? showMessageModal : async () => {};
     const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
 
     const authHeaders = () => ({
@@ -131,11 +133,11 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
             const requirementsMet = validatePasswords();
             const passwordsMatch = validatePasswordMatch();
             if (!requirementsMet) {
-                alert("New password does not meet all password requirements.");
+                await showError("ERR_PASSWORD_COMPLEXITY");
                 return;
             }
             if (!passwordsMatch) {
-                alert("Passwords do not match.");
+                await showError("ERR_PASSWORDS_DO_NOT_MATCH");
                 return;
             }
 
@@ -150,10 +152,10 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
                     changePasswordForm.reset();
-                    alert("Password changed successfully");
+                    await showMessage("MSG_PASSWORD_CHANGED_SUCCESS");
                     return;
                 }
-                alert(data.error || "Error changing password");
+                await showError(data.error || "ERR_FAILED_TO_CHANGE_PASSWORD");
             } finally {
                 hideOverlay();
             }
@@ -186,10 +188,10 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
                     securityQuestionsForm.reset();
-                    alert("Security questions updated successfully");
+                    await showMessage("MSG_SECURITY_QUESTIONS_UPDATED_SUCCESS");
                     return;
                 }
-                alert(data.error || "Error updating security questions");
+                await showError(data.error || "ERR_FAILED_TO_UPDATE_SECURITY_QUESTIONS");
             } finally {
                 hideOverlay();
             }
@@ -210,15 +212,14 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
                 });
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
-                    alert("Profile updated successfully");
+                    await showMessage("MSG_PROFILE_UPDATED_SUCCESS");
                     return;
                 }
-                alert(data.error || "Error updating profile");
+                await showError(data.error || "ERR_FAILED_TO_UPDATE_PROFILE");
             } finally {
                 hideOverlay();
             }
         });
     }
 }
-
 

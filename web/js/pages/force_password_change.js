@@ -11,6 +11,24 @@ function setMessage(text) {
     messageBox.classList.remove("hidden");
 }
 
+let getMessageFn = null;
+
+async function loadMessageHelper() {
+    if (getMessageFn) {
+        return getMessageFn;
+    }
+    const moduleUrl = new URL("/js/utils/messages.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    getMessageFn = module.getMessage;
+    return getMessageFn;
+}
+
+async function setMessageFromCode(code, replacements = {}, fallback = "") {
+    const getMessage = await loadMessageHelper();
+    const text = await getMessage(code, replacements, fallback);
+    setMessage(text);
+}
+
 export default async function initForcePasswordChange() {
     const form = document.querySelector("[data-force-password]");
     if (!form) {
@@ -18,6 +36,7 @@ export default async function initForcePasswordChange() {
     }
 
     setMessage();
+    form.addEventListener("input", () => setMessage());
 
     const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
     try {
@@ -129,12 +148,12 @@ export default async function initForcePasswordChange() {
 
         const missingEntry = securityQuestions.find((entry) => !entry.question || !entry.answer);
         if (missingEntry) {
-            setMessage("Please choose all security questions and provide answers.");
+            await setMessageFromCode("ERR_ALL_SECURITY_QA_REQUIRED");
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            setMessage("Passwords do not match.");
+            await setMessageFromCode("ERR_PASSWORDS_DO_NOT_MATCH");
             return;
         }
 
@@ -150,16 +169,14 @@ export default async function initForcePasswordChange() {
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                setMessage(data.error || "Unable to update password.");
+                setMessage(data.error || "");
                 return;
             }
             localStorage.removeItem("must_change_password");
-            setMessage("Password updated successfully. Redirecting...");
+            await setMessageFromCode("MSG_PASSWORD_UPDATED_REDIRECT");
             window.location.hash = "#/dashboard";
         } catch (error) {
-            setMessage(`An error occurred: ${error.message}`);
+            await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
         }
     });
 }
-
-

@@ -92,6 +92,14 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - source: text
 - created_at: timestamp with time zone
 
+### public.app_messages
+- code: text
+- message_text: text
+- category: text
+- is_active: boolean
+- created_at: timestamp with time zone
+- updated_at: timestamp with time zone
+
 ### public.audit_logs
 - id: bigint
 - event_type: text
@@ -238,5 +246,5 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - security_answer_hash_3: text
 - reset_token: text
 - reset_token_expires_at: timestamp with time zone
-- user_icon_path: uuid
+- user_icon_path: text
 - temp_password: boolean

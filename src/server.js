@@ -10,6 +10,7 @@ const { getCallerInfo, cleanupUserData, cleanupLogs } = require("./utils/utiliti
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
+const messagesRoutes = require("./routes/messages");
 const { dashboard, accountsList, forgotPasswordSubmit, profile } = require("./routes/rendered_routes");
 
 const app = express();
@@ -20,6 +21,7 @@ app.engine("html", ejs.renderFile);
 app.set("view engine", "html");
 app.set("views", path.join(__dirname, "..", "web", "pages"));
 app.use("/api/auth", authRoutes);
+app.use("/api/messages", messagesRoutes);
 
 app.use(authMiddleware);
 // Any routes added after this point will require authentication

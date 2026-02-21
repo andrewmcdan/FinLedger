@@ -1,11 +1,12 @@
 .app-shell {
     width: 100%;
     min-height: 100vh;
-    padding: 0;
+    padding: var(--global-message-offset, 0px) 0 0;
     display: flex;
     flex-direction: column;
     position: relative;
     z-index: 1;
+    transition: padding-top 0.28s ease;
 }
 
 .app-header {
@@ -646,6 +647,71 @@ button.button-small,
     color: var(--accent);
 }
 
+.message-line {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid transparent;
+    font-weight: 600;
+    transform: translateY(calc(-100% - 0.5rem));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform 0.28s ease,
+        opacity 0.28s ease;
+    z-index: 3000;
+}
+
+.message-line--active {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.message-line__text {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.message-line__close {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 1.35rem;
+    line-height: 1;
+    padding: 0 0.1rem;
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+.message-line__close:hover {
+    opacity: 1;
+}
+
+.message-line__close:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.message-line--error {
+    background: rgba(214, 69, 69, 0.95);
+    border-color: rgba(214, 69, 69, 0.95);
+    color: #fff3f3;
+}
+
+.message-line--success {
+    color: #eefdf8;
+    background: rgba(8, 78, 23, 0.96);
+    border-color: rgba(8, 78, 23, 0.96);
+}
+
 #loading_overlay {
     position: fixed;
     inset: 0;
@@ -726,6 +792,11 @@ textarea {
     .loading-spinner {
         animation-duration: 1.6s;
     }
+
+    .app-shell,
+    .message-line {
+        transition: none;
+    }
 }
 
 @media (max-width: 720px) {
@@ -737,6 +808,10 @@ textarea {
 
     .app-main {
         padding: 1.5rem 1.25rem 2.5rem;
+    }
+
+    .message-line {
+        padding: 0.7rem 0.75rem;
     }
 }
 .hidden {

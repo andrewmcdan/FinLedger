@@ -357,16 +357,20 @@ async function fetchPageMarkup(pageName) {
     console.log("Fetch page markup failed:", response.status);
     if (response.status === 401) {
         let resJson = await response.clone().json();
-        if (resJson.error == "Missing Authorization header" || resJson.error == "Invalid Authorization header" || resJson.error == "Missing X-User-Id header" || resJson.error == "Invalid or expired token") {
+        const errorCode = resJson?.errorCode;
+        const unauthenticatedCodes = new Set([
+            "ERR_MISSING_AUTH_HEADER",
+            "ERR_INVALID_AUTH_HEADER",
+            "ERR_MISSING_USER_ID_HEADER",
+            "ERR_INVALID_OR_EXPIRED_TOKEN",
+            "ERR_NOT_LOGGED_IN",
+        ]);
+        if (unauthenticatedCodes.has(errorCode)) {
             window.location.hash = "#/not_logged_in";
             return;
         }
-        if (resJson.error === "Role not permitted") {
+        if (errorCode === "ERR_ACCESS_DENIED_ADMIN_REQUIRED") {
             window.location.hash = "#/not_authorized";
-            return;
-        }
-        if (resJson?.error === "NOT_LOGGED_IN") {
-            window.location.hash = "#/not_logged_in";
             return;
         }
         console.log("Unauthorized access, redirecting to login");
@@ -380,11 +384,11 @@ async function fetchPageMarkup(pageName) {
         } catch (error) {
             resJson = null;
         }
-        if (resJson?.error === "TEMP_PASSWORD_CHANGE_REQUIRED") {
+        if (resJson?.errorCode === "ERR_TEMP_PASSWORD_CHANGE_REQUIRED") {
             window.location.hash = "#/force_password_change";
             return;
         }
-        if (resJson?.error === "Role not permitted") {
+        if (resJson?.errorCode === "ERR_ACCESS_DENIED_ADMIN_REQUIRED") {
             window.location.hash = "#/not_authorized";
             return;
         }
@@ -410,7 +414,7 @@ async function loadModule(moduleName) {
                 } catch (error) {
                     resJson = null;
                 }
-                if (resJson?.error === "TEMP_PASSWORD_REQUIRED") {
+                if (resJson?.errorCode === "ERR_TEMP_PASSWORD_CHANGE_REQUIRED") {
                     window.location.hash = "#/force_password_change";
                     return;
                 }

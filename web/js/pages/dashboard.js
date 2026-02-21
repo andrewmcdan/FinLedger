@@ -30,12 +30,12 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
-                await showMessageModal("Email sent successfully");
+                await showMessageModal("MSG_EMAIL_SENT_SUCCESS");
                 emailForm.reset();
                 hideLoadingOverlay();
                 return;
             }
-            await showErrorModal(data.error || "Failed to send email");
+            await showErrorModal(data.error || "ERR_FAILED_TO_SEND_EMAIL");
             hideLoadingOverlay();
         });
     }
@@ -58,7 +58,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             }
             usersData = Array.isArray(data.users) ? data.users : [];
         } catch (error) {
-            showErrorModal("Error loading users: " + error.message);
+            showErrorModal("ERR_FAILED_TO_FETCH_USERS");
             usersData = [];
         } finally {
             hideLoadingOverlay();
@@ -69,20 +69,20 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
         const actionConfig = {
             approve: {
                 url: (id) => `/api/users/approve-user/${id}`,
-                success: "User approved successfully",
-                error: "Error approving user",
+                successCode: "MSG_USER_APPROVED_SUCCESS",
+                errorCode: "ERR_INTERNAL_SERVER",
                 rowSelector: (id) => `[data-user_id-${id}]`,
             },
             reject: {
                 url: (id) => `/api/users/reject-user/${id}`,
-                success: "User rejected successfully",
-                error: "Error rejecting user",
+                successCode: "MSG_USER_REJECTED_SUCCESS",
+                errorCode: "ERR_INTERNAL_SERVER",
                 rowSelector: (id) => `[data-user_id-${id}]`,
             },
             reinstate: {
                 url: (id) => `/api/users/reinstate-user/${id}`,
-                success: "User reinstated successfully",
-                error: "Error reinstating user",
+                successCode: "MSG_USER_REINSTATED_SUCCESS",
+                errorCode: "ERR_INTERNAL_SERVER",
                 rowSelector: (id) => `[data-suspended_user_id-${id}]`,
             },
         };
@@ -101,14 +101,15 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                         "Content-Type": "application/json",
                     },
                 });
+                const data = await response.json().catch(() => ({}));
                 if (response.ok) {
-                    showMessageModal(config.success);
+                    showMessageModal(config.successCode);
                     const row = document.querySelector(config.rowSelector(userId));
                     if (row) {
                         row.remove();
                     }
                 } else {
-                    showErrorModal(config.error);
+                    showErrorModal(data.error || config.errorCode);
                 }
                 hideLoadingOverlay();
             });
@@ -171,11 +172,11 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                             });
                             const data = await response.json().catch(() => ({}));
                             if (!response.ok) {
-                                showErrorModal(data.error || "Failed to update user field");
+                                showErrorModal(data.error || "ERR_FIELD_CANNOT_BE_UPDATED");
                                 cell.textContent = value;
                             }
                         } catch (error) {
-                            showErrorModal("Error updating user field");
+                            showErrorModal("ERR_INTERNAL_SERVER");
                             cell.textContent = value;
                         }
                     }
@@ -293,11 +294,11 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                 body: formData,
             });
             if (response.ok) {
-                showMessageModal("User created successfully");
+                showMessageModal("MSG_USER_CREATED_SUCCESS");
                 createUserForm.reset();
             } else {
                 const errorData = await response.json();
-                showErrorModal(`Error creating user: ${errorData.message}`);
+                showErrorModal(errorData.error || "ERR_FAILED_TO_CREATE_USER");
             }
             hideLoadingOverlay();
         });
@@ -316,26 +317,26 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                 userIdToSuspend = matchedUser.id;
             }
             if (userIdToSuspend === null) {
-                showErrorModal("Invalid username selected");
+                showErrorModal("ERR_INVALID_USERNAME_SELECTED");
                 hideLoadingOverlay();
                 return;
             }
             const suspensionStartRaw = formData.get("suspension_start_date");
             const suspensionEndRaw = formData.get("suspension_end_date");
             if (!userIdToSuspend || !suspensionStartRaw || !suspensionEndRaw) {
-                showErrorModal("Please fill in all fields");
+                showErrorModal("ERR_PLEASE_FILL_ALL_FIELDS");
                 hideLoadingOverlay();
                 return;
             }
             const suspensionStartDate = new Date(suspensionStartRaw);
             const suspensionEndDate = new Date(suspensionEndRaw);
             if (Number.isNaN(suspensionStartDate.getTime()) || Number.isNaN(suspensionEndDate.getTime())) {
-                showErrorModal("Please provide valid suspension dates");
+                showErrorModal("ERR_PROVIDE_VALID_SUSPENSION_DATES");
                 hideLoadingOverlay();
                 return;
             }
             if (suspensionEndDate <= suspensionStartDate) {
-                showErrorModal("Suspension end date must be after start date");
+                showErrorModal("ERR_SUSPENSION_END_AFTER_START");
                 hideLoadingOverlay();
                 return;
             }
@@ -353,11 +354,11 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             })
                 .then((response) => {
                     if (response.ok) {
-                        showMessageModal("User suspended successfully");
+                        showMessageModal("MSG_USER_SUSPENDED_SUCCESS");
                         suspendUserForm.reset();
                     } else {
                         response.json().then((errorData) => {
-                            showErrorModal(`Error suspending user: ${errorData.message}`);
+                            showErrorModal(errorData.error || "ERR_INTERNAL_SERVER");
                             hideLoadingOverlay();
                         });
                     }
@@ -368,7 +369,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                     hideLoadingOverlay();
                 })
                 .catch((error) => {
-                    showErrorModal(`Error suspending user: ${error.message}`);
+                    showErrorModal("ERR_INTERNAL_SERVER");
                     hideLoadingOverlay();
                 });
         });
@@ -382,18 +383,18 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             const formData = new FormData(deleteUserForm);
             const usernameToDelete = formData.get("delete_username");
             if (!usernameToDelete) {
-                showErrorModal("Please enter a username to delete");
+                showErrorModal("ERR_ENTER_USERNAME_TO_DELETE");
                 hideLoadingOverlay();
                 return;
             }
             const userToDelete = usersData.find((user) => user.username === usernameToDelete);
             if (!userToDelete) {
-                showErrorModal("User not found");
+                showErrorModal("ERR_USER_NOT_FOUND");
                 hideLoadingOverlay();
                 return;
             }
             if (userToDelete.id === currentUserId) {
-                showErrorModal("You cannot delete your own account");
+                showErrorModal("ERR_CANNOT_DELETE_OWN_ACCOUNT");
                 hideLoadingOverlay();
                 return;
             }
@@ -412,16 +413,16 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                 });
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
-                    showMessageModal("User deleted successfully");
+                    showMessageModal("MSG_USER_DELETED_SUCCESS");
                     deleteUserForm.reset();
                     hideLoadingOverlay();
                     location.reload();
                     return;
                 }
-                showErrorModal(data.error || "Failed to delete user");
+                showErrorModal(data.error || "ERR_FAILED_TO_DELETE_USER");
                 hideLoadingOverlay();
             } catch (error) {
-                showErrorModal("Error deleting user");
+                showErrorModal("ERR_INTERNAL_SERVER");
                 hideLoadingOverlay();
             }
         });
@@ -435,14 +436,14 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             const formData = new FormData(resetPasswordForm);
             const username = formData.get("reset_username");
             if (!username) {
-                showErrorModal("Please enter a username to reset password");
+                showErrorModal("ERR_ENTER_USERNAME_TO_RESET_PASSWORD");
                 hideLoadingOverlay();
                 return;
             }
             // Find user by username
             const user = usersData.find((u) => u.username === username);
             if (!user) {
-                showErrorModal("User not found");
+                showErrorModal("ERR_USER_NOT_FOUND");
                 hideLoadingOverlay();
                 return;
             }
@@ -453,15 +454,15 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                 });
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
-                    await showMessageModal("Password reset successfully. An email has been sent to the user with the new password.");
+                    await showMessageModal("MSG_USER_PASSWORD_RESET_SUCCESS");
                     resetPasswordForm.reset();
                     hideLoadingOverlay();
                     return;
                 }
-                showErrorModal(data.error || "Failed to reset password");
+                showErrorModal(data.error || "ERR_FAILED_TO_RESET_USER_PASSWORD");
                 hideLoadingOverlay();
             } catch (error) {
-                showErrorModal("Error resetting password");
+                showErrorModal("ERR_FAILED_TO_RESET_PASSWORD_GENERIC");
                 hideLoadingOverlay();
             }
         });
@@ -481,5 +482,4 @@ async function loadFetchWithAuth() {
     const { fetchWithAuth } = module;
     return { fetchWithAuth };
 }
-
 

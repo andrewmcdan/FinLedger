@@ -1,22 +1,3 @@
-const errorMessagePrettyMap = {
-    "duplicate key value violates unique constraint": "An item with that value already exists.",
-    "violates foreign key constraint": "The selected related item does not exist.",
-    "null value in column": "A required field is missing.",
-    accounts_account_name_key: "An account with that name already exists.",
-    "Cannot delete category": "Cannot delete category because accounts are tied to it.",
-    "Cannot delete subcategory": "Cannot delete subcategory because accounts are tied to it.",
-};
-
-const errorFormatter = (error) => {
-    let errors = [];
-    for (const [key, prettyMessage] of Object.entries(errorMessagePrettyMap)) {
-        if (error.includes(key)) {
-            errors.push(prettyMessage);
-        }
-    }
-    return errors.length > 0 ? errors[errors.length - 1] : "An unknown error occurred.";
-};
-
 const authHelpers = await loadFetchWithAuth();
 const { fetchWithAuth } = authHelpers;
 const domHelpers = await loadDomHelpers();
@@ -97,12 +78,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 });
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || "Failed to create account");
+                    throw new Error(errorData.error || "ERR_ACCOUNT_CREATION_FAILED");
                 }
                 const newAccount = await response.json();
                 window.location.reload();
             } catch (error) {
-                showErrorModal("Error creating account: " + errorFormatter(error.message));
+                showErrorModal(error.message || "ERR_ACCOUNT_CREATION_FAILED");
             } finally {
                 hideLoadingOverlay();
             }
@@ -388,7 +369,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                             });
                             const data = await response.json().catch(() => ({}));
                             if (!response.ok) {
-                                throw new Error(data.error || "Failed to update account field");
+                                throw new Error(data.error || "ERR_FAILED_TO_UPDATE_ACCOUNT_FIELD");
                             }
                             if (column === "account_name") {
                                 account.account_name = newValue;
@@ -406,7 +387,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                                 account.account_category_id = newValue;
                                 const defaultSubcategory = getDefaultSubcategoryForCategory(newValue);
                                 if (!defaultSubcategory) {
-                                    showErrorModal("No subcategories found for the selected category.");
+                                    showErrorModal("ERR_NO_SUBCATEGORIES_FOUND");
                                     account.account_category_id = previousCategoryId;
                                     cell.textContent = formatDisplayValue(account, "account_category_id");
                                     updateSubcategoryCell(account, previousSubcategoryId);
@@ -427,11 +408,11 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                                     });
                                     const subcategoryData = await subcategoryResponse.json().catch(() => ({}));
                                     if (!subcategoryResponse.ok) {
-                                        throw new Error(subcategoryData.error || "Failed to update account subcategory");
+                                        throw new Error(subcategoryData.error || "ERR_FAILED_TO_UPDATE_ACCOUNT_FIELD");
                                     }
                                     updateSubcategoryCell(account, newSubcategoryId);
                                 } catch (error) {
-                                    showErrorModal(error.message || "Error updating account subcategory");
+                                    showErrorModal(error.message || "ERR_FAILED_TO_UPDATE_ACCOUNT_FIELD");
                                     try {
                                         await fetchWithAuth("/api/accounts/update-account-field", {
                                             method: "POST",
@@ -461,7 +442,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                             }
                             cell.textContent = formatDisplayValue(account, column);
                         } catch (error) {
-                            showErrorModal(error.message || "Error updating account field");
+                            showErrorModal(error.message || "ERR_FAILED_TO_UPDATE_ACCOUNT_FIELD");
                             cell.textContent = displayValue;
                         } finally {
                             formatLongTextCell(cell);
@@ -622,7 +603,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 accountCount = parseInt(data.total_accounts, 10) || 0;
             }
         } catch (error) {
-            showErrorModal("Error fetching account counts: " + error.message);
+            showErrorModal("ERR_INTERNAL_SERVER");
         } finally {
             updateTotalPages();
         }
@@ -711,7 +692,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             const offset = (page - 1) * accountsPerPage;
             const response = await fetchWithAuth(`/api/accounts/list/${offset}/${accountsPerPage}${buildAccountsQueryParams()}`);
             if (!response.ok) {
-                throw new Error("Failed to fetch accounts");
+                throw new Error("ERR_FAILED_TO_LOAD_ACCOUNTS");
             }
             const accounts = await response.json();
             await renderAccounts(Array.isArray(accounts) ? accounts : []);
@@ -719,7 +700,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 currentPageEl.textContent = page;
             }
         } catch (error) {
-            showErrorModal("Error loading accounts: " + error.message);
+            showErrorModal(error.message || "ERR_FAILED_TO_LOAD_ACCOUNTS");
         } finally {
             hideLoadingOverlay();
         }
@@ -939,12 +920,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 });
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || "Failed to add category/subcategory");
+                    throw new Error(errorData.error || "ERR_INTERNAL_SERVER");
                 }
                 const result = await response.json();
                 window.location.reload();
             } catch (error) {
-                showErrorModal("Error adding category/subcategory: " + errorFormatter(error.message));
+                showErrorModal(error.message || "ERR_INTERNAL_SERVER");
             } finally {
                 hideLoadingOverlay();
             }
@@ -1008,7 +989,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             showLoadingOverlay();
             const selection = deleteCategorySelect ? deleteCategorySelect.value : "";
             if (!selection || !selection.includes(":")) {
-                showErrorModal("Please select a category or subcategory to delete.");
+                showErrorModal("ERR_SELECT_CATEGORY_OR_SUBCATEGORY_TO_DELETE");
                 hideLoadingOverlay();
                 return;
             }
@@ -1042,7 +1023,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 }
                 endpoint = `/api/accounts/subcategory/${selectionId}`;
             } else {
-                showErrorModal("Invalid selection.");
+                showErrorModal("ERR_INVALID_SELECTION");
                 hideLoadingOverlay();
                 return;
             }
@@ -1052,12 +1033,12 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 });
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || "Failed to delete category");
+                    throw new Error(errorData.error || "ERR_INTERNAL_SERVER");
                 }
                 const result = await response.json();
                 window.location.reload();
             } catch (error) {
-                showErrorModal("Error deleting category: " + errorFormatter(error.message));
+                showErrorModal(error.message || "ERR_INTERNAL_SERVER");
             } finally {
                 hideLoadingOverlay();
             }
@@ -1071,7 +1052,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             event.preventDefault();
             const accountId = deactivateAccountSelectEl.value;
             if (!accountId) {
-                showErrorModal("Please select an account to deactivate.");
+                showErrorModal("ERR_SELECT_ACCOUNT_TO_DEACTIVATE");
                 return;
             }
             const confirmDeactivate = confirm("Are you sure you want to deactivate the selected account?");
@@ -1092,13 +1073,13 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 });
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || "Failed to deactivate account");
+                    throw new Error(errorData.error || "ERR_INTERNAL_SERVER");
                 }
                 const result = await response.json();
                 window.location.reload();
             } catch (error) {
                 console.log(error.message);
-                showErrorModal("Error deactivating account: " + errorFormatter(error.message));
+                showErrorModal(error.message || "ERR_INTERNAL_SERVER");
             } finally {
                 hideLoadingOverlay();
             }
@@ -1131,14 +1112,14 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                     });
                     if (!response.ok) {
                         const errorData = await response.json();
-                        throw new Error(errorData.error || "Failed to reactivate account");
+                        throw new Error(errorData.error || "ERR_INTERNAL_SERVER");
                     }
                     const row = document.querySelector(`[data-inactive_account_id-${accountId}]`);
                     if (row) {
                         row.remove();
                     }
                 } catch (error) {
-                    showErrorModal("Error reactivating account: " + errorFormatter(error.message));
+                    showErrorModal(error.message || "ERR_INTERNAL_SERVER");
                 } finally {
                     hideLoadingOverlay();
                 }

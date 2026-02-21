@@ -2,8 +2,9 @@ const { getUserLoggedInStatus } = require("../controllers/users.js");
 const { log } = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const db = require("../db/db.js");
+const { sendApiError } = require("../utils/api_messages");
 
-const non_auth_paths_begin = ["/api/auth/status", "/api/auth/logout", "/public_images", "/js/utils", "/js/app.js", "/js/background", "/css/", "/pages/public", "/js/pages/public", "/api/users/reset-password", "/api/users/security-questions", "/api/users/security-questions-list", "/api/users/verify-security-answers"];
+const non_auth_paths_begin = ["/api/auth/status", "/api/auth/logout", "/api/messages", "/public_images", "/js/utils", "/js/app.js", "/js/background", "/css/", "/pages/public", "/js/pages/public", "/api/users/reset-password", "/api/users/security-questions", "/api/users/security-questions-list", "/api/users/verify-security-answers"];
 const non_auth_paths_full = ["/", "/not_found.html", "/not_logged_in.html", "/api/users/register_new_user"];
 
 const setSessionExpiryHeaders = async (res, userId, token) => {
@@ -33,27 +34,27 @@ const authMiddleware = async (req, res, next) => {
     const authHeader = req.get("authorization");
     if (!authHeader) {
         log("warn", "Missing Authorization header", { path: req.path }, utilities.getCallerInfo());
-        return res.status(401).json({ error: "Missing Authorization header" });
+        return sendApiError(res, 401, "ERR_MISSING_AUTH_HEADER");
     }
     const [scheme, token] = authHeader.split(" ");
     if (scheme !== "Bearer" || !token) {
         log("warn", "Invalid Authorization header", { path: req.path }, utilities.getCallerInfo());
-        return res.status(401).json({ error: "Invalid Authorization header" });
+        return sendApiError(res, 401, "ERR_INVALID_AUTH_HEADER");
     }
     const userId = req.get("X-User-Id");
     if (!userId) {
         log("warn", "Missing X-User-Id header", { path: req.path }, utilities.getCallerInfo());
-        return res.status(401).json({ error: "Missing X-User-Id header" });
+        return sendApiError(res, 401, "ERR_MISSING_USER_ID_HEADER");
     }
     req.user = { token: token, id: userId };
     const loggedIn = await getUserLoggedInStatus(userId, token);
     if (!loggedIn) {
         if(req.path.startsWith("/pages/")) {
             log("info", `Unauthenticated access attempt to ${req.path}`, { user_id: userId }, utilities.getCallerInfo(), req.user.id);
-            return res.status(401).json({ error: "NOT_LOGGED_IN" });
+            return sendApiError(res, 401, "ERR_NOT_LOGGED_IN");
         }
         log("warn", "Invalid or expired token", { user_id: userId, path: req.path }, utilities.getCallerInfo(), req.user.id);
-        return res.status(401).json({ error: "Invalid or expired token" });
+        return sendApiError(res, 401, "ERR_INVALID_OR_EXPIRED_TOKEN");
     }
     const tempPasswordResult = await db.query("SELECT temp_password FROM users WHERE id = $1", [userId]);
     const tempPassword = tempPasswordResult.rowCount > 0 && tempPasswordResult.rows[0].temp_password === true;
@@ -68,7 +69,7 @@ const authMiddleware = async (req, res, next) => {
         ]);
         if (!tempAllowedPaths.has(req.path)) {
             log("warn", "Blocked request due to temporary password requirement", { user_id: userId, path: req.path }, utilities.getCallerInfo(), req.user.id);
-            return res.status(403).json({ error: "TEMP_PASSWORD_CHANGE_REQUIRED" });
+            return sendApiError(res, 403, "ERR_TEMP_PASSWORD_CHANGE_REQUIRED");
         }
     }
     await setSessionExpiryHeaders(res, userId, token);

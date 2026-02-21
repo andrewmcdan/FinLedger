@@ -199,14 +199,18 @@ const changePassword = async (userId, newPassword) => {
     }
     if (!checkPasswordComplexity(newPassword)) {
         logger.log("warn", "Password complexity check failed", { userId }, utilities.getCallerInfo(), userId);
-        throw new Error("Password does not meet complexity requirements");
+        const error = new Error("Password does not meet complexity requirements");
+        error.code = "ERR_PASSWORD_COMPLEXITY";
+        throw error;
     }
     await db.transaction(async (client) => {
         const pastPasswordsResult = await client.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
         for (const row of pastPasswordsResult.rows) {
             const matchResult = await client.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
             if (matchResult.rows.length > 0) {
-                throw new Error("New password cannot be the same as any past passwords");
+                const error = new Error("New password cannot be the same as any past passwords");
+                error.code = "ERR_PASSWORD_HISTORY_REUSE";
+                throw error;
             }
         }
         logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo(), userId);
@@ -371,7 +375,9 @@ const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
     // The table has rows like this:   security_question_1 TEXT, security_answer_hash_1 TEXT, security_question_2 TEXT, security_answer_hash_2 TEXT, security_question_3 TEXT, security_answer_hash_3 TEXT,
     if (questionsAndAnswers.length !== 3) {
         logger.log("warn", "Invalid security question payload length", { userId, length: questionsAndAnswers.length }, utilities.getCallerInfo(), userId);
-        throw new Error("Exactly three security questions and answers must be provided");
+        const error = new Error("Exactly three security questions and answers must be provided");
+        error.code = "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED";
+        throw error;
     }
     const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')), updated_at = now() WHERE id = $7";
     const values = [questionsAndAnswers[0].question, questionsAndAnswers[0].answer, questionsAndAnswers[1].question, questionsAndAnswers[1].answer, questionsAndAnswers[2].question, questionsAndAnswers[2].answer, userId];
@@ -397,7 +403,9 @@ const verifySecurityAnswers = async (userId, answers) => {
     // answers should be an array of strings with the answers to the security questions in order
     if (answers.length !== 3) {
         logger.log("warn", "Invalid security answer payload length", { userId, length: answers.length }, utilities.getCallerInfo(), userId);
-        throw new Error("Exactly three answers must be provided");
+        const error = new Error("Exactly three answers must be provided");
+        error.code = "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED";
+        throw error;
     }
     const query = "SELECT 1 FROM users WHERE id = $1 AND security_answer_hash_1 = crypt($2, security_answer_hash_1) AND security_answer_hash_2 = crypt($3, security_answer_hash_2) AND security_answer_hash_3 = crypt($4, security_answer_hash_3)";
     const values = [userId, answers[0], answers[1], answers[2]];
@@ -469,7 +477,9 @@ const deleteUserById = async (userId) => {
 const setUserPassword = async (userId, password, temp = false) => {
     if (!checkPasswordComplexity(password)) {
         logger.log("warn", "Password complexity check failed for setUserPassword", { userId, temp }, utilities.getCallerInfo(), userId);
-        throw new Error("Password does not meet complexity requirements");
+        const error = new Error("Password does not meet complexity requirements");
+        error.code = "ERR_PASSWORD_COMPLEXITY";
+        throw error;
     }
     logger.log("info", "Setting user password", { userId, temp }, utilities.getCallerInfo(), userId);
     return db.transaction(async (client) => {
