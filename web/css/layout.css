@@ -634,6 +634,16 @@ button.button-small,
     white-space: nowrap;
 }
 
+.account-transactions-link {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.account-transactions-link:hover {
+    color: var(--accent);
+}
+
 .inline-status {
     font-size: 0.9rem;
     color: var(--muted);

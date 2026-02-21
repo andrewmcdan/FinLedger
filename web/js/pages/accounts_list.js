@@ -14,6 +14,9 @@ const getIsAdmin = async () => {
 
 export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay, showErrorModal }) {
     const isAdmin = await getIsAdmin();
+    const editHoverText = "Double click to edit.";
+    const navAndEditHoverText = "Single click opens Transactions page. Double click to edit.";
+    const navOnlyHoverText = "Single click opens Transactions page.";
 
     const add_account_button = document.getElementById("add_account_button");
     const account_modal = document.getElementById("account_modal");
@@ -115,6 +118,11 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     const formatLongTextEls = () => {
         const longTextEls = document.querySelectorAll("[data-long-text]");
         longTextEls.forEach((el) => {
+            const editHint = el.getAttribute("data-edit-hint");
+            if (editHint) {
+                el.title = editHint;
+                return;
+            }
             if (el.textContent.length > 20) {
                 el.title = el.textContent;
             }
@@ -235,6 +243,11 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
 
     const formatLongTextCell = (cell) => {
         if (!cell || !cell.hasAttribute("data-long-text")) {
+            return;
+        }
+        const editHint = cell.getAttribute("data-edit-hint");
+        if (editHint) {
+            cell.title = editHint;
             return;
         }
         const text = cell.textContent || "";
@@ -623,8 +636,19 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             const statementType = statementTypeLabels[account.statement_type] || account.statement_type || "";
             const tr = document.createElement("tr");
             const status = account.status ? `${account.status.charAt(0).toUpperCase()}${account.status.slice(1)}` : "";
-            tr.appendChild(createCell({ text: account.account_name ?? "", dataAttr: `data-account_name-${account.id}` }));
-            tr.appendChild(createCell({ text: account.account_number ?? "", dataAttr: `data-account_number-${account.id}` }));
+            const accountNameCell = createCell({ text: account.account_name ?? "", dataAttr: `data-account_name-${account.id}` });
+            const accountNumberCell = createCell({ text: account.account_number ?? "", dataAttr: `data-account_number-${account.id}` });
+            const accountCellHoverText = isAdmin ? navAndEditHoverText : navOnlyHoverText;
+            accountNameCell.classList.add("account-transactions-link");
+            accountNumberCell.classList.add("account-transactions-link");
+            accountNameCell.title = accountCellHoverText;
+            accountNumberCell.title = accountCellHoverText;
+            if (isAdmin) {
+                accountNameCell.setAttribute("data-edit-hint", navAndEditHoverText);
+                accountNumberCell.setAttribute("data-edit-hint", navAndEditHoverText);
+            }
+            tr.appendChild(accountNameCell);
+            tr.appendChild(accountNumberCell);
             tr.appendChild(createCell({ text: accountOwner, dataAttr: `data-user_id-${account.id}` }));
             tr.appendChild(createCell({ text: status }));
             tr.appendChild(createCell({ text: normalSide, dataAttr: `data-normal_side-${account.id}` }));
@@ -647,6 +671,17 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             auditButton.textContent = "Audit";
             actionCell.appendChild(auditButton);
             tr.appendChild(actionCell);
+            if (isAdmin) {
+                const editableColumns = ["user_id", "normal_side", "account_description", "account_category_id", "account_subcategory_id", "statement_type", "comment"];
+                for (const column of editableColumns) {
+                    const editableCell = tr.querySelector(`[data-${column}-${account.id}]`);
+                    if (!editableCell) {
+                        continue;
+                    }
+                    editableCell.setAttribute("data-edit-hint", editHoverText);
+                    editableCell.title = editHoverText;
+                }
+            }
             let rowClickTimeout = null;
             const clearRowClickTimeout = () => {
                 if (rowClickTimeout) {
@@ -665,7 +700,8 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 }
                 return Boolean(target.closest("button, a, input, select, textarea, label, [data-prevent-row-click]"));
             };
-            tr.addEventListener("click", (event) => {
+
+            const onLinkCellClick = (event) => {
                 if (event.defaultPrevented || event.detail > 1 || isInteractiveTarget(event.target)) {
                     return;
                 }
@@ -674,8 +710,11 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                     rowClickTimeout = null;
                     openLedgerForAccount();
                 }, 250);
-            });
-            // Double-click should always suppress the pending single-click row navigation.
+            };
+
+            accountNameCell.addEventListener("click", onLinkCellClick);
+            accountNumberCell.addEventListener("click", onLinkCellClick);
+            // Double-click should always suppress the pending single-click navigation.
             tr.addEventListener("dblclick", () => {
                 clearRowClickTimeout();
             });
