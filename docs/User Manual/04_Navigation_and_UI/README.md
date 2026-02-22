@@ -1,6 +1,6 @@
 # Navigation and UI
 
-This section explains how users move through FinLedger and what UI patterns are used consistently across pages.
+This section describes current navigation and shared UI behavior.
 
 ## Navigation Model
 
@@ -33,7 +33,7 @@ Logo behavior:
 Primary navigation links:
 
 - `Dashboard`
-- `Accounts`
+- `Accounts` (route key: `#/accounts_list`)
 - `Transactions`
 - `Reports`
 - `Help`
@@ -46,13 +46,25 @@ Active-page behavior:
 
 ## Route Access and Redirect Behavior
 
-Common route outcomes:
+Current route outcomes:
 
 - Valid route: requested page loads into the main content area.
 - Unknown route: user is shown the Not Found page.
 - Not logged in or expired session: user is redirected to `Not Logged In` or `Login` depending on context.
 - Insufficient permission: user is redirected to `Not Authorized`.
 - Temporary password required: user is redirected to `Change Password`.
+
+## Global Message Line
+
+FinLedger uses a global message line below the header for success/error feedback.
+
+Behavior:
+
+- Message codes are resolved from the message catalog.
+- Error messages use alert-style presentation.
+- Success messages use status-style presentation.
+- The dismiss button clears the message.
+- Editing form inputs automatically clears the current message.
 
 ## Profile Menu
 
@@ -73,6 +85,7 @@ Help:
 - `Help` is a top-level navigation item.
 - The Help page is organized as expandable accordion topics.
 - Topics cover account access, profile/security, admin tools, reports, and support.
+- Support includes a public link to download the User Manual PDF.
 
 Tooltips:
 
@@ -106,14 +119,19 @@ Behavior:
 - Overlay hides after content finishes loading.
 - A short minimum display time is applied to prevent flashing.
 
-## Layout Consistency Standards
+## Current Module UX Status
 
-UI consistency expectations across pages:
+- `Dashboard`: operational/admin workspace, plus static summary cards.
+- `Accounts`: implemented account-management UI.
+- `Transactions`: simple activity feed with refresh timestamp update.
+- `Reports`: simple period selector and static summary text.
 
-- Shared header/navigation frame
-- Consistent page title and subtitle pattern
-- Reusable card, table, form, and button styles
-- Consistent placement for notices and status feedback
-- Unified role-aware navigation behavior
+## Layout Consistency
 
-These patterns support predictable navigation and reduce training time for end users.
+Shared patterns across pages:
+
+- Common header/navigation shell
+- Card and table layout components
+- Global message line for feedback
+- Global loading overlay for route/action loading
+- Role-aware visibility for privileged controls

@@ -1,36 +1,64 @@
 # Overview and Roles
 
-**System Overview**
+## System Overview
 
-FinLedger is a web-based financial management system that supports core accounting workflows, including user administration, chart of accounts, journal entries, ledger review, adjusting entries, and financial reporting. The application is organized into modules that align with the sprint feature lists and is accessed through a single-page web interface.
+FinLedger is a single-page web application with authenticated navigation and role-aware controls.
 
-**UI Landmarks**
+Current user-facing modules are:
 
-Use these landmarks when navigating the application or referencing UI elements:
+- Dashboard
+- Accounts (Chart of Accounts)
+- Transactions
+- Reports
+- Help
+- Profile
 
-- **Header and branding**: The top-left header area shows the FinLedger logo, application name, and a logged-in user banner. The banner reads “You are logged in as …” when authenticated.
-- **Main navigation**: The top navigation bar includes `Dashboard`, `Accounts`, `Transactions`, `Reports`, `Help`, and a `Login`/`Logout` link depending on session state.
-- **Profile menu**: The top-right profile button shows the current user name and avatar. It opens a small menu with `Go to profile` and `Logout`.
-- **Calendar popup**: A calendar icon in the header opens a pop-up calendar for quick date reference.
-- **Main content area**: Page content loads into the central area below the header. This is where module screens (Dashboard, Chart of Accounts, Ledger, Reports, etc.) appear.
-- **Loading overlay**: A full-page loading overlay appears during page loads or long actions.
+Important current-state note:
 
-**Role Summary**
+- Journal entry, ledger, adjusting-entry, and full financial-statement workflows are not exposed as complete UI/API user workflows yet, even though related database tables exist.
 
-FinLedger supports three roles. The UI exposes or hides controls based on the user’s role.
+## UI Landmarks
 
-- **Administrator**: Manages users (create, update, approve/reject registrations, suspend/reinstate, reset passwords) and manages the Chart of Accounts (add/edit/deactivate accounts, manage categories and subcategories). Administrators also access user and system reports and can email users from within the application.
-- **Manager**: Creates and approves journal entries, reviews pending approvals, and runs financial reports (trial balance, income statement, balance sheet, retained earnings). Managers can also view ledgers and account event logs.
-- **Accountant**: Prepares journal entries and adjusting entries, attaches source documents, and tracks approval status. Accountants can view ledgers and account details but do not approve entries.
+- Header: FinLedger branding, logged-in user label, calendar button, and top navigation.
+- Top navigation: `Dashboard`, `Accounts`, `Transactions`, `Reports`, `Help`, and `Login`/`Logout`.
+- Profile menu: top-right avatar/name menu with `Go to profile` and `Logout`.
+- Global message line: page-level success/error message area below the header.
+- Main content area: route content loaded without full page reload.
+- Loading overlay: shown during route loads and longer actions.
 
-**Module Map (High Level)**
+## Role Summary
 
-- **Dashboard**: Landing page that summarizes key metrics, alerts, and role-specific information.
-- **Accounts**: Chart of Accounts management and navigation to ledgers.
-- **Transactions**: Ledger and journal entry access.
-- **Reports**: Financial reporting (trial balance, income statement, balance sheet, retained earnings).
-- **Help**: In-app help content organized by topic.
-- **Profile**: User profile management, password changes, and security questions.
+FinLedger supports three roles: `administrator`, `manager`, and `accountant`.
 
-For login details and security rules, see `docs/User Manual/02_Login_and_Security/README.md`.
-For user administration tasks, see `docs/User Manual/03_User_Administration/README.md`.
+- Administrator:
+  - Full user administration on Dashboard (approve/reject, create, edit, suspend/reinstate, delete, reset password, email user).
+  - Full Chart of Accounts administration (create/edit/deactivate/reactivate accounts, manage categories/subcategories).
+  - Can access audit log APIs.
+- Manager:
+  - No admin user-management controls.
+  - Read-only use of current Accounts list UI.
+  - Can access audit log APIs.
+  - Can use current Transactions, Reports, Help, and Profile pages.
+- Accountant:
+  - No admin user-management controls.
+  - Read-only use of current Accounts list UI.
+  - Can use current Transactions, Reports, Help, and Profile pages.
+  - Cannot access audit log APIs.
+
+## Module Map
+
+- Dashboard:
+  - Static summary cards plus admin-only user-management workspace.
+- Accounts:
+  - Implemented Chart of Accounts list and admin account/category management.
+- Transactions:
+  - Current page is a simple activity view with refresh timestamp behavior.
+- Reports:
+  - Current page is a lightweight period selector and static summary text.
+- Help:
+  - Accordion help topics plus User Manual PDF link.
+- Profile:
+  - Personal info updates, password change, and security question updates.
+
+For authentication and password policy details, see `docs/User Manual/02_Login_and_Security/README.md`.
+For administrator workflows, see `docs/User Manual/03_User_Administration/README.md`.

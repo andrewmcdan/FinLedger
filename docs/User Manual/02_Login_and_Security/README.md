@@ -1,24 +1,24 @@
 # Login and Security
 
-This section explains how users sign in, manage passwords, recover access, and how FinLedger enforces session and password security.
+This section describes current sign-in, password, reset, and session-security behavior.
 
 ## Login Screen
 
-The login screen is available from the top navigation link `Login`.
+The login page is available from the `Login` link in the header.
 
-The sign-in form includes:
+The form includes:
 
 - `Username`
 - `Password`
 - `Log In`
-- `New User`
+- `Request Access`
 - `Forgot Password`
 
 After successful sign-in:
 
 - The header shows `You are logged in as ...`.
-- The top-right profile control shows your display name and profile image.
-- The navigation link changes from `Login` to `Logout`.
+- The profile button shows name/avatar.
+- Navigation updates to show `Logout`.
 
 ## Sign-In Process
 
@@ -26,109 +26,117 @@ After successful sign-in:
 2. Enter your username and password.
 3. Select `Log In`.
 
-On success, FinLedger creates a signed session token and redirects to the dashboard.
+On success, FinLedger stores session auth data in local storage and routes to `#/dashboard`.
 
-If credentials are invalid, the page shows a login failure message.
+If login fails, an error message from the message catalog is shown in the global message line.
 
 ## Session and Access Control
 
-FinLedger uses authenticated requests for protected pages and APIs.
+Protected routes require:
 
-- Protected requests include `Authorization: Bearer <token>` and `X-User-Id` headers.
-- Session expiration is tracked server-side and extended while users remain active.
-- If a session is missing or expired, protected routes return an authentication error and the UI redirects to sign-in.
+- `Authorization: Bearer <token>`
+- `X-User-Id`
+
+Session behavior:
+
+- Server sessions are tracked in `logged_in_users` with a sliding timeout.
+- Active requests extend session expiration.
+- Session expiry headers are returned to the browser.
+- The client warns before timeout and auto-logs out when expired.
+
+If auth is missing or invalid, protected requests fail and the UI redirects to `Not Logged In` or `Login`.
 
 ## Logout
 
-Users can sign out in either of these ways:
+Users can log out from:
 
-- Select `Logout` in the top navigation.
-- Open the profile menu and select `Logout`.
+- Top navigation `Logout`
+- Profile menu `Logout`
 
-Logout invalidates the active server session and clears local session data in the browser.
+Logout updates server session state and clears local session data.
 
-## Password Rules
+## Password Complexity Rules
 
-Password validation is enforced during password changes and resets.
+Password validation is enforced on:
 
-Current enforcement requires:
+- Profile password change
+- Temporary-password forced change
+- Password reset submit flow
+- Admin password set/reset paths
 
+Current required rules:
+
+- First character must be an ASCII letter (`A-Z` or `a-z`)
 - Minimum length of 8 characters.
 - At least one uppercase letter.
 - At least one lowercase letter.
 - At least one number.
 - At least one special character.
 
-Password reuse protection is enabled.
-
-- New passwords cannot match previously used passwords stored in password history.
+Password reuse is blocked by password-history checks.
 
 ## Failed Login Attempts and Suspension
 
 FinLedger tracks failed login attempts.
 
-- After 3 failed attempts, login is blocked for that user.
-- The user receives an account suspended message and must contact an administrator.
-- On successful login, failed-attempt counters are reset.
+- Failed attempts increment on bad password.
+- At 3 failed attempts, login is blocked with suspension messaging.
+- On successful login, failed-attempt counters reset.
 
 ## Forgot Password Flow
 
-Use `Forgot Password` when you cannot log in.
+Use `Forgot Password` from the login page.
 
 1. Open `Forgot Password` from the login page.
-2. Enter your email and user ID.
-3. Select `Reset Password`.
-4. Check your email for the reset link.
-5. Open the link and answer your three security questions.
+2. Enter email and username.
+3. Submit reset request.
+4. Open the emailed reset link.
+5. Answer three security questions.
 6. Enter and confirm a new password.
-7. Submit to complete reset.
+7. Submit.
 
-Important behavior:
+Reset protections:
 
-- Reset tokens expire.
-- Security answers must match what is stored for the account.
-- Password complexity and password-history rules still apply.
+- Reset token expires in 1 hour.
+- Security answers must match stored hashes.
+- Reset-answer failures are lock-limited (3 attempts).
+- Password complexity and password-history checks apply.
 
 ## Temporary Password and Forced Change
 
 Some accounts are issued temporary passwords.
 
-When logging in with a temporary password:
+When `temp_password` is active:
 
-- The user is redirected to the `Change Password` screen.
-- Most routes are blocked until password change is completed.
-- The user must set three security questions and answers, then set a new password.
+- Login redirects to `Change Password`.
+- Most protected routes are blocked until completion.
+- User must submit 3 security Q/A entries and a compliant password.
 
-After successful completion:
+After completion:
 
-- Temporary password mode is cleared.
-- The user can access normal application pages.
+- Temporary-password flag is cleared.
+- Normal route access resumes.
 
 ## Password Expiration and Warnings
 
-FinLedger enforces password expiration.
+Password expiration is enforced.
 
 - Standard passwords are set to expire after 90 days.
-- Warning emails are sent in the 3-day window before expiration.
-- Expired-password accounts can be suspended automatically by background jobs.
+- Warning emails are sent in the 3-day window before expiry.
+- Expired-password accounts can be auto-suspended by scheduled jobs.
 
 ## Security Storage and Encryption
 
-FinLedger stores security credentials in hashed form.
+Security-sensitive values are stored as hashes:
 
-- Passwords are hashed before storage.
-- Security answers are hashed before storage.
-- Password history hashes are stored to enforce reuse restrictions.
-- Reset links use time-limited reset tokens.
+- Password hashes
+- Security answer hashes
+- Password history hashes
 
-## Common Security Messages
+Reset links use time-limited tokens stored in the database.
 
-Users may see these messages during authentication flows:
+## Messaging Behavior
 
-- `Invalid username or password`
-- `Account is suspended due to multiple failed login attempts`
-- `Invalid or expired reset token`
-- `Security answers verification failed`
-- `TEMP_PASSWORD_CHANGE_REQUIRED`
+Auth and security feedback uses message codes resolved from the `app_messages` table.
 
-If access remains blocked after valid inputs, contact an administrator.
+Messages are displayed in the global message line and can be dismissed manually or cleared by new input.
