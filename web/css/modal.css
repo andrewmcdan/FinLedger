@@ -52,8 +52,3 @@
     white-space: nowrap;
 }
 
-#error_notification_message {
-    color: var(--error);
-    font-weight: 500;
-    margin-top: 0.5rem;
-}

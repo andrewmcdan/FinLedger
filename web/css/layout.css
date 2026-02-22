@@ -524,6 +524,14 @@
     box-shadow: 0 16px 24px rgba(21, 31, 40, 0.14);
 }
 
+.password_validation_popup[data-password-requirements] {
+    z-index: 4;
+}
+
+.password_validation_popup[data-password-match] {
+    z-index: 3;
+}
+
 .password_validation_popup h2 {
     margin: 0 0 0.5rem;
     font-size: 0.95rem;
