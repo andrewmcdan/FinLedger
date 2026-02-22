@@ -1,6 +1,8 @@
-export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, userIconBlobUrl } = {}) {
+export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, showErrorModal, showMessageModal, userIconBlobUrl } = {}) {
     const showOverlay = typeof showLoadingOverlay === "function" ? showLoadingOverlay : () => {};
     const hideOverlay = typeof hideLoadingOverlay === "function" ? hideLoadingOverlay : () => {};
+    const showError = typeof showErrorModal === "function" ? showErrorModal : async () => {};
+    const showMessage = typeof showMessageModal === "function" ? showMessageModal : async () => {};
     const selectEls = [document.getElementById("security_question_1"), document.getElementById("security_question_2"), document.getElementById("security_question_3")];
 
     const authHeaders = () => ({
@@ -62,8 +64,83 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
 
     const changePasswordForm = document.getElementById("change-password-form");
     if (changePasswordForm) {
+        const passwordInput = document.getElementById("new_password");
+        const confirmPasswordInput = document.getElementById("confirm_new_password");
+        const passwordRequirementsContainer = changePasswordForm.querySelector("[data-password-requirements]");
+        const passwordMatchContainer = changePasswordForm.querySelector("[data-password-match]");
+        const requirementItems = {
+            starts_with_letter: changePasswordForm.querySelector("#starts_with_letter"),
+            length: changePasswordForm.querySelector("#length"),
+            uppercase: changePasswordForm.querySelector("#uppercase"),
+            lowercase: changePasswordForm.querySelector("#lowercase"),
+            number: changePasswordForm.querySelector("#number"),
+            special: changePasswordForm.querySelector("#special"),
+        };
+
+        const setRequirementState = (key, met) => {
+            const item = requirementItems[key];
+            if (!item) {
+                return;
+            }
+            item.classList.toggle("valid", met);
+            item.classList.toggle("invalid", !met);
+        };
+
+        const validatePasswords = () => {
+            const password = passwordInput?.value || "";
+            const startsWithLetterMet = /^[A-Za-z]/.test(password);
+            const lengthMet = password.length >= 8;
+            const uppercaseMet = /[A-Z]/.test(password);
+            const lowercaseMet = /[a-z]/.test(password);
+            const numberMet = /[0-9]/.test(password);
+            const specialMet = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/.test(password);
+            const requirementsMet = startsWithLetterMet && lengthMet && uppercaseMet && lowercaseMet && numberMet && specialMet;
+
+            setRequirementState("starts_with_letter", startsWithLetterMet);
+            setRequirementState("length", lengthMet);
+            setRequirementState("uppercase", uppercaseMet);
+            setRequirementState("lowercase", lowercaseMet);
+            setRequirementState("number", numberMet);
+            setRequirementState("special", specialMet);
+
+            if (passwordRequirementsContainer) {
+                passwordRequirementsContainer.classList.toggle("hidden", requirementsMet);
+            }
+
+            return requirementsMet;
+        };
+
+        const validatePasswordMatch = () => {
+            const password = passwordInput?.value || "";
+            const confirmPassword = confirmPasswordInput?.value || "";
+            const matches = password === confirmPassword;
+
+            if (passwordMatchContainer) {
+                passwordMatchContainer.classList.toggle("hidden", matches);
+            }
+
+            return matches;
+        };
+
+        passwordInput?.addEventListener("input", () => {
+            validatePasswords();
+            validatePasswordMatch();
+        });
+        confirmPasswordInput?.addEventListener("input", validatePasswordMatch);
+
         changePasswordForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            const requirementsMet = validatePasswords();
+            const passwordsMatch = validatePasswordMatch();
+            if (!requirementsMet) {
+                await showError("ERR_PASSWORD_COMPLEXITY");
+                return;
+            }
+            if (!passwordsMatch) {
+                await showError("ERR_PASSWORDS_DO_NOT_MATCH");
+                return;
+            }
+
             showOverlay();
             const formData = new FormData(changePasswordForm);
             try {
@@ -75,10 +152,10 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
                     changePasswordForm.reset();
-                    alert("Password changed successfully");
+                    await showMessage("MSG_PASSWORD_CHANGED_SUCCESS");
                     return;
                 }
-                alert(data.error || "Error changing password");
+                await showError(data.error || "ERR_FAILED_TO_CHANGE_PASSWORD");
             } finally {
                 hideOverlay();
             }
@@ -111,10 +188,10 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
                     securityQuestionsForm.reset();
-                    alert("Security questions updated successfully");
+                    await showMessage("MSG_SECURITY_QUESTIONS_UPDATED_SUCCESS");
                     return;
                 }
-                alert(data.error || "Error updating security questions");
+                await showError(data.error || "ERR_FAILED_TO_UPDATE_SECURITY_QUESTIONS");
             } finally {
                 hideOverlay();
             }
@@ -135,15 +212,14 @@ export default function initProfile({ showLoadingOverlay, hideLoadingOverlay, us
                 });
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {
-                    alert("Profile updated successfully");
+                    await showMessage("MSG_PROFILE_UPDATED_SUCCESS");
                     return;
                 }
-                alert(data.error || "Error updating profile");
+                await showError(data.error || "ERR_FAILED_TO_UPDATE_PROFILE");
             } finally {
                 hideOverlay();
             }
         });
     }
 }
-
 

@@ -95,13 +95,19 @@ async function cleanupUserData(){
 
 async function cleanupLogs() {
     const appLogsRetentionDays = parseInt(process.env.APP_LOGS_RETENTION_DAYS) || 30;
-    const auditLogsRetentionDays = parseInt(process.env.AUDIT_LOGS_RETENTION_DAYS) || 180;
+    const auditLogsRetentionDays = Number.parseInt(process.env.AUDIT_LOGS_RETENTION_DAYS || "", 10);
     try {
         const appLogsCutoff = new Date(Date.now() - appLogsRetentionDays * 24 * 60 * 60 * 1000);
-        const auditLogsCutoff = new Date(Date.now() - auditLogsRetentionDays * 24 * 60 * 60 * 1000);
         const appLogsResult = await db.query("DELETE FROM app_logs WHERE created_at < $1 RETURNING *", [appLogsCutoff]);
-        const auditLogsResult = await db.query("DELETE FROM audit_logs WHERE created_at < $1 RETURNING *", [auditLogsCutoff]);
-        log("info", `Cleaned up logs: ${appLogsResult.rowCount} app logs and ${auditLogsResult.rowCount} audit logs deleted`, {}, getCallerInfo());
+
+        let auditLogsDeleted = 0;
+        if (Number.isFinite(auditLogsRetentionDays) && auditLogsRetentionDays > 0) {
+            const auditLogsCutoff = new Date(Date.now() - auditLogsRetentionDays * 24 * 60 * 60 * 1000);
+            const auditLogsResult = await db.query("DELETE FROM audit_logs WHERE changed_at < $1 RETURNING *", [auditLogsCutoff]);
+            auditLogsDeleted = auditLogsResult.rowCount;
+        }
+
+        log("info", `Cleaned up logs: ${appLogsResult.rowCount} app logs and ${auditLogsDeleted} audit logs deleted`, {}, getCallerInfo());
     } catch (error) {
         log("error", `Error during cleanupLogs: ${error.message}`, {}, getCallerInfo());
     }

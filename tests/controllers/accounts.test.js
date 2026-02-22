@@ -96,3 +96,54 @@ test("createAccount rejects unknown categories or subcategories", async () => {
 
     await assert.rejects(() => accountsController.createAccount(user.id, "Missing Subcategory", "Subcategory not found", "debit", "Assets", "Missing Subcategory", 0, 0, 0, 0, 1, "BS", ""), /Account subcategory not found/);
 });
+
+test("account create/update writes audit log with before and after images", async () => {
+    const admin = await insertUser({ username: "acct-admin", email: "acct-admin@example.com", role: "administrator" });
+    const created = await accountsController.createAccount(
+        admin.id,
+        "Audit Account",
+        "Audit account",
+        "debit",
+        "Assets",
+        "Current Assets",
+        0,
+        0,
+        0,
+        0,
+        1,
+        "BS",
+        "initial comment",
+        admin.id,
+    );
+
+    const insertAudit = await db.query(
+        "SELECT action, changed_by, b_image, a_image, changed_at FROM audit_logs WHERE entity_type = 'accounts' AND entity_id = $1 AND action = 'insert' ORDER BY id DESC LIMIT 1",
+        [created.id],
+    );
+    assert.equal(insertAudit.rowCount, 1);
+    assert.equal(insertAudit.rows[0].action, "insert");
+    assert.equal(String(insertAudit.rows[0].changed_by), String(admin.id));
+    assert.equal(insertAudit.rows[0].b_image, null);
+    assert.equal(insertAudit.rows[0].a_image.account_name, "Audit Account");
+    assert.equal(insertAudit.rows[0].a_image.comment, "initial comment");
+    assert.ok(insertAudit.rows[0].changed_at);
+
+    const updateResult = await accountsController.updateAccountField({
+        account_id: created.id,
+        field: "comment",
+        value: "updated comment",
+        user_id: admin.id,
+    });
+    assert.equal(updateResult.success, true);
+
+    const updateAudit = await db.query(
+        "SELECT action, changed_by, b_image, a_image, changed_at FROM audit_logs WHERE entity_type = 'accounts' AND entity_id = $1 AND action = 'update' ORDER BY id DESC LIMIT 1",
+        [created.id],
+    );
+    assert.equal(updateAudit.rowCount, 1);
+    assert.equal(updateAudit.rows[0].action, "update");
+    assert.equal(String(updateAudit.rows[0].changed_by), String(admin.id));
+    assert.equal(updateAudit.rows[0].b_image.comment, "initial comment");
+    assert.equal(updateAudit.rows[0].a_image.comment, "updated comment");
+    assert.ok(updateAudit.rows[0].changed_at);
+});

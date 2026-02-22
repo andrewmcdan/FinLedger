@@ -282,11 +282,16 @@ package "Logging" {
     *id : BIGSERIAL <<PK>>
     --
     event_type : TEXT
+    action : TEXT
     user_id : BIGINT <<FK>>
+    changed_by : BIGINT <<FK>>
+    changed_at : TIMESTAMPTZ
     entity_type : TEXT
     entity_id : BIGINT
-    changes : TEXT
-    metadata : TEXT
+    changes : JSONB
+    metadata : JSONB
+    b_image : JSONB
+    a_image : JSONB
     created_at : TIMESTAMPTZ
   }
 }
@@ -308,6 +313,7 @@ users ||--o{ adjustment_lines : created_by
 users ||--o{ statement_runs : created_by
 users ||--o{ app_logs : user_id
 users ||--o{ audit_logs : user_id
+users ||--o{ audit_logs : changed_by
 
 account_categories ||--o{ account_subcategories : account_category_id
 account_categories ||--o{ accounts : account_category_id

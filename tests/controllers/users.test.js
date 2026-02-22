@@ -279,6 +279,37 @@ test("createUser creates user and sends temp password email when needed", async 
     assert.equal(emailCalls.length, 1);
 });
 
+test("createUser appends letter suffix for duplicate generated usernames", async () => {
+    const first = await usersController.createUser("John", "Doe", "john@example.com", "ValidPass1!", "accountant", "123 Main", new Date("1990-01-01"), null);
+    const second = await usersController.createUser("Jane", "Doe", "jane@example.com", "ValidPass1!", "accountant", "124 Main", new Date("1991-01-01"), null);
+    const third = await usersController.createUser("Jill", "Doe", "jill@example.com", "ValidPass1!", "accountant", "125 Main", new Date("1992-01-01"), null);
+
+    assert.equal(second.username, `${first.username}A`);
+    assert.equal(third.username, `${first.username}B`);
+});
+
+test("createUser rolls username suffixes from Z to AA", async () => {
+    const createdUsers = [];
+    for (let i = 0; i < 29; i += 1) {
+        createdUsers.push(await usersController.createUser("Jamie", "Rollover", `jamie-rollover-${i}@example.com`, "ValidPass1!", "accountant", `${i} Main`, new Date("1990-01-01"), null));
+    }
+
+    const baseUsername = createdUsers[0].username;
+    assert.equal(createdUsers[1].username, `${baseUsername}A`);
+    assert.equal(createdUsers[26].username, `${baseUsername}Z`);
+    assert.equal(createdUsers[27].username, `${baseUsername}AA`);
+    assert.equal(createdUsers[28].username, `${baseUsername}AB`);
+});
+
+test("createUser uses the next serial letter suffix after the highest existing suffix", async () => {
+    const first = await usersController.createUser("Jordan", "Serial", "jordan-serial-0@example.com", "ValidPass1!", "accountant", "100 Main", new Date("1990-01-01"), null);
+    await insertUser({ username: `${first.username}A`, email: "jordan-serial-a@example.com" });
+    await insertUser({ username: `${first.username}C`, email: "jordan-serial-c@example.com" });
+
+    const next = await usersController.createUser("Jules", "Serial", "jordan-serial-1@example.com", "ValidPass1!", "accountant", "101 Main", new Date("1991-01-01"), null);
+    assert.equal(next.username, `${first.username}D`);
+});
+
 test("createUser rejects invalid role and missing required fields", async () => {
     await assert.rejects(() => usersController.createUser("Role", "Bad", "badrole@example.com", "ValidPass1!", "invalid", "1 Main", new Date("1990-01-01"), null), /Invalid role/);
 

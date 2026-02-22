@@ -13,15 +13,95 @@ function checkPasswordComplexity(password) {
     if (password.length < 8) {
         return false;
     }
+    const startsWithLetterRegex = /^[A-Za-z]/;
     const uppercaseRegex = /[A-Z]/;
     const lowercaseRegex = /[a-z]/;
     const digitRegex = /[0-9]/;
     const specialCharRegex = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/;
-    if (!uppercaseRegex.test(password) || !lowercaseRegex.test(password) || !digitRegex.test(password) || !specialCharRegex.test(password)) {
+    if (!startsWithLetterRegex.test(password) || !uppercaseRegex.test(password) || !lowercaseRegex.test(password) || !digitRegex.test(password) || !specialCharRegex.test(password)) {
         return false;
     }
     return true;
 }
+
+const buildUsernameBase = (firstName, lastName, date = new Date()) => {
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = String(date.getFullYear()).slice(-2);
+    return `${firstName.charAt(0)}${lastName}${month}${year}`;
+};
+
+const alphaSuffixToNumber = (suffix) => {
+    if (!suffix || !/^[A-Z]+$/.test(suffix)) {
+        return null;
+    }
+    let value = 0;
+    for (const char of suffix) {
+        value = value * 26 + (char.charCodeAt(0) - 64);
+    }
+    return value;
+};
+
+const numberToAlphaSuffix = (value) => {
+    let nextValue = Number(value);
+    if (!Number.isInteger(nextValue) || nextValue <= 0) {
+        throw new Error(`Invalid suffix value: ${value}`);
+    }
+    let suffix = "";
+    while (nextValue > 0) {
+        nextValue -= 1;
+        suffix = String.fromCharCode(65 + (nextValue % 26)) + suffix;
+        nextValue = Math.floor(nextValue / 26);
+    }
+    return suffix;
+};
+
+const generateUniqueUsername = async (client, firstName, lastName) => {
+    const baseUsername = buildUsernameBase(firstName, lastName);
+    const suffixResult = await client.query(
+        `SELECT username
+         FROM users
+         WHERE username = $1
+            OR LEFT(username, LENGTH($1)) = $1`,
+        [baseUsername],
+    );
+
+    let baseTaken = false;
+    let maxSuffixNumber = 0;
+    for (const row of suffixResult.rows) {
+        const username = row.username || "";
+        if (username === baseUsername) {
+            baseTaken = true;
+            continue;
+        }
+        if (!username.startsWith(baseUsername)) {
+            continue;
+        }
+        const suffix = username.slice(baseUsername.length);
+        if (!suffix) {
+            continue;
+        }
+        const suffixNumber = alphaSuffixToNumber(String(suffix).toUpperCase());
+        if (suffixNumber) {
+            maxSuffixNumber = Math.max(maxSuffixNumber, suffixNumber);
+        }
+    }
+
+    if (!baseTaken) {
+        return baseUsername;
+    }
+
+    return `${baseUsername}${numberToAlphaSuffix(maxSuffixNumber + 1)}`;
+};
+
+const isUsernameUniqueViolation = (error) => {
+    if (error?.code !== "23505") {
+        return false;
+    }
+    if (error?.constraint === "users_username_key") {
+        return true;
+    }
+    return typeof error?.detail === "string" && error.detail.includes("(username)=");
+};
 
 const getUserLoggedInStatus = async (user_id, token) => {
     logger.log("trace", "Checking logged-in status", { user_id }, utilities.getCallerInfo(), user_id);
@@ -95,7 +175,10 @@ const getUserByEmail = async (email) => {
 
 const getUserByResetToken = async (resetToken) => {
     logger.log("debug", "Fetching user by reset token", {}, utilities.getCallerInfo());
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()", [resetToken]);
+    const userResult = await db.query(
+        "SELECT id, username, email, first_name, last_name, reset_failed_attempts FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()",
+        [resetToken],
+    );
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by reset token", {}, utilities.getCallerInfo());
         return null;
@@ -108,6 +191,19 @@ const listUsers = async () => {
     const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at, address, user_icon_path, temp_password, password_expires_at FROM users ORDER BY id ASC");
     logger.log("debug", "Users listed", { count: usersResult.rowCount }, utilities.getCallerInfo());
     return usersResult.rows;
+};
+
+const listAdministratorContacts = async (excludeUserId = null) => {
+    logger.log("debug", "Listing administrator contacts", { excludeUserId }, utilities.getCallerInfo());
+    const values = [];
+    let whereClause = "role = 'administrator' AND email IS NOT NULL AND email <> ''";
+    if (excludeUserId !== null && excludeUserId !== undefined) {
+        values.push(excludeUserId);
+        whereClause += " AND id <> $1";
+    }
+    const adminResult = await db.query(`SELECT id, email, first_name FROM users WHERE ${whereClause} ORDER BY id ASC`, values);
+    logger.log("debug", "Administrator contacts listed", { count: adminResult.rowCount }, utilities.getCallerInfo());
+    return adminResult.rows;
 };
 
 const listLoggedInUsers = async () => {
@@ -127,46 +223,50 @@ const listLoggedInUsers = async () => {
     return loggedInUsers;
 };
 
-const approveUser = async (userId) => {
+const approveUser = async (userId, changedByUserId = null) => {
     logger.log("info", `Approving user with ID ${userId}`, { function: "approveUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET status = 'active', updated_at = now() WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'active', updated_at = now() WHERE id = $1", [userId], changedByUserId);
 };
 
-const rejectUser = async (userId) => {
+const rejectUser = async (userId, changedByUserId = null) => {
     logger.log("info", `Rejecting user with ID ${userId}`, { function: "rejectUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET status = 'rejected', updated_at = now() WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'rejected', updated_at = now() WHERE id = $1", [userId], changedByUserId);
 };
 
-const suspendUser = async (userId, suspensionStart, suspensionEnd) => {
+const suspendUser = async (userId, suspensionStart, suspensionEnd, changedByUserId = null) => {
     logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended', updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId]);
+    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended', updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId], changedByUserId);
 };
 
-const reinstateUser = async (userId) => {
+const reinstateUser = async (userId, changedByUserId = null) => {
     logger.log("info", `Reinstating user with ID ${userId}`, { function: "reinstateUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE id = $1", [userId]);
+    await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE id = $1", [userId], changedByUserId);
 };
 
-const changePassword = async (userId, newPassword) => {
+const changePassword = async (userId, newPassword, changedByUserId = userId) => {
     if (decodeURIComponent(newPassword) !== newPassword) {
         newPassword = decodeURIComponent(newPassword);
     }
     if (!checkPasswordComplexity(newPassword)) {
         logger.log("warn", "Password complexity check failed", { userId }, utilities.getCallerInfo(), userId);
-        throw new Error("Password does not meet complexity requirements");
+        const error = new Error("Password does not meet complexity requirements");
+        error.code = "ERR_PASSWORD_COMPLEXITY";
+        throw error;
     }
     await db.transaction(async (client) => {
         const pastPasswordsResult = await client.query("SELECT password_hash FROM password_history WHERE user_id = $1", [userId]);
         for (const row of pastPasswordsResult.rows) {
             const matchResult = await client.query("SELECT 1 FROM users WHERE password_hash = crypt($1, $2) AND id = $3", [newPassword, row.password_hash, userId]);
             if (matchResult.rows.length > 0) {
-                throw new Error("New password cannot be the same as any past passwords");
+                const error = new Error("New password cannot be the same as any past passwords");
+                error.code = "ERR_PASSWORD_HISTORY_REUSE";
+                throw error;
             }
         }
         logger.log("info", `Changing password for user with ID ${userId}`, { function: "changePassword" }, utilities.getCallerInfo(), userId);
         const result = await client.query("UPDATE users SET password_hash = crypt($1, gen_salt('bf')), temp_password = false, password_changed_at = now(), password_expires_at = now() + interval '90 days', updated_at = now() WHERE id = $2 RETURNING password_hash", [newPassword, userId]);
         await savePasswordToHistory(userId, result.rows[0].password_hash, client);
-    });
+    }, changedByUserId);
     logger.log("info", "Password changed successfully", { userId }, utilities.getCallerInfo(), userId);
 };
 
@@ -186,7 +286,7 @@ const changePasswordWithCurrentPassword = async (userId, currentPassword, newPas
         error.code = "INVALID_CURRENT_PASSWORD";
         throw error;
     }
-    await changePassword(userId, newPassword);
+    await changePassword(userId, newPassword, userId);
 };
 
 const updateSecurityQuestionsWithCurrentPassword = async (userId, currentPassword, securityQuestions) => {
@@ -197,10 +297,10 @@ const updateSecurityQuestionsWithCurrentPassword = async (userId, currentPasswor
         error.code = "INVALID_CURRENT_PASSWORD";
         throw error;
     }
-    await updateSecurityQuestions(userId, securityQuestions);
+    await updateSecurityQuestions(userId, securityQuestions, userId);
 };
 
-const updateUserProfile = async (userId, profileUpdates) => {
+const updateUserProfile = async (userId, profileUpdates, changedByUserId = userId) => {
     const fields = {
         first_name: profileUpdates.first_name,
         last_name: profileUpdates.last_name,
@@ -232,7 +332,7 @@ const updateUserProfile = async (userId, profileUpdates) => {
     values.push(userId);
     updates.push(`updated_at = now()`);
     const query = `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, email, first_name, last_name, address, user_icon_path`;
-    const result = await db.query(query, values);
+    const result = await db.query(query, values, changedByUserId);
     if (result.rowCount === 0) {
         logger.log("warn", `No user found with ID ${userId} to update profile`, { function: "updateUserProfile" }, utilities.getCallerInfo(), userId);
         return null;
@@ -253,10 +353,8 @@ const updateUserProfile = async (userId, profileUpdates) => {
  * @param {String} profileImage - Absolute path to temp profile image
  * @returns
  */
-const createUser = async (firstName, lastName, email, password, role, address, dateOfBirth, profileImage) => {
+const createUser = async (firstName, lastName, email, password, role, address, dateOfBirth, profileImage, createdByUserId = null) => {
     logger.log("info", "Creating user", { email, role }, utilities.getCallerInfo());
-    // username should be made of the first name initial, the full last name, and a four digit (two-digit month and two-digit year) of when the account is created
-    const username = `${firstName.charAt(0)}${lastName}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`;
     if (role !== "accountant" && role !== "administrator" && role !== "manager") {
         logger.log("error", `Invalid role specified when creating user: ${role}`, { function: "createUser" }, utilities.getCallerInfo());
         throw new Error("Invalid role specified");
@@ -274,14 +372,32 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         throw new Error("First name, last name, email, and password cannot be empty");
     }
 
-    const createdUser = await db.transaction(async (client) => {
-        const result = await client.query(
-            "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
-            [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
-        );
-        await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
-        return result.rows[0];
-    });
+    let createdUser = null;
+    const maxUsernameInsertAttempts = 5;
+    for (let attempt = 1; attempt <= maxUsernameInsertAttempts; attempt += 1) {
+        try {
+            createdUser = await db.transaction(async (client) => {
+                const username = await generateUniqueUsername(client, firstName, lastName);
+                const result = await client.query(
+                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
+                    [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
+                );
+                await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
+                return result.rows[0];
+            }, createdByUserId);
+            break;
+        } catch (error) {
+            if (attempt === maxUsernameInsertAttempts || !isUsernameUniqueViolation(error)) {
+                throw error;
+            }
+            logger.log("warn", "Username collision detected during user creation; retrying", { email, attempt }, utilities.getCallerInfo());
+        }
+    }
+
+    if (!createdUser) {
+        throw new Error("Failed to generate a unique username");
+    }
+
     logger.log("info", "User created", { userId: createdUser.id, username: createdUser.username, role }, utilities.getCallerInfo(), createdUser.id);
     const userIconPath = createdUser.user_icon_path;
     if (profileImage && profileImage != null && profileImage !== "" && profileImage !== "null" && userIconPath) {
@@ -292,7 +408,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
     }
     if (tempPasswordFlag) {
         const emailSubject = "Your FinLedger Account Has Been Created";
-        const emailBody = `Dear ${firstName} ${lastName},\n\nYour FinLedger account has been created successfully.\n\nUsername: ${username}\nTemporary Password: ${password}\n\nPlease log in and change your password at your earliest convenience.\n\nBest regards,\nFinLedger Team`;
+        const emailBody = `Dear ${firstName} ${lastName},\n\nYour FinLedger account has been created successfully.\n\nUsername: ${createdUser.username}\nTemporary Password: ${password}\n\nPlease log in and change your password at your earliest convenience.\n\nBest regards,\nFinLedger Team`;
         let result = await sendEmail(email, emailSubject, emailBody);
         logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
     }
@@ -304,16 +420,18 @@ const savePasswordToHistory = async (userId, passwordHash, client = null) => {
     await executor.query("INSERT INTO password_history (user_id, password_hash, changed_at) VALUES ($1, $2, now())", [userId, passwordHash]);
 };
 
-const updateSecurityQuestions = async (userId, questionsAndAnswers) => {
+const updateSecurityQuestions = async (userId, questionsAndAnswers, changedByUserId = userId) => {
     // questionsAndAnswers should be an array of objects with 'question' and 'answer' properties
     // The table has rows like this:   security_question_1 TEXT, security_answer_hash_1 TEXT, security_question_2 TEXT, security_answer_hash_2 TEXT, security_question_3 TEXT, security_answer_hash_3 TEXT,
     if (questionsAndAnswers.length !== 3) {
         logger.log("warn", "Invalid security question payload length", { userId, length: questionsAndAnswers.length }, utilities.getCallerInfo(), userId);
-        throw new Error("Exactly three security questions and answers must be provided");
+        const error = new Error("Exactly three security questions and answers must be provided");
+        error.code = "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED";
+        throw error;
     }
     const query = "UPDATE users SET security_question_1 = $1, security_answer_hash_1 = crypt($2, gen_salt('bf')), security_question_2 = $3, security_answer_hash_2 = crypt($4, gen_salt('bf')), security_question_3 = $5, security_answer_hash_3 = crypt($6, gen_salt('bf')), updated_at = now() WHERE id = $7";
     const values = [questionsAndAnswers[0].question, questionsAndAnswers[0].answer, questionsAndAnswers[1].question, questionsAndAnswers[1].answer, questionsAndAnswers[2].question, questionsAndAnswers[2].answer, userId];
-    await db.query(query, values);
+    await db.query(query, values, changedByUserId);
     logger.log("info", `Updated security questions for user with ID ${userId}`, { function: "updateSecurityQuestions" }, utilities.getCallerInfo(), userId);
 };
 
@@ -335,7 +453,9 @@ const verifySecurityAnswers = async (userId, answers) => {
     // answers should be an array of strings with the answers to the security questions in order
     if (answers.length !== 3) {
         logger.log("warn", "Invalid security answer payload length", { userId, length: answers.length }, utilities.getCallerInfo(), userId);
-        throw new Error("Exactly three answers must be provided");
+        const error = new Error("Exactly three answers must be provided");
+        error.code = "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED";
+        throw error;
     }
     const query = "SELECT 1 FROM users WHERE id = $1 AND security_answer_hash_1 = crypt($2, security_answer_hash_1) AND security_answer_hash_2 = crypt($3, security_answer_hash_2) AND security_answer_hash_3 = crypt($4, security_answer_hash_3)";
     const values = [userId, answers[0], answers[1], answers[2]];
@@ -399,15 +519,17 @@ const suspendUsersWithExpiredPasswords = async () => {
     logger.log("debug", "Expired password suspension complete", { suspendedCount: result.rowCount }, utilities.getCallerInfo());
 };
 
-const deleteUserById = async (userId) => {
+const deleteUserById = async (userId, changedByUserId = null) => {
     logger.log("info", `Deleting user with ID ${userId}`, { function: "deleteUserById" }, utilities.getCallerInfo());
-    await db.query("DELETE FROM users WHERE id = $1", [userId]);
+    await db.query("DELETE FROM users WHERE id = $1", [userId], changedByUserId);
 };
 
-const setUserPassword = async (userId, password, temp = false) => {
+const setUserPassword = async (userId, password, temp = false, changedByUserId = userId) => {
     if (!checkPasswordComplexity(password)) {
         logger.log("warn", "Password complexity check failed for setUserPassword", { userId, temp }, utilities.getCallerInfo(), userId);
-        throw new Error("Password does not meet complexity requirements");
+        const error = new Error("Password does not meet complexity requirements");
+        error.code = "ERR_PASSWORD_COMPLEXITY";
+        throw error;
     }
     logger.log("info", "Setting user password", { userId, temp }, utilities.getCallerInfo(), userId);
     return db.transaction(async (client) => {
@@ -416,7 +538,7 @@ const setUserPassword = async (userId, password, temp = false) => {
         const result2 = await client.query("UPDATE users SET password_hash = $1, temp_password = $2, password_changed_at = now(), password_expires_at = now() + ($3 * interval '15 minutes'), updated_at = now() WHERE id = $4", [passwordHash, temp, temp ? 1 : 90 * 24 * 60, userId]);
         await savePasswordToHistory(userId, passwordHash, client);
         return result2.rowCount > 0;
-    });
+    }, changedByUserId);
 };
 
 const getUserByUsername = async (username) => {
@@ -435,6 +557,7 @@ module.exports = {
     isManager,
     getUserById,
     listUsers,
+    listAdministratorContacts,
     listLoggedInUsers,
     approveUser,
     createUser,

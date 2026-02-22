@@ -13,7 +13,8 @@
     "manual:pdf": "node scripts/build-user-manual-pdf.js",
     "pretest": "npm run db-init:test",
     "prestart": "npm run db-init",
-    "test": "node --env-file=.env.test --test --test-concurrency=1"
+    "test": "node --env-file=.env.test --test --test-concurrency=1",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "ejs": "^4.0.1",
@@ -25,6 +26,7 @@
     "pg": "^8.17.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "nodemon": "^3.0.2"
   }
 }

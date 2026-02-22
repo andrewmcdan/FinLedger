@@ -5,14 +5,14 @@ const authRoutes = require("./routes/auth");
 const imageRoutes = require("./routes/images");
 const userDocRoutes = require("./routes/user_docs");
 const authMiddleware = require("./middleware/auth");
-const db = require("./db/db");
 const logger = require("./utils/logger");
 const { getCallerInfo, cleanupUserData, cleanupLogs } = require("./utils/utilities");
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
-const accountsController = require("./controllers/accounts");
-const { SECURITY_QUESTIONS } = require("./data/security_questions");
+const auditLogsRoutes = require("./routes/audit_logs");
+const messagesRoutes = require("./routes/messages");
+const { dashboard, accountsList, forgotPasswordSubmit, profile } = require("./routes/rendered_routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,93 +22,19 @@ app.engine("html", ejs.renderFile);
 app.set("view engine", "html");
 app.set("views", path.join(__dirname, "..", "web", "pages"));
 app.use("/api/auth", authRoutes);
+app.use("/api/messages", messagesRoutes);
 
 app.use(authMiddleware);
 // Any routes added after this point will require authentication
-app.get("/pages/dashboard.html", async (req, res, next) => {
-    try {
-        logger.log("debug", "Rendering dashboard", { userId: req.user?.id }, getCallerInfo(), req.user?.id);
-        const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
-        const role = result.rows[0]?.role || "none";
-        const loggedInUsers = await usersController.listLoggedInUsers();
-        const users = await usersController.listUsers();
-        const currentUserId = Number(req.user.id);
-        res.render("dashboard", { role, loggedInUsers, users, currentUserId });
-    } catch (error) {
-        logger.log("error", `Dashboard render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
-        next(error);
-    }
-});
-app.get("/pages/accounts_list.html", async (req, res, next) => {
-    const user = await usersController.getUserById(req.user.id);
-    const role = user ? user.role : "none";
-    const allUsers = await usersController.listUsers();
-    try {
-        logger.log("debug", "Rendering accounts list", { userId: req.user?.id, role }, getCallerInfo(), req.user?.id);
-        const result = await accountsController.listAccounts(req.user.id, req.user.token);
-        const accounts = result.rows;
-        const allCategories = await accountsController.listAccountCategories();
-        res.render("accounts_list", { accounts, role, allUsers, allCategories });
-    } catch (error) {
-        logger.log("error", `Accounts list render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
-        next(error);
-    }
-});
-app.get("/pages/public/forgot-password_submit.html", async (req, res, next) => {
-    const emptyQuestions = {
-        security_question_1: "",
-        security_question_2: "",
-        security_question_3: "",
-    };
-    const questionLabelMap = Object.values(SECURITY_QUESTIONS)
-        .flat()
-        .reduce((map, item) => {
-            map[item.value] = item.label;
-            return map;
-        }, {});
-    try {
-        const resetToken = req.query.reset_token;
-        if (!resetToken) {
-            logger.log("debug", "Rendering forgot-password submit with empty token", {}, getCallerInfo());
-            return res.render("public/forgot-password_submit", { security_questions: emptyQuestions, reset_token: "" });
-        }
-        const userData = await usersController.getUserByResetToken(resetToken);
-        if (!userData) {
-            logger.log("warn", "Forgot-password submit with invalid reset token", {}, getCallerInfo());
-            return res.render("public/forgot-password_submit", { security_questions: emptyQuestions, reset_token: "" });
-        }
-        const securityQuestions = await usersController.getSecurityQuestionsForUser(userData.id);
-        const resolvedQuestions = securityQuestions
-            ? {
-                security_question_1: questionLabelMap[securityQuestions.security_question_1] || securityQuestions.security_question_1 || "",
-                security_question_2: questionLabelMap[securityQuestions.security_question_2] || securityQuestions.security_question_2 || "",
-                security_question_3: questionLabelMap[securityQuestions.security_question_3] || securityQuestions.security_question_3 || "",
-            }
-            : emptyQuestions;
-        return res.render("public/forgot-password_submit", {
-            security_questions: resolvedQuestions,
-            reset_token: resetToken,
-        });
-    } catch (error) {
-        logger.log("error", `Forgot-password submit render failed: ${error.message}`, {}, getCallerInfo());
-        return next(error);
-    }
-});
-app.get("/pages/profile.html", async (req, res, next) => {
-    try {
-        logger.log("debug", "Rendering profile page", { userId: req.user?.id }, getCallerInfo(), req.user?.id);
-        const result = await db.query("SELECT id, role, first_name, last_name, email, address, password_expires_at, suspension_start_at, suspension_end_at, security_question_1, security_question_2, security_question_3, temp_password FROM users WHERE id = $1", [req.user.id]);
-        const user = result.rows[0] || {};
-        res.render("profile", { user: user });
-    } catch (error) {
-        logger.log("error", `Profile render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
-        next(error);
-    }
-});
+app.get("/pages/dashboard.html", dashboard);
+app.get("/pages/accounts_list.html", accountsList);
+app.get("/pages/public/forgot-password_submit.html", forgotPasswordSubmit);
+app.get("/pages/profile.html", profile);
 app.use(express.static("web"));
-app.use("/documents", userDocRoutes);
+app.use("/api/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/accounts", accountsRoutes);
+app.use("/api/audit-logs", auditLogsRoutes);
 app.use("/images", imageRoutes);
 
 // This if statement ensures the server only starts if this file is run directly.
