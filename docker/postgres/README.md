@@ -26,6 +26,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - created_at: timestamp without time zone
 - updated_at: timestamp without time zone
 - account_number_prefix: character varying
+- order_index: integer
 
 ### public.account_metadata_edits
 - id: bigint

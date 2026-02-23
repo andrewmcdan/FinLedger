@@ -10,7 +10,7 @@ const accountsController = require("../../src/controllers/accounts");
 const ACCOUNT_COUNT = 100;
 
 async function resetDb() {
-    await db.query("TRUNCATE TABLE password_history, password_expiry_email_tracking, logged_in_users, documents, audit_logs, app_logs, accounts, users RESTART IDENTITY CASCADE");
+    await db.query("TRUNCATE TABLE password_history, password_expiry_email_tracking, logged_in_users, documents, audit_logs, app_logs, account_subcategories, account_categories, accounts, users RESTART IDENTITY CASCADE");
 }
 
 async function ensureCategoryAndSubcategory({ categoryName, subcategoryName, prefix, orderIndex }) {
@@ -50,7 +50,7 @@ test.beforeEach(async () => {
         categoryName: "Assets",
         subcategoryName: "Current Assets",
         prefix: "10",
-        orderIndex: 0,
+        orderIndex: 10,
     });
 });
 
@@ -64,7 +64,7 @@ test("createAccount allows multiple accounts in same category/subcategory", asyn
     for (let i = 0; i < ACCOUNT_COUNT; i += 1) {
         const created = await accountsController.createAccount(user.id, `Account ${i + 1}`, `Test account ${i + 1}`, "debit", "Assets", "Current Assets", 100 + i, 100 + i, 0, 0, accountOrder, "Balance Sheet", `batch-${i + 1}`);
 
-        const accountNumber = String(created.account_number).padStart(8, "0");
+        const accountNumber = String(created.account_number).padStart(10, "0");
         console.log(`[accounts.test] account number ${i + 1}: ${accountNumber}`);
         accountNumbers.add(accountNumber);
     }
@@ -75,13 +75,13 @@ test("createAccount allows multiple accounts in same category/subcategory", asyn
     const suffixes = sortedNumbers.map((number) => number.slice(6));
 
     for (const number of sortedNumbers) {
-        assert.equal(number.length, 8);
+        assert.equal(number.length, 10);
         assert.ok(number.startsWith(prefix));
     }
 
     assert.equal(new Set(suffixes).size, ACCOUNT_COUNT);
-    assert.equal(suffixes[0], "00");
-    assert.equal(suffixes[ACCOUNT_COUNT - 1], String(ACCOUNT_COUNT - 1).padStart(2, "0"));
+    assert.equal(suffixes[0], "0000");
+    assert.equal(suffixes[ACCOUNT_COUNT - 1], String(ACCOUNT_COUNT - 1).padStart(4, "0"));
 });
 
 test("createAccount rejects invalid statement types", async () => {
@@ -95,6 +95,50 @@ test("createAccount rejects unknown categories or subcategories", async () => {
     await assert.rejects(() => accountsController.createAccount(user.id, "Missing Category", "Category not found", "debit", "Missing Category", "Current Assets", 0, 0, 0, 0, 1, "BS", ""), /Account category not found/);
 
     await assert.rejects(() => accountsController.createAccount(user.id, "Missing Subcategory", "Subcategory not found", "debit", "Assets", "Missing Subcategory", 0, 0, 0, 0, 1, "BS", ""), /Account subcategory not found/);
+});
+
+test("addCategory places duplicate order index between neighbors", async () => {
+    await accountsController.addCategory(
+        "Liabilities",
+        "20",
+        "Liability category",
+        "Current Liabilities",
+        "Liabilities due within one year",
+        20,
+    );
+
+    const inserted = await accountsController.addCategory(
+        "Equity",
+        "30",
+        "Equity category",
+        "Common Stock",
+        "Owner equity",
+        10,
+    );
+
+    assert.equal(Number(inserted.category.order_index), 15);
+});
+
+test("addSubcategory places duplicate order index between neighbors", async () => {
+    const categoryResult = await db.query("SELECT id FROM account_categories WHERE name = $1", ["Assets"]);
+    const categoryId = categoryResult.rows[0]?.id;
+    assert.ok(categoryId);
+
+    await accountsController.addSubcategory(
+        "Fixed Assets",
+        categoryId,
+        20,
+        "Long-term assets",
+    );
+
+    const inserted = await accountsController.addSubcategory(
+        "Liquid Assets",
+        categoryId,
+        10,
+        "Highly liquid assets",
+    );
+
+    assert.equal(Number(inserted.order_index), 15);
 });
 
 test("account create/update writes audit log with before and after images", async () => {
