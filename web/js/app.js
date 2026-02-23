@@ -34,14 +34,14 @@ function loadModalApi() {
     return modalApiPromise;
 }
 
-async function showErrorModal(message) {
+async function showErrorModal(message, autoHide) {
     const { showErrorModal: showErrorModalImpl } = await loadModalApi();
-    return showErrorModalImpl(message);
+    return showErrorModalImpl(message, autoHide);
 }
 
-async function showMessageModal(message) {
+async function showMessageModal(message, autoHide) {
     const { showMessageModal: showMessageModalImpl } = await loadModalApi();
-    return showMessageModalImpl(message);
+    return showMessageModalImpl(message, autoHide);
 }
 
 async function delay(ms) {

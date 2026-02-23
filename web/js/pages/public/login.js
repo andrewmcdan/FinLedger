@@ -107,8 +107,7 @@ export default function initLogin({ showErrorModal, showMessageModal } = {}) {
             .then((response) => response.json())
             .then(async (data) => {
                 if (data.token) {
-                    await showGlobalMessage("MSG_LOGIN_SUCCESS");
-                    // You might want to store the token and user info here
+                    await showGlobalMessage("MSG_LOGIN_SUCCESS", true);
                     localStorage.setItem("user_id", data.user_id);
                     localStorage.setItem("auth_token", data.token);
                     localStorage.setItem("username", data.username);

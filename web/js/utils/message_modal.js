@@ -6,6 +6,27 @@ let dismissBound = false;
 let resizeBound = false;
 let getMessageFn = null;
 const OFFSET_CSS_VAR = "--global-message-offset";
+const AUTO_HIDE_MS = 3000;
+let autoHideTimerId = null;
+
+function clearAutoHideTimer() {
+    if (!autoHideTimerId) {
+        return;
+    }
+    clearTimeout(autoHideTimerId);
+    autoHideTimerId = null;
+}
+
+function isInputLikeElement(element) {
+    return Boolean(element && element instanceof HTMLElement && element.matches("input, textarea, select"));
+}
+
+function shouldAutoHideMessage(autoHide) {
+    if (typeof autoHide === "boolean") {
+        return autoHide;
+    }
+    return !isInputLikeElement(document.activeElement);
+}
 
 async function loadMessageHelper() {
     if (getMessageFn) {
@@ -43,6 +64,7 @@ function clearMessageLine() {
     if (!messageLine) {
         return;
     }
+    clearAutoHideTimer();
     if (messageText) {
         messageText.textContent = "";
     } else {
@@ -56,10 +78,11 @@ function clearMessageLine() {
     setPageOffset(0);
 }
 
-function showMessageLine(message, type = "error") {
+function showMessageLine(message, type = "error", autoHide) {
     if (!messageLine) {
         return;
     }
+    clearAutoHideTimer();
     if (!message || `${message}`.trim() === "") {
         clearMessageLine();
         return;
@@ -81,6 +104,12 @@ function showMessageLine(message, type = "error") {
         messageLine.setAttribute("aria-live", "assertive");
     }
     messageLine.classList.add("message-line--active");
+    if (shouldAutoHideMessage(autoHide)) {
+        autoHideTimerId = setTimeout(() => {
+            autoHideTimerId = null;
+            clearMessageLine();
+        }, AUTO_HIDE_MS);
+    }
     requestAnimationFrame(syncPageOffset);
 }
 
@@ -117,20 +146,20 @@ function bindResizeSync() {
     resizeBound = true;
 }
 
-async function showErrorModal(message) {
+async function showErrorModal(message, autoHide) {
     bindAutoClearOnInput();
     bindDismissButton();
     bindResizeSync();
     const resolved = await resolveMessage(message);
-    showMessageLine(resolved, "error");
+    showMessageLine(resolved, "error", autoHide);
 }
 
-async function showMessageModal(message) {
+async function showMessageModal(message, autoHide) {
     bindAutoClearOnInput();
     bindDismissButton();
     bindResizeSync();
     const resolved = await resolveMessage(message);
-    showMessageLine(resolved, "success");
+    showMessageLine(resolved, "success", autoHide);
 }
 
 export { showErrorModal, showMessageModal, showMessageLine, clearMessageLine };
