@@ -1,3 +1,4 @@
+-- Master account categories used for account grouping and numbering prefixes.
 CREATE TABLE IF NOT EXISTS account_categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
@@ -8,6 +9,7 @@ CREATE TABLE IF NOT EXISTS account_categories (
     order_index INT DEFAULT 10
 );
 
+-- Child subcategories scoped to a parent category.
 CREATE TABLE IF NOT EXISTS account_subcategories (
     id SERIAL PRIMARY KEY,
     account_category_id INT REFERENCES account_categories(id) ON DELETE CASCADE,
@@ -18,9 +20,11 @@ CREATE TABLE IF NOT EXISTS account_subcategories (
     order_index INT DEFAULT 0
 );
 
+-- Backward-compatible guard for databases created before order_index existed.
 ALTER TABLE account_categories
     ADD COLUMN IF NOT EXISTS order_index INT DEFAULT 10;
 
+-- Seed default category set with explicit ordering and two-digit numbering prefixes.
 INSERT INTO account_categories (name, description, account_number_prefix, order_index) VALUES
 ('Assets', 'Resources owned by the company', '10', 10),
 ('Liabilities', 'Obligations owed to others', '20', 20),
@@ -29,6 +33,8 @@ INSERT INTO account_categories (name, description, account_number_prefix, order_
 ('Expenses', 'Costs incurred in the process of earning revenue', '50', 50)
 ON CONFLICT (name) DO NOTHING;
 
+-- Seed common subcategories.
+-- Parent category IDs are looked up by name to keep this script deterministic across DBs.
 INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES
 ((SELECT id FROM account_categories WHERE name = 'Assets'), 'Current Assets', 'Assets expected to be converted to cash within one year', 10),
 ((SELECT id FROM account_categories WHERE name = 'Assets'), 'Fixed Assets', 'Long-term tangible assets used in operations', 20),

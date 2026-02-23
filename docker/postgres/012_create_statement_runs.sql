@@ -1,3 +1,5 @@
+-- Stores each generated financial statement run for reproducibility/audit.
+-- data_line_type distinguishes "as of" style statements from period-ending reports.
 CREATE TABLE IF NOT EXISTS statement_runs (
     id SERIAL PRIMARY KEY,
     statement_type TEXT NOT NULL CHECK (statement_type IN ('IS', 'BS', 'RE')),

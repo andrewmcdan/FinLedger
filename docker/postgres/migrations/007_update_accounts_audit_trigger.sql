@@ -1,3 +1,7 @@
+-- Replaces the placeholder trigger with full audit + metadata change capture.
+-- This trigger runs BEFORE UPDATE on accounts and writes:
+--   1) balance movement rows into account_audits
+--   2) per-field metadata edits into account_metadata_edits
 CREATE OR REPLACE FUNCTION trg_accounts_write_audit_and_metadata()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -6,11 +10,13 @@ DECLARE
   v_changed_by BIGINT;
 BEGIN
 
+  -- Prefer app.user_id from transaction context; fallback to row owner.
   v_changed_by := NULLIF(current_setting('app.user_id', true), '')::bigint;
   IF v_changed_by IS NULL THEN
     v_changed_by := NEW.user_id;
   END IF;
 
+  -- Balance-related values are audited together as one movement record.
   IF (NEW.total_debits   IS DISTINCT FROM OLD.total_debits)
      OR (NEW.total_credits  IS DISTINCT FROM OLD.total_credits)
      OR (NEW.balance IS DISTINCT FROM OLD.balance)
@@ -30,6 +36,7 @@ BEGIN
     );
   END IF;
 
+  -- Metadata edits are captured one field at a time for precise history.
   IF NEW.account_name IS DISTINCT FROM OLD.account_name THEN
     INSERT INTO account_metadata_edits(account_id, edit_timestamp, field_name, previous_value, new_value, changed_by)
     VALUES (OLD.id, now(), 'account_name', OLD.account_name, NEW.account_name, v_changed_by);

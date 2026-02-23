@@ -1,4 +1,6 @@
--- Users table for authentication and admin workflows.
+-- Core identity and profile table used by authentication and user management.
+-- This table stores login state, lifecycle state (pending/active/suspended/etc.),
+-- password metadata, and password-reset/security-question data.
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
   username TEXT UNIQUE,
@@ -30,7 +32,8 @@ CREATE TABLE IF NOT EXISTS users (
   reset_token_expires_at TIMESTAMPTZ
 );
 
--- Table to track password history for users to enforce password reuse policies.
+-- Historical password hashes for password-reuse prevention checks.
+-- Rows are cascade-deleted when a user is removed.
 CREATE TABLE IF NOT EXISTS password_history (
   id BIGSERIAL PRIMARY KEY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

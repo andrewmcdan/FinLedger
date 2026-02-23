@@ -1,3 +1,5 @@
+-- Expand audit_logs with richer audit-trail metadata fields.
+-- These columns support structured before/after images and actor attribution.
 ALTER TABLE audit_logs
   ADD COLUMN IF NOT EXISTS action TEXT,
   ADD COLUMN IF NOT EXISTS changed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
@@ -5,6 +7,8 @@ ALTER TABLE audit_logs
   ADD COLUMN IF NOT EXISTS b_image JSONB,
   ADD COLUMN IF NOT EXISTS a_image JSONB;
 
+-- Backward-compatibility block:
+-- If changes is still text/varchar on an existing DB, convert it to JSONB.
 DO $$
 BEGIN
   IF EXISTS (
@@ -22,6 +26,8 @@ BEGIN
 END;
 $$;
 
+-- Backward-compatibility block:
+-- If metadata is still text/varchar on an existing DB, convert it to JSONB.
 DO $$
 BEGIN
   IF EXISTS (
@@ -39,6 +45,7 @@ BEGIN
 END;
 $$;
 
+-- Backfill new columns for historical rows when values are missing.
 UPDATE audit_logs
 SET
   action = COALESCE(action, event_type),
@@ -48,11 +55,13 @@ WHERE action IS NULL
    OR changed_by IS NULL
    OR changed_at IS NULL;
 
+-- Indexes for actor/action/timeline lookups.
 CREATE INDEX IF NOT EXISTS idx_audit_logs_changed_by ON audit_logs(changed_by);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_changed_at ON audit_logs(changed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_changed_at ON audit_logs(entity_type, entity_id, changed_at DESC);
 
+-- Remove sensitive keys from stored row snapshots before writing audit records.
 CREATE OR REPLACE FUNCTION audit_sanitize_row(row_data JSONB)
 RETURNS JSONB
 LANGUAGE sql
@@ -71,6 +80,8 @@ AS $$
     END;
 $$;
 
+-- Generic event-log trigger function reused across many tables.
+-- Captures operation type, actor, entity id, and sanitized before/after images.
 CREATE OR REPLACE FUNCTION trg_write_event_log()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -84,6 +95,7 @@ DECLARE
   v_entity_id BIGINT;
   v_action TEXT;
 BEGIN
+  -- Convert OLD/NEW records into JSONB based on operation type.
   IF TG_OP = 'INSERT' THEN
     v_old_json := NULL;
     v_new_json := to_jsonb(NEW);
@@ -97,11 +109,17 @@ BEGIN
     RETURN NULL;
   END IF;
 
+  -- Sanitize snapshots and normalize action label (insert/update/delete).
   v_b_image := audit_sanitize_row(v_old_json);
   v_a_image := audit_sanitize_row(v_new_json);
   v_action := lower(TG_OP);
+
+  -- Primary actor resolution path: transaction-scoped app.user_id.
   v_changed_by := NULLIF(current_setting('app.user_id', true), '')::BIGINT;
 
+  -- Fallback actor resolution path:
+  -- inspect common user-id style fields from NEW first, then OLD.
+  -- Regex guards avoid cast failures when values are non-numeric.
   IF v_changed_by IS NULL THEN
     v_changed_by := COALESCE(
       CASE WHEN (COALESCE(v_new_json, '{}'::jsonb) ->> 'updated_by') ~ '^[0-9]+$' THEN (COALESCE(v_new_json, '{}'::jsonb) ->> 'updated_by')::BIGINT END,
@@ -115,11 +133,13 @@ BEGIN
     );
   END IF;
 
+  -- Resolve entity_id from NEW.id for insert/update, else OLD.id for delete.
   v_entity_id := COALESCE(
     CASE WHEN (COALESCE(v_new_json, '{}'::jsonb) ->> 'id') ~ '^[0-9]+$' THEN (COALESCE(v_new_json, '{}'::jsonb) ->> 'id')::BIGINT END,
     CASE WHEN (COALESCE(v_old_json, '{}'::jsonb) ->> 'id') ~ '^[0-9]+$' THEN (COALESCE(v_old_json, '{}'::jsonb) ->> 'id')::BIGINT END
   );
 
+  -- Write one structured audit row for the DML event.
   INSERT INTO audit_logs (
     event_type,
     action,
@@ -150,6 +170,7 @@ BEGIN
     now()
   );
 
+  -- Standard trigger return contract.
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
   END IF;
@@ -157,6 +178,7 @@ BEGIN
 END;
 $$;
 
+-- Attach the shared event-log trigger to each tracked table.
 DROP TRIGGER IF EXISTS trg_event_log_users ON users;
 CREATE TRIGGER trg_event_log_users
 AFTER INSERT OR UPDATE OR DELETE ON users
