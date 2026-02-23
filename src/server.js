@@ -12,7 +12,7 @@ const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
 const auditLogsRoutes = require("./routes/audit_logs");
 const messagesRoutes = require("./routes/messages");
-const { dashboard, accountsList, forgotPasswordSubmit, profile } = require("./routes/rendered_routes");
+const { dashboard, accountsList, forgotPasswordSubmit, profile, transactions } = require("./routes/rendered_routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +28,7 @@ app.use(authMiddleware);
 // Any routes added after this point will require authentication
 app.get("/pages/dashboard.html", dashboard);
 app.get("/pages/accounts_list.html", accountsList);
+app.get("/pages/transactions.html", transactions);
 app.get("/pages/public/forgot-password_submit.html", forgotPasswordSubmit);
 app.get("/pages/profile.html", profile);
 app.use(express.static("web"));

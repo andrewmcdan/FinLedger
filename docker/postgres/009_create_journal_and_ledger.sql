@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     journal_type TEXT NOT NULL CHECK (journal_type IN ('general', 'adjusting')),
     entry_date TIMESTAMP NOT NULL DEFAULT NOW(),
     description TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('draft', 'approved', 'posted', 'voided')),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
     total_debits NUMERIC(18, 2) NOT NULL,
     total_credits NUMERIC(18, 2) NOT NULL,
     created_by INTEGER NOT NULL REFERENCES users(id),

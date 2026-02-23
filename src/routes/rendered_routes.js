@@ -89,9 +89,22 @@ async function profile(req, res, next) {
     }
 }
 
+async function transactions(req, res, next) {
+    try {
+        logger.log("debug", "Rendering transactions page", { userId: req.user?.id }, getCallerInfo(), req.user?.id);
+        const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
+        const role = result.rows[0]?.role || "none";
+        res.render("transactions", { role });
+    } catch (error) {
+        logger.log("error", `Transactions render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
+        next(error);
+    }
+}
+
 module.exports = {
     dashboard,
     accountsList,
     forgotPasswordSubmit,
     profile,
+    transactions,
 };
