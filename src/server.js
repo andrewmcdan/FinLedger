@@ -51,6 +51,7 @@ if (require.main === module) {
             try {
                 await usersController.logoutInactiveUsers();
                 await usersController.unsuspendExpiredSuspensions();
+                await usersController.resetStaleFailedLoginAttempts();
             } catch (error) {
                 logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
             }

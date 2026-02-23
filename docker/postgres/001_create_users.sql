@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_changed_at TIMESTAMPTZ,
   password_expires_at TIMESTAMPTZ,
   failed_login_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_login_attempts >= 0),
+  last_login_attempt_at TIMESTAMPTZ,
   last_login_at TIMESTAMPTZ,
   suspension_start_at TIMESTAMPTZ,
   suspension_end_at TIMESTAMPTZ,

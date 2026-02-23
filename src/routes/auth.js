@@ -37,7 +37,7 @@ router.post("/login", async (req, res) => {
     log("info", `Login attempt for username: ${req.body.username}`, { function: "login" }, utilities.getCallerInfo());
     // Implement login logic here
     const { username, password } = req.body;
-    const userRowsNonAuth = await db.query("SELECT id, status, failed_login_attempts, suspension_end_at FROM users WHERE username = $1 AND status = 'active'", [username]);
+    const userRowsNonAuth = await db.query("SELECT id, status, failed_login_attempts, suspension_start_at, suspension_end_at FROM users WHERE username = $1", [username]);
     if (userRowsNonAuth.rowCount === 0) {
         log("warn", `Login failed - user not found or inactive for username: ${username}`, { function: "login" }, utilities.getCallerInfo());
         return sendApiError(res, 401, "ERR_INVALID_USERNAME_OR_PASSWORD");
@@ -45,28 +45,61 @@ router.post("/login", async (req, res) => {
     
     // First we get the user with no authentication to check for failed login attempts.
     const userNonAuth = userRowsNonAuth.rows[0];
+    const now = new Date();
+    await db.query("UPDATE users SET last_login_attempt_at = now(), updated_at = now() WHERE id = $1", [userNonAuth.id]);
+
+    if (userNonAuth.status === "suspended") {
+        if (!userNonAuth.suspension_end_at) {
+            log("warn", `Blocked login attempt for suspended user. User id: ${userNonAuth.id}`, { function: "login" }, utilities.getCallerInfo(), userNonAuth.id);
+            return sendApiError(res, 403, "ERR_ACCOUNT_SUSPENDED_DUE_TO_ATTEMPTS");
+        }
+        if (now < userNonAuth.suspension_end_at) {
+            log("warn", `Blocked login attempt for suspended user. User id: ${userNonAuth.id}`, { function: "login" }, utilities.getCallerInfo(), userNonAuth.id);
+            return sendApiError(res, 403, "ERR_ACCOUNT_SUSPENDED_UNTIL", { suspension_end_at: userNonAuth.suspension_end_at });
+        }
+        await db.query("UPDATE users SET status = 'active', failed_login_attempts = 0, suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE id = $1", [userNonAuth.id]);
+        userNonAuth.status = "active";
+        userNonAuth.failed_login_attempts = 0;
+        userNonAuth.suspension_start_at = null;
+        userNonAuth.suspension_end_at = null;
+    }
+
+    if (userNonAuth.status !== "active") {
+        log("warn", `Login failed - user is not active for username: ${username}`, { function: "login", status: userNonAuth.status }, utilities.getCallerInfo(), userNonAuth.id);
+        return sendApiError(res, 401, "ERR_INVALID_USERNAME_OR_PASSWORD");
+    }
+
     // If the user has 3 or more failed login attempts, block login.
-    if(userNonAuth.failed_login_attempts >= 3) {
+    if (userNonAuth.failed_login_attempts >= 3) {
+        const suspensionEndAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000); // 100 years from now
+        await db.query(
+            "UPDATE users SET failed_login_attempts = 0, status = 'suspended', suspension_start_at = now(), suspension_end_at = $1, updated_at = now() WHERE id = $2",
+            [suspensionEndAt, userNonAuth.id],
+        );
         log("warn", `Blocked login attempt for suspended user who has too many attempts with incorrect passwords. User id: ${userNonAuth.id}`, { function: "login" }, utilities.getCallerInfo(), userNonAuth.id);
         return sendApiError(res, 403, "ERR_ACCOUNT_SUSPENDED_DUE_TO_ATTEMPTS");
     }
 
     // Now we check the password
-    const userRows = await db.query("SELECT id, profile_image_url, suspension_end_at, status, temp_password, first_name, last_name FROM users WHERE password_hash = crypt($1, password_hash) AND username = $2", [password, username]);
+    const userRows = await db.query("SELECT id, profile_image_url, suspension_end_at, status, temp_password, first_name, last_name FROM users WHERE password_hash = crypt($1, password_hash) AND username = $2 AND status = 'active'", [password, username]);
     // If the password was correct, we'll have one row in userRows
     const user = userRows.rows[0];
 
     // if userNonAuth has a row but userRows does not, it means password is incorrect
-    if(userNonAuth && userRows.rowCount === 0) {
+    if (userRows.rowCount === 0) {
         // increment failed login attempts
-        let failedAttempts = userNonAuth.failed_login_attempts + 1;
-        let suspensionEndAt = null;
-        if(failedAttempts >= 3) {
-            // suspend account indefinitely (effectively) - admin must unsuspend.
-            const now = new Date();
-            suspensionEndAt = new Date(now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000); // 100 years from now
+        const failedAttempts = userNonAuth.failed_login_attempts + 1;
+        if (failedAttempts >= 3) {
+            // Suspend account indefinitely (effectively) - admin must unsuspend.
+            const suspensionEndAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000); // 100 years from now
+            await db.query(
+                "UPDATE users SET failed_login_attempts = 0, status = 'suspended', suspension_start_at = now(), suspension_end_at = $1, updated_at = now() WHERE id = $2",
+                [suspensionEndAt, userNonAuth.id],
+            );
+            log("warn", `User suspended after max failed login attempts. User id: ${userNonAuth.id}`, { function: "login" }, utilities.getCallerInfo(), userNonAuth.id);
+            return sendApiError(res, 403, "ERR_ACCOUNT_SUSPENDED_DUE_TO_ATTEMPTS");
         }
-        await db.query("UPDATE users SET failed_login_attempts = $1, suspension_end_at = $2 WHERE id = $3", [failedAttempts, suspensionEndAt, userNonAuth.id]);
+        await db.query("UPDATE users SET failed_login_attempts = $1, updated_at = now() WHERE id = $2", [failedAttempts, userNonAuth.id]);
     }
 
     // If no user found with that username/password
@@ -93,7 +126,7 @@ router.post("/login", async (req, res) => {
             await client.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
             await client.query("INSERT INTO logged_in_users (user_id, token) VALUES ($1, $2)", [user.id, token]);
             // reset failed login attempts on successful login
-            await client.query("UPDATE users SET failed_login_attempts = 0, suspension_end_at = NULL WHERE id = $1", [user.id]);
+            await client.query("UPDATE users SET failed_login_attempts = 0, suspension_start_at = NULL, suspension_end_at = NULL WHERE id = $1", [user.id]);
         }, user.id);
     } catch (error) {
         log("error", `Login transaction failed for username ${username}: ${error}`, { function: "login" }, utilities.getCallerInfo(), user.id);

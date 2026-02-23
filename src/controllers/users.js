@@ -155,7 +155,7 @@ const isManager = async (userId, token) => {
 
 const getUserById = async (userId) => {
     logger.log("debug", "Fetching user by ID", { userId }, utilities.getCallerInfo(), userId);
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_attempt_at, last_login_at FROM users WHERE id = $1", [userId]);
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by ID", { userId }, utilities.getCallerInfo(), userId);
         return null;
@@ -165,7 +165,7 @@ const getUserById = async (userId) => {
 
 const getUserByEmail = async (email) => {
     logger.log("debug", "Fetching user by email", { email }, utilities.getCallerInfo());
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE email = $1", [email]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_attempt_at, last_login_at FROM users WHERE email = $1", [email]);
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by email", { email }, utilities.getCallerInfo());
         return null;
@@ -473,6 +473,13 @@ const unsuspendExpiredSuspensions = async () => {
     logger.log("info", "Unsuspended users with expired suspensions: " + result.rowCount, { function: "unsuspendExpiredSuspensions" }, utilities.getCallerInfo());
 };
 
+const resetStaleFailedLoginAttempts = async () => {
+    const result = await db.query(
+        "UPDATE users SET failed_login_attempts = 0, updated_at = now() WHERE status = 'active' AND failed_login_attempts > 0 AND last_login_attempt_at IS NOT NULL AND last_login_attempt_at <= now() - INTERVAL '15 minutes'",
+    );
+    logger.log("info", "Reset stale failed login attempts: " + result.rowCount, { function: "resetStaleFailedLoginAttempts" }, utilities.getCallerInfo());
+};
+
 const sendPasswordExpiryWarnings = async () => {
     const warningThresholdDays = 3;
     logger.log("debug", "Sending password expiry warnings", { warningThresholdDays }, utilities.getCallerInfo());
@@ -543,7 +550,7 @@ const setUserPassword = async (userId, password, temp = false, changedByUserId =
 
 const getUserByUsername = async (username) => {
     logger.log("debug", "Fetching user by username", { username }, utilities.getCallerInfo());
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE username = $1", [username]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_attempt_at, last_login_at FROM users WHERE username = $1", [username]);
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by username", { username }, utilities.getCallerInfo());
         return null;
@@ -575,6 +582,7 @@ module.exports = {
     getUserByResetToken,
     logoutInactiveUsers,
     unsuspendExpiredSuspensions,
+    resetStaleFailedLoginAttempts,
     sendPasswordExpiryWarnings,
     suspendUsersWithExpiredPasswords,
     deleteUserById,

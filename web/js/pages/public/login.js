@@ -72,6 +72,27 @@ async function showLocalMessage(message) {
 let showGlobalErrorFn = null;
 let showGlobalMessageFn = null;
 
+function clearMessages() {
+    setMessage();
+    if (typeof showGlobalMessageFn === "function") {
+        void showGlobalMessageFn("");
+        return;
+    }
+    if (typeof showGlobalErrorFn === "function") {
+        void showGlobalErrorFn("");
+    }
+}
+
+async function showErrorMessage(message, autoHide) {
+    const presenter = showGlobalErrorFn || showLocalMessage;
+    await presenter(message, autoHide);
+}
+
+async function showSuccessMessage(message, autoHide) {
+    const presenter = showGlobalMessageFn || showLocalMessage;
+    await presenter(message, autoHide);
+}
+
 export default function initLogin({ showErrorModal, showMessageModal } = {}) {
     const form = document.querySelector("[data-login]");
     const container = document.querySelector("[data-login-container]");
@@ -86,11 +107,8 @@ export default function initLogin({ showErrorModal, showMessageModal } = {}) {
         showGlobalMessageFn = showMessageModal;
     }
 
-    const showGlobalError = showGlobalErrorFn || showLocalMessage;
-    const showGlobalMessage = showGlobalMessageFn || showLocalMessage;
-
-    setMessage(); // Clear any existing messages
-    form.addEventListener("input", () => setMessage());
+    clearMessages();
+    form.addEventListener("input", clearMessages);
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -107,7 +125,7 @@ export default function initLogin({ showErrorModal, showMessageModal } = {}) {
             .then((response) => response.json())
             .then(async (data) => {
                 if (data.token) {
-                    await showGlobalMessage("MSG_LOGIN_SUCCESS", true);
+                    await showSuccessMessage("MSG_LOGIN_SUCCESS", true);
                     localStorage.setItem("user_id", data.user_id);
                     localStorage.setItem("auth_token", data.token);
                     localStorage.setItem("username", data.username);
@@ -123,11 +141,11 @@ export default function initLogin({ showErrorModal, showMessageModal } = {}) {
                     window.location.href = "/#/dashboard";
                 } else {
                     const errorCode = typeof data.errorCode === "string" ? data.errorCode.trim() : "";
-                    await showGlobalError(errorCode || data.error || "ERR_INTERNAL_SERVER");
+                    await showErrorMessage(errorCode || data.error || "ERR_INTERNAL_SERVER");
                 }
             })
             .catch(async () => {
-                await showGlobalError("ERR_INTERNAL_SERVER");
+                await showErrorMessage("ERR_INTERNAL_SERVER");
             });
     });
 
@@ -158,7 +176,7 @@ export default function initLogin({ showErrorModal, showMessageModal } = {}) {
 
 let newUserLogic = async function () {
     await replacePageContent("public/register");
-    setMessage();
+    clearMessages();
     history.pushState({ page: "register" }, "");
     window.onpopstate = async () => {
         await replacePageContent("public/login");
@@ -190,7 +208,7 @@ let newUserLogic = async function () {
 
     const form = document.querySelector("[data-register]");
     if (form) {
-        form.addEventListener("input", () => setMessage());
+        form.addEventListener("input", clearMessages);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             const formData = new FormData(form);
@@ -218,19 +236,18 @@ let newUserLogic = async function () {
                 .then(async (data) => {
                     form.reset();
                     if (data.user) {
-                        await setMessageFromCode("MSG_REGISTRATION_SUCCESS_REDIRECT");
-                        setTimeout(async () => {
-                            await replacePageContent("public/login");
-                            initLogin();
-                            history.pushState({ page: "login" }, "");
-                        }, 3000);
+                        await showSuccessMessage("MSG_REGISTRATION_SUCCESS_REDIRECT");
+                        setTimeout(() => {
+                            const loginUrl = `${window.location.pathname}?reload=${Date.now()}#/login`;
+                            window.location.href = loginUrl;
+                        }, 1500);
                     } else {
-                        setMessage(data.error || "");
+                        await showErrorMessage(data.errorCode || data.error || "ERR_FAILED_TO_REGISTER_USER");
                     }
                 })
-                .catch(async (error) => {
+                .catch(async () => {
                     form.reset();
-                    await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
+                    await showErrorMessage("ERR_INTERNAL_SERVER");
                 });
         });
     }
@@ -300,7 +317,7 @@ let newUserLogic = async function () {
 
 let forgotPasswordLogic = async function () {
     await replacePageContent("public/forgot-password_init");
-    setMessage();
+    clearMessages();
     history.pushState({ page: "forgot-password" }, "");
     window.onpopstate = async () => {
         await replacePageContent("public/login");
@@ -311,7 +328,7 @@ let forgotPasswordLogic = async function () {
 
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        form.addEventListener("input", () => setMessage());
+        form.addEventListener("input", clearMessages);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             const formData = new FormData(form);
@@ -326,23 +343,23 @@ let forgotPasswordLogic = async function () {
                 .then((response) => response.json())
                 .then(async (data) => {
                     if (data.message) {
-                        setMessage(data.message);
+                        await showSuccessMessage(data.message);
                     } else {
-                        setMessage(data.error || "");
+                        await showErrorMessage(data.errorCode || data.error || "ERR_PASSWORD_RESET_REQUEST_FAILED");
                     }
                 })
-                .catch(async (error) => {
-                    await setMessageFromCode("ERR_PASSWORD_RESET_REQUEST_FAILED", {}, error.message || "");
+                .catch(async () => {
+                    await showErrorMessage("ERR_PASSWORD_RESET_REQUEST_FAILED");
                 });
         });
     }
 };
 
 let newPasswordLogic = async function (resetToken) {
-    setMessage();
+    clearMessages();
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        form.addEventListener("input", () => setMessage());
+        form.addEventListener("input", clearMessages);
         const passwordInput = document.getElementById("password");
         const confirmPasswordInput = document.getElementById("password_confirmation");
         const passwordRequirementsContainer = document.querySelector("[data-password-requirements]");
@@ -421,7 +438,7 @@ let newPasswordLogic = async function (resetToken) {
             });
             const data = await response.json();
             if (data.error) {
-                setMessage(data.error);
+                await showErrorMessage(data.errorCode || data.error || "ERR_INVALID_OR_EXPIRED_RESET_TOKEN");
                 return;
             }
 
@@ -446,11 +463,11 @@ let newPasswordLogic = async function (resetToken) {
             const confirmPassword = formData.get("password_confirmation");
 
             if (!validatePasswords()) {
-                await setMessageFromCode("ERR_PASSWORD_COMPLEXITY");
+                await showErrorMessage("ERR_PASSWORD_COMPLEXITY");
                 return;
             }
             if (newPassword !== confirmPassword) {
-                await setMessageFromCode("ERR_PASSWORDS_DO_NOT_MATCH");
+                await showErrorMessage("ERR_PASSWORDS_DO_NOT_MATCH");
                 return;
             }
 
@@ -464,17 +481,16 @@ let newPasswordLogic = async function (resetToken) {
                 .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
                 .then(async ({ ok, data }) => {
                     if (!ok) {
-                        setMessage(data.error || "");
+                        await showErrorMessage(data.errorCode || data.error || "ERR_FAILED_TO_RESET_PASSWORD");
                         return;
                     }
-                    await setMessageFromCode("MSG_PASSWORD_RESET_SUCCESS");
+                    await showSuccessMessage("MSG_PASSWORD_RESET_SUCCESS");
                     setTimeout(async () => {
-                        const loginUrl = `${window.location.pathname}?reload=${Date.now()}#/login`;
-                        window.location.href = loginUrl;
-                    }, 1500);
+                        window.location.hash = "#/login";
+                    }, 1200);
                 })
-                .catch(async (error) => {
-                    await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
+                .catch(async () => {
+                    await showErrorMessage("ERR_INTERNAL_SERVER");
                 });
         });
     }

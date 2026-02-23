@@ -255,3 +255,4 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - user_icon_path: uuid
 - temp_password: boolean
 - reset_failed_attempts: integer
+- last_login_attempt_at: timestamp with time zone
