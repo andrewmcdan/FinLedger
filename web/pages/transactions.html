@@ -221,6 +221,9 @@
             <p class="value">
                 <span class="span-label page-navigation">Ledger View</span>
                 <span class="span-actions">
+                    <a id="ledger_trial_balance_link" class="account-transactions-link" href="#/reports?report=trial_balance&as_of=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>&from_date=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>&to_date=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>"> View Trial Balance as of today </a>
+                </span>
+                <span class="span-actions">
                     <button type="button" class="button-small" id="ledger_apply_filters_button">Apply Filters</button>
                     <button type="button" class="button-small" id="ledger_clear_filters_button">Clear</button>
                 </span>
@@ -234,7 +237,7 @@
                         <th>Date</th>
                         <th>Account</th>
                         <th>Description</th>
-                        <th>PR</th>
+                        <th>Posting Ref</th>
                         <th>Debit</th>
                         <th>Credit</th>
                         <th>Balance</th>
@@ -262,7 +265,7 @@
                         <thead>
                             <tr>
                                 <th>Date</th>
-                                <th>PR</th>
+                                <th>Posting Ref</th>
                                 <th>Debit</th>
                             </tr>
                         </thead>
@@ -283,7 +286,7 @@
                         <thead>
                             <tr>
                                 <th>Date</th>
-                                <th>PR</th>
+                                <th>Posting Ref</th>
                                 <th>Credit</th>
                             </tr>
                         </thead>
