@@ -131,101 +131,100 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
     const modifyTableCell = (user, column, isDate = false) => {
         const selector = `[data-${column}-${user.id}]`;
         const cell = document.querySelector(selector);
-        if (cell) {
-            const handleClick = () => {
-                cell.removeEventListener("dblclick", handleClick);
-                const value = column === "fullname" ? `${user.first_name || ""} ${user.last_name || ""}`.trim() : (user[column] ?? "");
-                const inputAttr = `data-input-${column}-${user.id}`;
-                if (isDate) {
-                    const dateValue = value ? new Date(value).toISOString().slice(0, 16) : "";
-                    const input = createInput("datetime-local", dateValue, inputAttr);
-                    cell.replaceChildren(input);
-                } else if (column === "role") {
-                    const roleOptions = [
-                        { value: "administrator", label: "Administrator" },
-                        { value: "manager", label: "Manager" },
-                        { value: "accountant", label: "Accountant" },
-                    ];
-                    const select = createSelect(roleOptions, value, inputAttr);
-                    cell.replaceChildren(select);
-                } else if (column === "status") {
-                    const statusOptions = [
-                        { value: "active", label: "Active" },
-                        { value: "pending", label: "Pending" },
-                        { value: "suspended", label: "Suspended" },
-                        { value: "deactivated", label: "Deactivated" },
-                        { value: "rejected", label: "Rejected" },
-                    ];
-                    const select = createSelect(statusOptions, value, inputAttr);
-                    cell.replaceChildren(select);
-                } else {
-                    const input = createInput("text", value || "", inputAttr);
-                    cell.replaceChildren(input);
-                }
-                const inputEl = cell.querySelector(`[data-input-${column}-${user.id}]`);
-                inputEl.focus();
-                const commitChange = async () => {
-                    const newValue = inputEl.value;
-                    if (String(newValue ?? "") !== String(value ?? "")) {
-                        const previousValues = {
-                            first_name: user.first_name,
-                            last_name: user.last_name,
-                            [column]: user[column],
-                        };
-                        const payload = {
-                            user_id: user.id,
-                            field: column,
-                            value: newValue,
-                        };
-                        try {
-                            const response = await fetchWithAuth("/api/users/update-user-field", {
-                                method: "POST",
-                                headers: {
-                                    "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify(payload),
-                            });
-                            const data = await response.json().catch(() => ({}));
-                            if (!response.ok) {
-                                throw new Error(data.error || "ERR_FIELD_CANNOT_BE_UPDATED");
-                            }
-                            if (column === "fullname") {
-                                const nameParts = newValue.trim().split(/\s+/).filter(Boolean);
-                                const firstName = nameParts.shift() || "";
-                                const lastName = nameParts.join(" ");
-                                user.first_name = firstName;
-                                user.last_name = lastName;
-                            } else if (nullableDateColumns.has(column) && newValue === "") {
-                                user[column] = null;
-                            } else {
-                                user[column] = newValue;
-                            }
-                        } catch (error) {
-                            showErrorModal(error.message || "ERR_INTERNAL_SERVER");
-                            if (column === "fullname") {
-                                user.first_name = previousValues.first_name;
-                                user.last_name = previousValues.last_name;
-                            } else {
-                                user[column] = previousValues[column];
-                            }
+        if (!cell) return;
+        const handleClick = () => {
+            cell.removeEventListener("dblclick", handleClick);
+            const value = column === "fullname" ? `${user.first_name || ""} ${user.last_name || ""}`.trim() : (user[column] ?? "");
+            const inputAttr = `data-input-${column}-${user.id}`;
+            if (isDate) {
+                const dateValue = value ? new Date(value).toISOString().slice(0, 16) : "";
+                const input = createInput("datetime-local", dateValue, inputAttr);
+                cell.replaceChildren(input);
+            } else if (column === "role") {
+                const roleOptions = [
+                    { value: "administrator", label: "Administrator" },
+                    { value: "manager", label: "Manager" },
+                    { value: "accountant", label: "Accountant" },
+                ];
+                const select = createSelect(roleOptions, value, inputAttr);
+                cell.replaceChildren(select);
+            } else if (column === "status") {
+                const statusOptions = [
+                    { value: "active", label: "Active" },
+                    { value: "pending", label: "Pending" },
+                    { value: "suspended", label: "Suspended" },
+                    { value: "deactivated", label: "Deactivated" },
+                    { value: "rejected", label: "Rejected" },
+                ];
+                const select = createSelect(statusOptions, value, inputAttr);
+                cell.replaceChildren(select);
+            } else {
+                const input = createInput("text", value || "", inputAttr);
+                cell.replaceChildren(input);
+            }
+            const inputEl = cell.querySelector(`[data-input-${column}-${user.id}]`);
+            inputEl.focus();
+            const commitChange = async () => {
+                const newValue = inputEl.value;
+                if (String(newValue ?? "") !== String(value ?? "")) {
+                    const previousValues = {
+                        first_name: user.first_name,
+                        last_name: user.last_name,
+                        [column]: user[column],
+                    };
+                    const payload = {
+                        user_id: user.id,
+                        field: column,
+                        value: newValue,
+                    };
+                    try {
+                        const response = await fetchWithAuth("/api/users/update-user-field", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(payload),
+                        });
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            throw new Error(data.error || "ERR_FIELD_CANNOT_BE_UPDATED");
+                        }
+                        if (column === "fullname") {
+                            const nameParts = newValue.trim().split(/\s+/).filter(Boolean);
+                            const firstName = nameParts.shift() || "";
+                            const lastName = nameParts.join(" ");
+                            user.first_name = firstName;
+                            user.last_name = lastName;
+                        } else if (nullableDateColumns.has(column) && newValue === "") {
+                            user[column] = null;
+                        } else {
+                            user[column] = newValue;
+                        }
+                    } catch (error) {
+                        showErrorModal(error.message || "ERR_INTERNAL_SERVER");
+                        if (column === "fullname") {
+                            user.first_name = previousValues.first_name;
+                            user.last_name = previousValues.last_name;
+                        } else {
+                            user[column] = previousValues[column];
                         }
                     }
-                    cell.textContent = getDisplayValue(user, column);
-                    cell.addEventListener("dblclick", handleClick);
-                };
-                inputEl.addEventListener("blur", commitChange);
-                inputEl.addEventListener("keydown", (event) => {
-                    if (event.key === "Enter") {
-                        inputEl.blur();
-                    }
-                });
-                inputEl.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                });
+                }
+                cell.textContent = getDisplayValue(user, column);
+                cell.addEventListener("dblclick", handleClick);
             };
-            cell.title = "Double click to edit.";
-            cell.addEventListener("dblclick", handleClick);
-        }
+            inputEl.addEventListener("blur", commitChange);
+            inputEl.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    inputEl.blur();
+                }
+            });
+            inputEl.addEventListener("click", (event) => {
+                event.stopPropagation();
+            });
+        };
+        cell.title = "Double click to edit.";
+        cell.addEventListener("dblclick", handleClick);
     };
 
     const usersTableBody = document.querySelector("[data-users-list]");

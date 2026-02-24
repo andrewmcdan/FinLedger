@@ -842,3 +842,11 @@ textarea {
 .hidden {
     display: none;
 }
+
+.balanced {
+    color: var(--accent);
+}
+
+.unbalanced {
+    color: var(--error);
+}

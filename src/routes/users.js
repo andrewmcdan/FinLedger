@@ -40,6 +40,7 @@ const uploadProfile = multer({
 });
 const router = express.Router();
 const {
+    getUserLoggedInStatus,
     getUserByUsername,
     setUserPassword,
     isAdmin,
@@ -71,8 +72,12 @@ const db = require("../db/db.js");
 const { sendApiError, sendApiSuccess } = require("../utils/api_messages");
 
 const ensureAuthenticatedUser = (req, res, next) => {
-    if (!req.user?.id) {
+    if (!req.user?.id || !req.user?.token) {
         log("warn", "Unauthorized upload request", { path: req.path }, utilities.getCallerInfo());
+        return sendApiError(res, 401, "ERR_UNAUTHORIZED");
+    }
+    if(!getUserLoggedInStatus(req.user.id, req.user.token)) {
+        log("warn", "Invalid token for authenticated user", { userId: req.user.id }, utilities.getCallerInfo());
         return sendApiError(res, 401, "ERR_UNAUTHORIZED");
     }
     return next();

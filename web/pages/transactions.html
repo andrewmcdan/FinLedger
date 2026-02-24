@@ -30,7 +30,7 @@
                 </div>
                 <div class="field">
                     <label for="journal_reference">Reference</label>
-                    <input type="text" id="journal_reference" name="reference" placeholder="Optional reference code" />
+                    <input type="text" id="journal_reference" name="reference" placeholder="Optional reference code" title="Reference Code will be generated if not provided." />
                 </div>
                 <div class="field">
                     <label for="journal_source_document">Source Document</label>
@@ -47,9 +47,7 @@
                 <p class="value">
                     <span class="span-label page-navigation">Journal Lines (debits first, then credits)</span>
                     <span class="span-actions">
-                        <button type="button" class="button-small" id="journal_new_entry_button">New Entry</button>
-                        <button type="button" class="button-small" id="journal_add_line_button">Add Account Line</button>
-                        <button type="button" class="button-small" id="journal_reset_button">Reset</button>
+                        <button type="button" class="button-small" id="journal_add_line_button" data-add-line-button>Add Account Line</button>
                     </span>
                 </p>
             </div>
@@ -63,26 +61,11 @@
                             <th>Line Description</th>
                             <th>Debit</th>
                             <th>Credit</th>
-                            <th>Source Doc</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody data-journal-lines>
-                        <tr>
-                            <td>1</td>
-                            <td>
-                                <select aria-label="Journal line account">
-                                    <option selected>Cash</option>
-                                    <option>Accounts Receivable</option>
-                                    <option>Sales Revenue</option>
-                                </select>
-                            </td>
-                            <td><input type="text" aria-label="Journal line description" placeholder="Optional line note" /></td>
-                            <td><input type="number" step="0.01" min="0" aria-label="Debit amount" placeholder="0.00" /></td>
-                            <td><input type="number" step="0.01" min="0" aria-label="Credit amount" placeholder="0.00" /></td>
-                            <td><span class="meta">No file</span></td>
-                            <td><button type="button" class="button-small">Remove</button></td>
-                        </tr>
+                        
                     </tbody>
                 </table>
             </div>
@@ -98,7 +81,9 @@
                     <span class="span-label"> </span>
                     <span class="span-actions">
                         <button type="button" id="journal_submit_button">Submit for Approval</button>
+                        <button type="button" class="button-small" id="journal_reset_button">Reset</button>
                     </span>
+                    
                 </p>
             </div>
         </form>
