@@ -93,6 +93,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                 const userId = button.dataset.userId;
                 const config = actionConfig[action];
                 if (!config || !userId) {
+                    hideLoadingOverlay();
                     return;
                 }
                 const response = await fetchWithAuth(config.url(userId), {
