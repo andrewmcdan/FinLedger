@@ -203,11 +203,7 @@ router.patch("/reject-user/:userId", async (req, res) => {
     log("info", `User ID ${userIdToReject} rejected by admin user ID ${requestingUserId}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
 
     try {
-        const emailResult = await sendEmail(
-            userData.email,
-            "Your FinLedger Access Request Was Not Approved",
-            `Dear ${userData.first_name},\n\nWe regret to inform you that your FinLedger access request was not approved at this time.\n\nIf you believe this is in error, please contact an administrator for further assistance.\n\nBest regards,\nThe FinLedger Team\n\n`,
-        );
+        const emailResult = await sendEmail(userData.email, "Your FinLedger Access Request Was Not Approved", `Dear ${userData.first_name},\n\nWe regret to inform you that your FinLedger access request was not approved at this time.\n\nIf you believe this is in error, please contact an administrator for further assistance.\n\nBest regards,\nThe FinLedger Team\n\n`);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send rejection email to ${userData.email} for user ID ${userIdToReject}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
         }
@@ -335,6 +331,13 @@ router.post("/update-profile", uploadProfile.single("profile_image"), async (req
         log("warn", "Update profile user not found", { requestingUserId }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
     }
+    // If the DB does not return the user_icon_path and a file was uploaded, then remove the any uploaded file and send an error.
+    if (req.file?.path && (userData.user_icon_path === undefined || userData.user_icon_path === "")) {
+        if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        return sendApiError(res, 500, "ERR_FAILED_TO_UPDATE_PROFILE_IMAGE");
+    }
     const profileUpdates = {
         first_name: req.body.first_name,
         last_name: req.body.last_name,
@@ -424,11 +427,13 @@ router.post("/register_new_user", async (req, res) => {
 
         const adminResult = await listAdministratorContacts(newUser.id);
         const adminSubject = "New FinLedger Access Request Pending Approval";
-        const adminNotifyResults = await Promise.allSettled(adminResult.map((adminRow) => {
-            const adminFirstName = adminRow.first_name || "Administrator";
-            const adminBody = `Dear ${adminFirstName},\n\nA new user has requested access to FinLedger and is pending approval.\n\nName: ${first_name} ${last_name}\nEmail: ${email}\nRequested Role: ${role}\n\nPlease review this request in the user management area.\n\nBest regards,\nThe FinLedger Team\n\n`;
-            return sendEmail(adminRow.email, adminSubject, adminBody);
-        }));
+        const adminNotifyResults = await Promise.allSettled(
+            adminResult.map((adminRow) => {
+                const adminFirstName = adminRow.first_name || "Administrator";
+                const adminBody = `Dear ${adminFirstName},\n\nA new user has requested access to FinLedger and is pending approval.\n\nName: ${first_name} ${last_name}\nEmail: ${email}\nRequested Role: ${role}\n\nPlease review this request in the user management area.\n\nBest regards,\nThe FinLedger Team\n\n`;
+                return sendEmail(adminRow.email, adminSubject, adminBody);
+            }),
+        );
         for (let i = 0; i < adminNotifyResults.length; i += 1) {
             const result = adminNotifyResults[i];
             const adminEmail = adminResult[i]?.email;
@@ -439,11 +444,15 @@ router.post("/register_new_user", async (req, res) => {
             }
         }
 
-        await updateSecurityQuestions(newUser.id, [
-            { question: security_question_1, answer: security_answer_1 },
-            { question: security_question_2, answer: security_answer_2 },
-            { question: security_question_3, answer: security_answer_3 },
-        ], newUser.id);
+        await updateSecurityQuestions(
+            newUser.id,
+            [
+                { question: security_question_1, answer: security_answer_1 },
+                { question: security_question_2, answer: security_answer_2 },
+                { question: security_question_3, answer: security_answer_3 },
+            ],
+            newUser.id,
+        );
         return res.json({ user: newUser });
     } catch (error) {
         log("error", `Error registering new user: ${error}`, { function: "register_new_user" }, utilities.getCallerInfo());
@@ -476,10 +485,7 @@ router.patch("/reset-password/:email/:userName", async (req, res) => {
     const resetLink = `${resetLinkUrlBase}/#/login?userId=${userData2.id}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
-    await db.query(
-        "UPDATE users SET reset_token = $1, reset_token_expires_at = $2, reset_failed_attempts = 0, updated_at = now() WHERE id = $3",
-        [resetToken, tokenExpiry, userData2.id],
-    );
+    await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2, reset_failed_attempts = 0, updated_at = now() WHERE id = $3", [resetToken, tokenExpiry, userData2.id]);
     const emailResult = await sendEmail(
         userData2.email,
         "FinLedger Password Reset Request",
@@ -507,8 +513,8 @@ router.get("/security-questions/:resetToken", async (req, res) => {
 router.post("/verify-security-answers/:resetToken", async (req, res) => {
     const resetToken = req.params.resetToken;
     const { securityAnswers, newPassword } = req.body;
-    if(!Array.isArray(securityAnswers) || securityAnswers.length !== 3){
-        log("error", "Security answer verification requires exactly 3 answers.", {securityAnswers}, utilities.getCallerInfo());
+    if (!Array.isArray(securityAnswers) || securityAnswers.length !== 3) {
+        log("error", "Security answer verification requires exactly 3 answers.", { securityAnswers }, utilities.getCallerInfo());
         return sendApiError(res, 400, "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED");
     }
     log("info", "Verify security answers request received", {}, utilities.getCallerInfo());
@@ -524,10 +530,7 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     const verified = await verifySecurityAnswers(userData.id, securityAnswers);
     if (!verified) {
         log("warn", `Security answers verification failed for user ID ${userData.id} during password reset`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
-        const attemptResult = await db.query(
-            "UPDATE users SET reset_failed_attempts = LEAST(reset_failed_attempts + 1, 3), updated_at = now() WHERE id = $1 RETURNING reset_failed_attempts",
-            [userData.id],
-        );
+        const attemptResult = await db.query("UPDATE users SET reset_failed_attempts = LEAST(reset_failed_attempts + 1, 3), updated_at = now() WHERE id = $1 RETURNING reset_failed_attempts", [userData.id]);
         const failedAttempts = Number(attemptResult.rows[0]?.reset_failed_attempts || 0);
         if (failedAttempts >= 3) {
             log("warn", `Password reset verification locked after max attempts for user ID ${userData.id}`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
@@ -537,10 +540,7 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     }
     try {
         await changePassword(userData.id, newPassword);
-        await db.query(
-            "UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, reset_failed_attempts = 0, updated_at = now() WHERE id = $1",
-            [userData.id],
-        );
+        await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, reset_failed_attempts = 0, updated_at = now() WHERE id = $1", [userData.id]);
         log("info", "Password reset successful via security answers", { userId: userData.id }, utilities.getCallerInfo(), userData.id);
         return sendApiSuccess(res, "MSG_PASSWORD_RESET_SUCCESS");
     } catch (error) {
@@ -633,7 +633,7 @@ router.post("/update-user-field", async (req, res) => {
         return sendApiError(res, 400, "ERR_FIELD_CANNOT_BE_UPDATED");
     }
     if (fieldName === "fullname") {
-        if(typeof(newValue) !== "string") return sendApiError(res, 400, "ERR_FIELD_CANNOT_BE_UPDATED");
+        if (typeof newValue !== "string") return sendApiError(res, 400, "ERR_FIELD_CANNOT_BE_UPDATED");
         const nameParts = newValue.trim().split(" ");
         const firstName = nameParts.shift();
         const lastName = nameParts.join(" ");
