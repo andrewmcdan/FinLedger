@@ -21,10 +21,10 @@ async function dashboard(req, res, next) {
 }
 
 async function accountsList(req, res, next) {
-    const user = await usersController.getUserById(req.user.id);
-    const role = user ? user.role : "none";
-    const allUsers = await usersController.listUsers();
     try {
+        const user = await usersController.getUserById(req.user.id);
+        const role = user ? user.role : "none";
+        const allUsers = await usersController.listUsers();
         logger.log("debug", "Rendering accounts list", { userId: req.user?.id, role }, getCallerInfo(), req.user?.id);
         const result = await accountsController.listAccounts(req.user.id, req.user.token);
         const accounts = result.rows;
@@ -62,10 +62,10 @@ async function forgotPasswordSubmit(req, res, next) {
         const securityQuestions = await usersController.getSecurityQuestionsForUser(userData.id);
         const resolvedQuestions = securityQuestions
             ? {
-                security_question_1: questionLabelMap[securityQuestions.security_question_1] || securityQuestions.security_question_1 || "",
-                security_question_2: questionLabelMap[securityQuestions.security_question_2] || securityQuestions.security_question_2 || "",
-                security_question_3: questionLabelMap[securityQuestions.security_question_3] || securityQuestions.security_question_3 || "",
-            }
+                  security_question_1: questionLabelMap[securityQuestions.security_question_1] || securityQuestions.security_question_1 || "",
+                  security_question_2: questionLabelMap[securityQuestions.security_question_2] || securityQuestions.security_question_2 || "",
+                  security_question_3: questionLabelMap[securityQuestions.security_question_3] || securityQuestions.security_question_3 || "",
+              }
             : emptyQuestions;
         return res.render("public/forgot-password_submit", {
             security_questions: resolvedQuestions,
