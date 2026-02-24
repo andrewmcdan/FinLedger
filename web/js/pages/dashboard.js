@@ -97,7 +97,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                     return;
                 }
                 const response = await fetchWithAuth(config.url(userId), {
-                    method: "GET",
+                    method: "PATCH",
                     headers: {
                         "Content-Type": "application/json",
                     },
@@ -134,9 +134,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
         if (cell) {
             const handleClick = () => {
                 cell.removeEventListener("dblclick", handleClick);
-                const value = column === "fullname"
-                    ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
-                    : (user[column] ?? "");
+                const value = column === "fullname" ? `${user.first_name || ""} ${user.last_name || ""}`.trim() : (user[column] ?? "");
                 const inputAttr = `data-input-${column}-${user.id}`;
                 if (isDate) {
                     const dateValue = value ? new Date(value).toISOString().slice(0, 16) : "";
@@ -486,7 +484,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             const userId = user.id;
             try {
                 const response = await fetchWithAuth(`/api/users/reset-user-password/${userId}`, {
-                    method: "GET",
+                    method: "PATCH",
                 });
                 const data = await response.json().catch(() => ({}));
                 if (response.ok) {

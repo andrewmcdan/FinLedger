@@ -305,14 +305,13 @@ let newUserLogic = async function () {
             const confirmPassword = confirmPasswordInput.value;
             if (passwordMatchContainer && password === confirmPassword) {
                 passwordMatchContainer.classList.add("hidden");
-            }else if (passwordMatchContainer) {
+            } else if (passwordMatchContainer) {
                 passwordMatchContainer.classList.remove("hidden");
             }
         };
         passwordInput.addEventListener("input", validatePasswords);
         confirmPasswordInput.addEventListener("input", validatePasswordMatch);
     }
-    
 };
 
 let forgotPasswordLogic = async function () {
@@ -335,7 +334,7 @@ let forgotPasswordLogic = async function () {
             const email = formData.get("email");
             const user_id = formData.get("user_id");
             fetch("/api/users/reset-password/" + encodeURIComponent(email) + "/" + encodeURIComponent(user_id), {
-                method: "GET",
+                method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
                 },
@@ -454,11 +453,7 @@ let newPasswordLogic = async function (resetToken) {
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             const formData = new FormData(form);
-            const securityAnswers = [
-                formData.get("security_answer_1"),
-                formData.get("security_answer_2"),
-                formData.get("security_answer_3"),
-            ];
+            const securityAnswers = [formData.get("security_answer_1"), formData.get("security_answer_2"), formData.get("security_answer_3")];
             const newPassword = formData.get("password");
             const confirmPassword = formData.get("password_confirmation");
 

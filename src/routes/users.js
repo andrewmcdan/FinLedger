@@ -148,7 +148,7 @@ router.post("/email-user", async (req, res) => {
     }
 });
 
-router.get("/approve-user/:userId", async (req, res) => {
+router.patch("/approve-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         return sendApiError(res, 401, "ERR_UNAUTHORIZED");
@@ -179,7 +179,7 @@ router.get("/approve-user/:userId", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_APPROVED_SUCCESS");
 });
 
-router.get("/reject-user/:userId", async (req, res) => {
+router.patch("/reject-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized reject-user request", { path: req.path }, utilities.getCallerInfo());
@@ -451,7 +451,7 @@ router.post("/register_new_user", async (req, res) => {
     }
 });
 
-router.get("/reset-password/:email/:userName", async (req, res) => {
+router.patch("/reset-password/:email/:userName", async (req, res) => {
     const userNameToReset = req.params.userName;
     const emailToReset = req.params.email;
     log("info", "Password reset request received", { userNameToReset, emailToReset }, utilities.getCallerInfo());
@@ -581,7 +581,7 @@ router.post("/suspend-user", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_SUSPENDED_SUCCESS");
 });
 
-router.get("/reinstate-user/:userId", async (req, res) => {
+router.patch("/reinstate-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized reinstate-user request", { path: req.path }, utilities.getCallerInfo());
@@ -669,7 +669,7 @@ router.post("/delete-user", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_DELETED_SUCCESS");
 });
 
-router.get("/reset-user-password/:userId", async (req, res) => {
+router.patch("/reset-user-password/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized reset-user-password request", { path: req.path }, utilities.getCallerInfo());
