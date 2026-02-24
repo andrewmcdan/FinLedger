@@ -2,16 +2,27 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("node:crypto");
 const uploadNone = multer();
 const userIconRoot = path.resolve(__dirname, "./../../user-icons/");
 const allowedImageExts = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+const imageMimeToExt = new Map([
+    ["image/png", ".png"],
+    ["image/jpeg", ".jpg"],
+    ["image/gif", ".gif"],
+    ["image/webp", ".webp"],
+]);
 
 fs.mkdirSync(userIconRoot, { recursive: true });
 
 const profileStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, userIconRoot),
     filename: (req, file, cb) => {
-        cb(null, path.basename(file.originalname));
+        const extension = imageMimeToExt.get((file.mimetype || "").toLowerCase());
+        if (!extension) {
+            return cb(new Error("ERR_INVALID_FILE_TYPE"));
+        }
+        return cb(null, `${crypto.randomUUID()}${extension}`);
     },
 });
 
@@ -19,8 +30,9 @@ const uploadProfile = multer({
     storage: profileStorage,
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase();
-        if (!allowedImageExts.has(ext)) {
+        const ext = path.extname(file.originalname || "").toLowerCase();
+        const mimeExtension = imageMimeToExt.get((file.mimetype || "").toLowerCase());
+        if (!mimeExtension || !allowedImageExts.has(ext)) {
             return cb(new Error("ERR_INVALID_FILE_TYPE"));
         }
         return cb(null, true);
@@ -57,6 +69,14 @@ const utilities = require("../utils/utilities.js");
 const { sendEmail } = require("../services/email.js");
 const db = require("../db/db.js");
 const { sendApiError, sendApiSuccess } = require("../utils/api_messages");
+
+const ensureAuthenticatedUser = (req, res, next) => {
+    if (!req.user?.id) {
+        log("warn", "Unauthorized upload request", { path: req.path }, utilities.getCallerInfo());
+        return sendApiError(res, 401, "ERR_UNAUTHORIZED");
+    }
+    return next();
+};
 
 router.get("/security-questions-list", async (req, res) => {
     log("debug", "Security questions list requested", { userId: req.user?.id }, utilities.getCallerInfo(), req.user?.id);
@@ -214,7 +234,7 @@ router.patch("/reject-user/:userId", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_REJECTED_SUCCESS");
 });
 
-router.post("/create-user", uploadProfile.single("user_icon"), async (req, res) => {
+router.post("/create-user", ensureAuthenticatedUser, uploadProfile.single("user_icon"), async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         return sendApiError(res, 401, "ERR_UNAUTHORIZED");
@@ -319,7 +339,7 @@ router.post("/update-security-questions", async (req, res) => {
     }
 });
 
-router.post("/update-profile", uploadProfile.single("profile_image"), async (req, res) => {
+router.post("/update-profile", ensureAuthenticatedUser, uploadProfile.single("profile_image"), async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized update-profile request", { path: req.path }, utilities.getCallerInfo());
