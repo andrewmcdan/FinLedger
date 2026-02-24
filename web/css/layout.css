@@ -524,6 +524,14 @@
     box-shadow: 0 16px 24px rgba(21, 31, 40, 0.14);
 }
 
+.password_validation_popup[data-password-requirements] {
+    z-index: 4;
+}
+
+.password_validation_popup[data-password-match] {
+    z-index: 3;
+}
+
 .password_validation_popup h2 {
     margin: 0 0 0.5rem;
     font-size: 0.95rem;
@@ -568,6 +576,13 @@ button {
 button:hover {
     transform: translateY(-1px);
     box-shadow: 0 8px 18px rgba(11, 123, 108, 0.25);
+}
+
+button:active:not(.message-line__close) {
+    transform: translateY(0);
+    box-shadow:
+        0 12px 26px rgba(11, 123, 108, 0.42),
+        inset 0 2px 6px rgba(4, 40, 12, 0.2);
 }
 
 button.button-small,

@@ -1,3 +1,5 @@
+-- Centralized API/UI message catalog.
+-- Message codes are stable keys; text/category can be revised via migration upserts.
 CREATE TABLE IF NOT EXISTS app_messages (
     code TEXT PRIMARY KEY,
     message_text TEXT NOT NULL,
@@ -7,6 +9,7 @@ CREATE TABLE IF NOT EXISTS app_messages (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Keep updated_at in sync whenever a message row changes.
 CREATE OR REPLACE FUNCTION app_messages_set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -21,6 +24,8 @@ BEFORE UPDATE ON app_messages
 FOR EACH ROW
 EXECUTE FUNCTION app_messages_set_updated_at();
 
+-- Seed/refresh message catalog entries.
+-- ON CONFLICT updates text/category and re-activates message codes.
 INSERT INTO app_messages (code, message_text, category)
 VALUES
     ('ERR_UNAUTHORIZED', 'Unauthorized', 'error'),
@@ -119,6 +124,7 @@ VALUES
     ('MSG_USER_CREATED_SUCCESS', 'User created successfully', 'success')
 ON CONFLICT (code) DO UPDATE
 SET
+    -- Use incoming values from this migration as source of truth.
     message_text = EXCLUDED.message_text,
     category = EXCLUDED.category,
     is_active = TRUE,

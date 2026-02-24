@@ -558,14 +558,32 @@ test("Password reset flow: GET /reset-password issues token, then /security-ques
         assert.equal(qs.statusCode, 200);
         assert.ok(qs.body.security_questions);
 
-        const bad = await requestJson({
+        const bad1 = await requestJson({
             port,
             method: "POST",
             path: `/api/users/verify-security-answers/${dbUser.rows[0].reset_token}`,
             body: { securityAnswers: ["bad", "A2", "A3"], newPassword: "NewPass9!" },
         });
-        assert.equal(bad.statusCode, 403);
-        assert.equal(bad.body.errorCode, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
+        assert.equal(bad1.statusCode, 403);
+        assert.equal(bad1.body.errorCode, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
+
+        const bad2 = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${dbUser.rows[0].reset_token}`,
+            body: { securityAnswers: ["bad", "A2"], newPassword: "NewPass9!" },
+        });
+        assert.equal(bad2.statusCode, 400);
+        assert.equal(bad2.body.errorCode, "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED");
+
+        const bad3 = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${dbUser.rows[0].reset_token}`,
+            body: { securityAnswers: "bad", newPassword: "NewPass9!" },
+        });
+        assert.equal(bad3.statusCode, 400);
+        assert.equal(bad3.body.errorCode, "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED");
 
         const ok = await requestJson({
             port,
@@ -732,6 +750,64 @@ test("Admin user management endpoints: suspend, reinstate, update-user-field, de
 
         const gone = await db.query("SELECT 1 FROM users WHERE id = $1", [user.id]);
         assert.equal(gone.rowCount, 0);
+    } finally {
+        server.close();
+    }
+});
+
+test("POST /api/users/update-user-field updates fullname for admin", async () => {
+    const admin = await insertUser({ username: "admin-fullname", email: "admin-fullname@example.com", role: "administrator" });
+    const user = await insertUser({ username: "name-target", email: "name-target@example.com", firstName: "Old", lastName: "Name", role: "accountant", status: "active" });
+    const token = "admin-fullname-token";
+    await insertLoggedInUser({ userId: admin.id, token });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+        const update = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/update-user-field",
+            headers: authHeaders({ userId: admin.id, token }),
+            body: { user_id: user.id, field: "fullname", value: "Jane Q Public" },
+        });
+
+        assert.equal(update.statusCode, 200);
+        assert.equal(update.body.messageCode, "MSG_USER_FIELD_UPDATED_SUCCESS");
+
+        const updated = await db.query("SELECT first_name, last_name FROM users WHERE id = $1", [user.id]);
+        assert.equal(updated.rows[0].first_name, "Jane");
+        assert.equal(updated.rows[0].last_name, "Q Public");
+    } finally {
+        server.close();
+    }
+});
+
+test("POST /api/users/update-user-field rejects non-string fullname value", async () => {
+    const admin = await insertUser({ username: "admin-fullname2", email: "admin-fullname2@example.com", role: "administrator" });
+    const user = await insertUser({ username: "name-target2", email: "name-target2@example.com", firstName: "Old", lastName: "Name", role: "accountant", status: "active" });
+    const token = "admin-fullname2-token";
+    await insertLoggedInUser({ userId: admin.id, token });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+        const update = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/update-user-field",
+            headers: authHeaders({ userId: admin.id, token }),
+            body: { user_id: user.id, field: "fullname", value: 12345 },
+        });
+
+        assert.equal(update.statusCode, 400);
+        assert.equal(update.body.errorCode, "ERR_FIELD_CANNOT_BE_UPDATED");
+
+        const unchanged = await db.query("SELECT first_name, last_name FROM users WHERE id = $1", [user.id]);
+        assert.equal(unchanged.rows[0].first_name, "Old");
+        assert.equal(unchanged.rows[0].last_name, "Name");
     } finally {
         server.close();
     }

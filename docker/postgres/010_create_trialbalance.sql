@@ -1,3 +1,4 @@
+-- Trial balance run header captures the run context and totals.
 CREATE TABLE IF NOT EXISTS trial_balance_runs (
     id SERIAL PRIMARY KEY,
     run_type TEXT NOT NULL CHECK (run_type IN ('unadjusted', 'adjusted')),
@@ -8,6 +9,8 @@ CREATE TABLE IF NOT EXISTS trial_balance_runs (
     total_credits NUMERIC(18, 2) NOT NULL
 );
 
+-- Trial balance detail lines for each account included in the run.
+-- liquidity_order_used preserves report ordering at run time.
 CREATE TABLE IF NOT EXISTS trial_balance_lines (
     id SERIAL PRIMARY KEY,
     trial_balance_run_id INTEGER NOT NULL REFERENCES trial_balance_runs(id) ON DELETE CASCADE,

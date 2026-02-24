@@ -1,18 +1,17 @@
 # FinLedger User Manual
 
-This manual describes how to use the FinLedger web application. Each section lives in its own folder so it can be authored independently and later compiled into a single PDF.
+This folder contains the source markdown for the FinLedger User Manual.
 
-**Structure**
+## Structure
 
-- Each section has its own folder under `docs/User Manual/`.
-- Each section should include a `README.md` with the actual content.
-- Use `todo.md` while a section is in progress; remove it after the section is complete.
-- Section folders are numbered to preserve the final document order.
-- Shared writing standards are in `docs/User Manual/STYLE_GUIDE.md`.
-- Section drafting template is in `docs/User Manual/templates/SECTION_TEMPLATE.md`.
-- Screenshot and figure standards are in `docs/User Manual/assets/README.md`.
+- Each manual section has its own numbered folder under `docs/User Manual/`.
+- Each completed section uses `README.md`.
+- Numbering controls section order in the generated PDF.
+- Shared writing rules are in `docs/User Manual/STYLE_GUIDE.md`.
+- The section template is in `docs/User Manual/templates/SECTION_TEMPLATE.md`.
+- Figure and screenshot guidance is in `docs/User Manual/assets/README.md`.
 
-**Section Order**
+## Section Order
 
 1. `docs/User Manual/01_Overview_and_Roles/README.md`
 2. `docs/User Manual/02_Login_and_Security/README.md`
@@ -28,22 +27,27 @@ This manual describes how to use the FinLedger web application. Each section liv
 12. `docs/User Manual/12_Notifications_and_Email/README.md`
 13. `docs/User Manual/13_Audit_and_Event_Logs/README.md`
 
-**PDF Generation**
+## PDF Generation
 
-- Generate the PDF with the project script:
+Generate the manual PDF:
 
 ```bash
 npm run manual:pdf
 ```
 
-- Default output path: `docs/User Manual/FinLedger_User_Manual.pdf`
-- Optional custom output path:
+Default output:
+
+- `docs/User Manual/FinLedger_User_Manual.pdf`
+
+Optional custom output:
 
 ```bash
 node scripts/build-user-manual-pdf.js --out "docs/User Manual/FinLedger_User_Manual_custom.pdf"
 ```
 
-- The generator includes:
-  - `docs/User Manual/README.md`
-  - Any numbered section folder that contains `README.md`
-- Numbered folders without `README.md` are skipped with a warning.
+Current generator behavior:
+
+- Builds a title page, then table of contents.
+- Includes numbered section folders that contain `README.md`.
+- Skips numbered folders with no `README.md` and logs a warning.
+- This top-level `docs/User Manual/README.md` is reference text and is not included in the PDF body.

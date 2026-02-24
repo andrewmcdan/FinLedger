@@ -155,7 +155,7 @@ const isManager = async (userId, token) => {
 
 const getUserById = async (userId) => {
     logger.log("debug", "Fetching user by ID", { userId }, utilities.getCallerInfo(), userId);
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE id = $1", [userId]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_attempt_at, last_login_at FROM users WHERE id = $1", [userId]);
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by ID", { userId }, utilities.getCallerInfo(), userId);
         return null;
@@ -165,7 +165,7 @@ const getUserById = async (userId) => {
 
 const getUserByEmail = async (email) => {
     logger.log("debug", "Fetching user by email", { email }, utilities.getCallerInfo());
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE email = $1", [email]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_attempt_at, last_login_at FROM users WHERE email = $1", [email]);
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by email", { email }, utilities.getCallerInfo());
         return null;
@@ -311,6 +311,8 @@ const updateUserProfile = async (userId, profileUpdates, changedByUserId = userI
         status: profileUpdates.status,
         suspension_start_at: profileUpdates.suspension_start_at,
         suspension_end_at: profileUpdates.suspension_end_at,
+        date_of_birth: profileUpdates.date_of_birth,
+        password_expires_at: profileUpdates.password_expires_at
     };
 
     const updates = [];
@@ -379,7 +381,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
             createdUser = await db.transaction(async (client) => {
                 const username = await generateUniqueUsername(client, firstName, lastName);
                 const result = await client.query(
-                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
+                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash",
                     [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
                 );
                 await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
@@ -451,7 +453,7 @@ const getSecurityQuestionsForUser = async (userId) => {
 
 const verifySecurityAnswers = async (userId, answers) => {
     // answers should be an array of strings with the answers to the security questions in order
-    if (answers.length !== 3) {
+    if (!Array.isArray(answers) || answers.length !== 3) {
         logger.log("warn", "Invalid security answer payload length", { userId, length: answers.length }, utilities.getCallerInfo(), userId);
         const error = new Error("Exactly three answers must be provided");
         error.code = "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED";
@@ -471,6 +473,13 @@ const logoutInactiveUsers = async () => {
 const unsuspendExpiredSuspensions = async () => {
     const result = await db.query("UPDATE users SET status = 'active', suspension_start_at = NULL, suspension_end_at = NULL, updated_at = now() WHERE suspension_end_at < now() AND status = 'suspended'");
     logger.log("info", "Unsuspended users with expired suspensions: " + result.rowCount, { function: "unsuspendExpiredSuspensions" }, utilities.getCallerInfo());
+};
+
+const resetStaleFailedLoginAttempts = async () => {
+    const result = await db.query(
+        "UPDATE users SET failed_login_attempts = 0, updated_at = now() WHERE status = 'active' AND failed_login_attempts > 0 AND last_login_attempt_at IS NOT NULL AND last_login_attempt_at <= now() - INTERVAL '15 minutes'",
+    );
+    logger.log("info", "Reset stale failed login attempts: " + result.rowCount, { function: "resetStaleFailedLoginAttempts" }, utilities.getCallerInfo());
 };
 
 const sendPasswordExpiryWarnings = async () => {
@@ -543,7 +552,7 @@ const setUserPassword = async (userId, password, temp = false, changedByUserId =
 
 const getUserByUsername = async (username) => {
     logger.log("debug", "Fetching user by username", { username }, utilities.getCallerInfo());
-    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_at FROM users WHERE username = $1", [username]);
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_attempt_at, last_login_at FROM users WHERE username = $1", [username]);
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by username", { username }, utilities.getCallerInfo());
         return null;
@@ -575,6 +584,7 @@ module.exports = {
     getUserByResetToken,
     logoutInactiveUsers,
     unsuspendExpiredSuspensions,
+    resetStaleFailedLoginAttempts,
     sendPasswordExpiryWarnings,
     suspendUsersWithExpiredPasswords,
     deleteUserById,

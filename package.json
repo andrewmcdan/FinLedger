@@ -9,6 +9,7 @@
     "dev": "nodemon --env-file=.env src/server.js",
     "db-init": "node --env-file=.env scripts/init-db.js",
     "db-reset": "node --env-file=.env scripts/reset-db.js",
+    "accounts-seed": "node --env-file=.env scripts/accounts-seed.js",
     "db-init:test": "node --env-file=.env.test scripts/init-db.js",
     "manual:pdf": "node scripts/build-user-manual-pdf.js",
     "pretest": "npm run db-init:test",

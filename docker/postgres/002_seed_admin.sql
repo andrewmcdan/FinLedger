@@ -1,6 +1,9 @@
--- Seed a default administrator account using template values.
+-- Enable pgcrypto for password hashing helpers (crypt/gen_salt).
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- Seed a default administrator account.
+-- Template placeholders are filled by scripts/init-db.js from environment values.
+-- ON CONFLICT DO NOTHING makes this idempotent for repeated initialization runs.
 INSERT INTO users (
   username,
   email,

@@ -2,6 +2,7 @@ const db = require("../db/db.js");
 const fs = require("fs").promises;
 const path = require("path");
 const {log} = require("./logger.js");
+const crypto = require("node:crypto");
 
 function getCallerInfo() {
     const stack = new Error().stack;
@@ -48,12 +49,7 @@ function sanitizeInput(input) {
 }
 
 function generateRandomToken(length = 32) {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let token = "";
-    for (let i = 0; i < length; i++) {
-        token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
+    return crypto.randomBytes(length).toString("base64url");
 }
 
 async function cleanupUserData(){

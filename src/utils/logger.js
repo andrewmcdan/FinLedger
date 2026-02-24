@@ -1,4 +1,5 @@
 const db = require("../db/db");
+const fs = require("fs");
 
 // Get LOG_TO_FILE, LOG_FILE_PATH, LOG_TO_FILE_LEVEL, LOG_TO_DB, DB_LOG_LEVEL, LOG_TO_CONSOLE, CONSOLE_LOG_LEVEL from environment variables
 const LOG_TO_FILE = process.env.LOG_TO_FILE === "true";
@@ -11,6 +12,17 @@ const CONSOLE_LOG_LEVEL = process.env.CONSOLE_LOG_LEVEL || "debug";
 
 // Define log levels
 const levels = { trace: 0, debug: 1, info: 2, warn: 3, error: 4, fatal: 5 };
+
+const normalizeUserId = (userId) => {
+    if (userId === null || userId === undefined || userId === "") {
+        return null;
+    }
+    const numericUserId = Number(userId);
+    if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) {
+        return null;
+    }
+    return numericUserId;
+};
 
 /**
  * Log an event. Depending on configuration, logs to console, file, and/or database.
@@ -40,14 +52,14 @@ const log = async (level, message, context = null, source = "", user_id = null, 
     // Log to database
     if (!skipDb && LOG_TO_DB && levelValue >= levels[DB_LOG_LEVEL]) {
         try {
+            const normalizedUserId = normalizeUserId(user_id);
             const queryString = `
-                INSERT INTO app_logs (level, message, context, source${user_id ? ", user_id" : ""})
-                VALUES ($1, $2, $3, $4${user_id ? ", $5" : ""})
+                INSERT INTO app_logs (level, message, context, source, user_id)
+                SELECT $1, $2, $3, $4, u.id
+                FROM (SELECT 1) AS marker
+                LEFT JOIN users u ON u.id = $5
             `;
-            const values = [level, message, context, source];
-            if (user_id) {
-                values.push(user_id);
-            }
+            const values = [level, message, context, source, normalizedUserId];
             await db.query(queryString, values);
         }
         catch (error) {
@@ -57,7 +69,6 @@ const log = async (level, message, context = null, source = "", user_id = null, 
 
     // Log to file
     if (!skipFile && LOG_TO_FILE && levelValue >= levels[LOG_TO_FILE_LEVEL]) {
-        const fs = require("fs");
         const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message} ${JSON.stringify(context)} ${sourceLabel}\n`;
         // If file doesn't exist, create it
         if (!fs.existsSync(LOG_FILE_PATH)) {

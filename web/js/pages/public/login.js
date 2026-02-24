@@ -56,15 +56,59 @@ async function setMessageFromCode(code, replacements = {}, fallback = "") {
     setMessage(text);
 }
 
-export default function initLogin() {
+async function showLocalMessage(message) {
+    const text = `${message ?? ""}`.trim();
+    if (!text) {
+        setMessage();
+        return;
+    }
+    if (text.startsWith("ERR_") || text.startsWith("MSG_")) {
+        await setMessageFromCode(text, {}, text);
+        return;
+    }
+    setMessage(text);
+}
+
+let showGlobalErrorFn = null;
+let showGlobalMessageFn = null;
+
+function clearMessages() {
+    setMessage();
+    if (typeof showGlobalMessageFn === "function") {
+        void showGlobalMessageFn("");
+        return;
+    }
+    if (typeof showGlobalErrorFn === "function") {
+        void showGlobalErrorFn("");
+    }
+}
+
+async function showErrorMessage(message, autoHide) {
+    const presenter = showGlobalErrorFn || showLocalMessage;
+    await presenter(message, autoHide);
+}
+
+async function showSuccessMessage(message, autoHide) {
+    const presenter = showGlobalMessageFn || showLocalMessage;
+    await presenter(message, autoHide);
+}
+
+export default function initLogin({ showErrorModal, showMessageModal } = {}) {
     const form = document.querySelector("[data-login]");
     const container = document.querySelector("[data-login-container]");
     if (!form || !container) {
         return;
     }
 
-    setMessage(); // Clear any existing messages
-    form.addEventListener("input", () => setMessage());
+    if (typeof showErrorModal === "function") {
+        showGlobalErrorFn = showErrorModal;
+    }
+    if (typeof showMessageModal === "function") {
+        showGlobalMessageFn = showMessageModal;
+    }
+
+    clearMessages();
+    form.addEventListener("input", clearMessages);
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -81,8 +125,7 @@ export default function initLogin() {
             .then((response) => response.json())
             .then(async (data) => {
                 if (data.token) {
-                    await setMessageFromCode("MSG_LOGIN_SUCCESS");
-                    // You might want to store the token and user info here
+                    await showSuccessMessage("MSG_LOGIN_SUCCESS", true);
                     localStorage.setItem("user_id", data.user_id);
                     localStorage.setItem("auth_token", data.token);
                     localStorage.setItem("username", data.username);
@@ -97,11 +140,12 @@ export default function initLogin() {
                     // Redirect to the main app page or refresh
                     window.location.href = "/#/dashboard";
                 } else {
-                    setMessage(data.error || "");
+                    const errorCode = typeof data.errorCode === "string" ? data.errorCode.trim() : "";
+                    await showErrorMessage(errorCode || data.error || "ERR_INTERNAL_SERVER");
                 }
             })
-            .catch(async (error) => {
-                await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
+            .catch(async () => {
+                await showErrorMessage("ERR_INTERNAL_SERVER");
             });
     });
 
@@ -132,7 +176,7 @@ export default function initLogin() {
 
 let newUserLogic = async function () {
     await replacePageContent("public/register");
-    setMessage();
+    clearMessages();
     history.pushState({ page: "register" }, "");
     window.onpopstate = async () => {
         await replacePageContent("public/login");
@@ -164,7 +208,7 @@ let newUserLogic = async function () {
 
     const form = document.querySelector("[data-register]");
     if (form) {
-        form.addEventListener("input", () => setMessage());
+        form.addEventListener("input", clearMessages);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             const formData = new FormData(form);
@@ -192,19 +236,18 @@ let newUserLogic = async function () {
                 .then(async (data) => {
                     form.reset();
                     if (data.user) {
-                        await setMessageFromCode("MSG_REGISTRATION_SUCCESS_REDIRECT");
-                        setTimeout(async () => {
-                            await replacePageContent("public/login");
-                            initLogin();
-                            history.pushState({ page: "login" }, "");
-                        }, 3000);
+                        await showSuccessMessage("MSG_REGISTRATION_SUCCESS_REDIRECT");
+                        setTimeout(() => {
+                            const loginUrl = `${window.location.pathname}?reload=${Date.now()}#/login`;
+                            window.location.href = loginUrl;
+                        }, 1500);
                     } else {
-                        setMessage(data.error || "");
+                        await showErrorMessage(data.errorCode || data.error || "ERR_FAILED_TO_REGISTER_USER");
                     }
                 })
-                .catch(async (error) => {
+                .catch(async () => {
                     form.reset();
-                    await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
+                    await showErrorMessage("ERR_INTERNAL_SERVER");
                 });
         });
     }
@@ -262,19 +305,18 @@ let newUserLogic = async function () {
             const confirmPassword = confirmPasswordInput.value;
             if (passwordMatchContainer && password === confirmPassword) {
                 passwordMatchContainer.classList.add("hidden");
-            }else if (passwordMatchContainer) {
+            } else if (passwordMatchContainer) {
                 passwordMatchContainer.classList.remove("hidden");
             }
         };
         passwordInput.addEventListener("input", validatePasswords);
         confirmPasswordInput.addEventListener("input", validatePasswordMatch);
     }
-    
 };
 
 let forgotPasswordLogic = async function () {
     await replacePageContent("public/forgot-password_init");
-    setMessage();
+    clearMessages();
     history.pushState({ page: "forgot-password" }, "");
     window.onpopstate = async () => {
         await replacePageContent("public/login");
@@ -285,14 +327,14 @@ let forgotPasswordLogic = async function () {
 
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        form.addEventListener("input", () => setMessage());
+        form.addEventListener("input", clearMessages);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             const formData = new FormData(form);
             const email = formData.get("email");
             const user_id = formData.get("user_id");
             fetch("/api/users/reset-password/" + encodeURIComponent(email) + "/" + encodeURIComponent(user_id), {
-                method: "GET",
+                method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
                 },
@@ -300,28 +342,29 @@ let forgotPasswordLogic = async function () {
                 .then((response) => response.json())
                 .then(async (data) => {
                     if (data.message) {
-                        setMessage(data.message);
+                        await showSuccessMessage(data.message);
                     } else {
-                        setMessage(data.error || "");
+                        await showErrorMessage(data.errorCode || data.error || "ERR_PASSWORD_RESET_REQUEST_FAILED");
                     }
                 })
-                .catch(async (error) => {
-                    await setMessageFromCode("ERR_PASSWORD_RESET_REQUEST_FAILED", {}, error.message || "");
+                .catch(async () => {
+                    await showErrorMessage("ERR_PASSWORD_RESET_REQUEST_FAILED");
                 });
         });
     }
 };
 
 let newPasswordLogic = async function (resetToken) {
-    setMessage();
+    clearMessages();
     const form = document.querySelector("[data-forgot-password]");
     if (form) {
-        form.addEventListener("input", () => setMessage());
+        form.addEventListener("input", clearMessages);
         const passwordInput = document.getElementById("password");
         const confirmPasswordInput = document.getElementById("password_confirmation");
         const passwordRequirementsContainer = document.querySelector("[data-password-requirements]");
         const passwordMatchContainer = document.querySelector("[data-password-match]");
         const requirementItems = {
+            starts_with_letter: document.getElementById("starts_with_letter"),
             length: document.getElementById("length"),
             uppercase: document.getElementById("uppercase"),
             lowercase: document.getElementById("lowercase"),
@@ -340,16 +383,18 @@ let newPasswordLogic = async function (resetToken) {
 
         const validatePasswords = () => {
             if (!passwordInput) {
-                return;
+                return false;
             }
             const password = passwordInput.value;
+            const startsWithLetterMet = /^[A-Za-z]/.test(password);
             const lengthMet = password.length >= 8;
             const uppercaseMet = /[A-Z]/.test(password);
             const lowercaseMet = /[a-z]/.test(password);
             const numberMet = /[0-9]/.test(password);
             const specialMet = /[~!@#$%^&*()_+|}{":?><,./;'[\]\\=-]/.test(password);
-            const requirementsMet = lengthMet && uppercaseMet && lowercaseMet && numberMet && specialMet;
+            const requirementsMet = startsWithLetterMet && lengthMet && uppercaseMet && lowercaseMet && numberMet && specialMet;
 
+            setRequirementState("starts_with_letter", startsWithLetterMet);
             setRequirementState("length", lengthMet);
             setRequirementState("uppercase", uppercaseMet);
             setRequirementState("lowercase", lowercaseMet);
@@ -361,6 +406,8 @@ let newPasswordLogic = async function (resetToken) {
             } else if (passwordRequirementsContainer) {
                 passwordRequirementsContainer.classList.remove("hidden");
             }
+
+            return requirementsMet;
         };
 
         const validatePasswordMatch = () => {
@@ -390,7 +437,7 @@ let newPasswordLogic = async function (resetToken) {
             });
             const data = await response.json();
             if (data.error) {
-                setMessage(data.error);
+                await showErrorMessage(data.errorCode || data.error || "ERR_INVALID_OR_EXPIRED_RESET_TOKEN");
                 return;
             }
 
@@ -403,19 +450,19 @@ let newPasswordLogic = async function (resetToken) {
             }
         }
 
-        form.addEventListener("submit", (event) => {
+        form.addEventListener("submit", async (event) => {
             event.preventDefault();
             const formData = new FormData(form);
-            const securityAnswers = [
-                formData.get("security_answer_1"),
-                formData.get("security_answer_2"),
-                formData.get("security_answer_3"),
-            ];
+            const securityAnswers = [formData.get("security_answer_1"), formData.get("security_answer_2"), formData.get("security_answer_3")];
             const newPassword = formData.get("password");
             const confirmPassword = formData.get("password_confirmation");
 
+            if (!validatePasswords()) {
+                await showErrorMessage("ERR_PASSWORD_COMPLEXITY");
+                return;
+            }
             if (newPassword !== confirmPassword) {
-                setMessageFromCode("ERR_PASSWORDS_DO_NOT_MATCH");
+                await showErrorMessage("ERR_PASSWORDS_DO_NOT_MATCH");
                 return;
             }
 
@@ -429,17 +476,16 @@ let newPasswordLogic = async function (resetToken) {
                 .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
                 .then(async ({ ok, data }) => {
                     if (!ok) {
-                        setMessage(data.error || "");
+                        await showErrorMessage(data.errorCode || data.error || "ERR_FAILED_TO_RESET_PASSWORD");
                         return;
                     }
-                    await setMessageFromCode("MSG_PASSWORD_RESET_SUCCESS");
+                    await showSuccessMessage("MSG_PASSWORD_RESET_SUCCESS");
                     setTimeout(async () => {
-                        const loginUrl = `${window.location.pathname}?reload=${Date.now()}#/login`;
-                        window.location.href = loginUrl;
-                    }, 1500);
+                        window.location.hash = "#/login";
+                    }, 1200);
                 })
-                .catch(async (error) => {
-                    await setMessageFromCode("ERR_INTERNAL_SERVER", {}, error.message || "");
+                .catch(async () => {
+                    await showErrorMessage("ERR_INTERNAL_SERVER");
                 });
         });
     }

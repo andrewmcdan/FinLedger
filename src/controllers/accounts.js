@@ -74,6 +74,110 @@ const SORT_FIELD_MAP = {
 };
 
 const normalizeQueryValue = (value) => (Array.isArray(value) ? value[0] : value);
+const ORDER_INDEX_STEP = 10;
+const DEFAULT_ORDER_INDEX = 10;
+const ACCOUNT_NUMBER_LENGTH = 10;
+const ACCOUNT_NUMBER_SUFFIX_WIDTH = 4;
+const ACCOUNT_NUMBER_SEGMENT_WIDTH = 2;
+
+function parseOptionalOrderIndex(rawValue) {
+    if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+        return null;
+    }
+    const normalized = String(rawValue).trim();
+    if (!/^-?\d+$/.test(normalized)) {
+        throw new Error(`Invalid order index: ${rawValue}`);
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new Error(`Invalid order index: ${rawValue}`);
+    }
+    return parsed;
+}
+
+function computeResolvedOrderIndex(existingIndexes, requestedOrderIndex) {
+    const sortedUnique = [...new Set(
+        (Array.isArray(existingIndexes) ? existingIndexes : [])
+            .map((value) => Number(value))
+            .filter(Number.isFinite),
+    )].sort((a, b) => a - b);
+
+    if (requestedOrderIndex === null) {
+        if (sortedUnique.length === 0) {
+            return DEFAULT_ORDER_INDEX;
+        }
+        return sortedUnique[sortedUnique.length - 1] + ORDER_INDEX_STEP;
+    }
+
+    if (!sortedUnique.includes(requestedOrderIndex)) {
+        return requestedOrderIndex;
+    }
+
+    const nextHigher = sortedUnique.find((value) => value > requestedOrderIndex);
+    if (nextHigher === undefined) {
+        return requestedOrderIndex + ORDER_INDEX_STEP;
+    }
+
+    const midpoint = requestedOrderIndex + Math.floor((nextHigher - requestedOrderIndex) / 2);
+    if (midpoint > requestedOrderIndex && midpoint < nextHigher) {
+        return midpoint;
+    }
+
+    return null;
+}
+
+async function listCategoryOrderIndexes(client) {
+    const result = await client.query("SELECT order_index FROM account_categories ORDER BY order_index ASC, id ASC");
+    return result.rows.map((row) => Number(row.order_index)).filter(Number.isFinite);
+}
+
+async function listSubcategoryOrderIndexes(client, accountCategoryId) {
+    const result = await client.query(
+        "SELECT order_index FROM account_subcategories WHERE account_category_id = $1 ORDER BY order_index ASC, id ASC",
+        [accountCategoryId],
+    );
+    return result.rows.map((row) => Number(row.order_index)).filter(Number.isFinite);
+}
+
+async function rebalanceCategoryOrderIndexes(client) {
+    await client.query(`
+        WITH ranked AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY order_index ASC, id ASC) AS rn
+            FROM account_categories
+        )
+        UPDATE account_categories AS categories
+        SET order_index = ranked.rn * $1
+        FROM ranked
+        WHERE categories.id = ranked.id
+    `, [ORDER_INDEX_STEP]);
+}
+
+async function rebalanceSubcategoryOrderIndexes(client, accountCategoryId) {
+    await client.query(`
+        WITH ranked AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY order_index ASC, id ASC) AS rn
+            FROM account_subcategories
+            WHERE account_category_id = $1
+        )
+        UPDATE account_subcategories AS subcategories
+        SET order_index = ranked.rn * $2
+        FROM ranked
+        WHERE subcategories.id = ranked.id
+    `, [accountCategoryId, ORDER_INDEX_STEP]);
+}
+
+async function resolveOrderIndexWithSpacing({ client, requestedOrderIndex, loadIndexes, rebalanceIndexes }) {
+    const normalizedRequestedIndex = parseOptionalOrderIndex(requestedOrderIndex);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        const existingIndexes = await loadIndexes();
+        const resolved = computeResolvedOrderIndex(existingIndexes, normalizedRequestedIndex);
+        if (resolved !== null) {
+            return resolved;
+        }
+        await rebalanceIndexes();
+    }
+    throw new Error("Failed to resolve order index.");
+}
 
 const buildAccountFilterClauses = ({ filterField, filterValue, filterMin, filterMax }, params) => {
     const clauses = [];
@@ -173,10 +277,6 @@ async function listAccounts(userId, token, offset = 0, limit = 25, options = {})
     const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
-    // if (!isAdminUser && !isManagerUser) {
-    //     params.push(userId);
-    //     whereClauses.push(`accounts.user_id = $${params.length}`);
-    // }
     const filterClauses = buildAccountFilterClauses(
         {
             filterField: options?.filterField,
@@ -211,10 +311,6 @@ async function getAccountCounts(userId, token, options = {}) {
     const whereClauses = [];
     const isAdminUser = await isAdmin(userId, token);
     const isManagerUser = await isManager(userId, token);
-    // if (!isAdminUser && !isManagerUser) {
-    //     params.push(userId);
-    //     whereClauses.push(`accounts.user_id = $${params.length}`);
-    // }
     const filterClauses = buildAccountFilterClauses(
         {
             filterField: options?.filterField,
@@ -280,8 +376,8 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
         throw new Error(`Invalid account order: ${accountOrder}`);
     }
 
-    const orderCode = String(orderValue).padStart(2, "0");
-    if (orderCode.length !== 2) {
+    const orderCode = String(orderValue).padStart(ACCOUNT_NUMBER_SEGMENT_WIDTH, "0");
+    if (orderCode.length !== ACCOUNT_NUMBER_SEGMENT_WIDTH) {
         log("error", "Account order out of bounds", { accountCategory, accountSubcategory, accountOrder }, getCallerInfo());
         throw new Error(`Account order must be between 0 and 99. Received: ${accountOrder}`);
     }
@@ -291,12 +387,23 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
         const category = await resolveCategory(client, accountCategory);
         const subcategory = await resolveSubcategory(client, accountSubcategory, category.id);
 
-        const categoryCode = String(category.account_number_prefix).padStart(2, "0");
-        const subcategoryCode = String(subcategory.order_index).padStart(2, "0");
+        const rawCategoryPrefix = String(category.account_number_prefix ?? "").trim();
+        if (!/^\d{2}$/.test(rawCategoryPrefix) || rawCategoryPrefix.startsWith("0")) {
+            log("error", "Invalid category prefix for account number generation", { accountCategory, rawCategoryPrefix }, getCallerInfo());
+            throw new Error(`Account category prefix must be a two-digit number between 10 and 99. Category: ${accountCategory}`);
+        }
+        const categoryCode = rawCategoryPrefix;
+
+        const subcategoryOrderIndex = Number.parseInt(subcategory.order_index, 10);
+        if (!Number.isFinite(subcategoryOrderIndex) || subcategoryOrderIndex < 0 || subcategoryOrderIndex > 99) {
+            log("error", "Invalid subcategory order index for account number generation", { accountSubcategory, subcategoryOrderIndex }, getCallerInfo());
+            throw new Error(`Account subcategory order index must be between 0 and 99. Subcategory: ${accountSubcategory}`);
+        }
+        const subcategoryCode = String(subcategoryOrderIndex).padStart(ACCOUNT_NUMBER_SEGMENT_WIDTH, "0");
         const base = `${categoryCode}${subcategoryCode}${orderCode}`;
 
         const suffixRes = await client.query(
-            `SELECT MAX(CAST(RIGHT(account_number::text, 2) AS INT)) AS max_suffix
+            `SELECT MAX(CAST(RIGHT(account_number::text, ${ACCOUNT_NUMBER_SUFFIX_WIDTH}) AS INT)) AS max_suffix
              FROM accounts
              WHERE account_category_id = $1
                AND account_subcategory_id = $2
@@ -306,15 +413,20 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
 
         const maxSuffix = suffixRes.rows[0]?.max_suffix;
         const nextSuffix = maxSuffix === null || maxSuffix === undefined ? 0 : Number(maxSuffix) + 1;
-        if (nextSuffix > 99) {
+        if (nextSuffix > (10 ** ACCOUNT_NUMBER_SUFFIX_WIDTH) - 1) {
             log("error", "Account suffix overflow", { accountCategory, accountSubcategory, accountOrder: orderValue }, getCallerInfo());
             throw new Error(`Account suffix overflow for ${accountCategory} / ${accountSubcategory} / order ${orderValue}`);
         }
 
-        const suffixCode = String(nextSuffix).padStart(2, "0");
-        log("debug", "Account number generated", { accountNumber: `${base}${suffixCode}`, categoryId: category.id, subcategoryId: subcategory.id }, getCallerInfo());
+        const suffixCode = String(nextSuffix).padStart(ACCOUNT_NUMBER_SUFFIX_WIDTH, "0");
+        const accountNumber = `${base}${suffixCode}`;
+        if (accountNumber.length !== ACCOUNT_NUMBER_LENGTH) {
+            log("error", "Generated account number has invalid length", { accountNumber, length: accountNumber.length }, getCallerInfo());
+            throw new Error(`Generated account number must be ${ACCOUNT_NUMBER_LENGTH} digits.`);
+        }
+        log("debug", "Account number generated", { accountNumber, categoryId: category.id, subcategoryId: subcategory.id }, getCallerInfo());
         return {
-            accountNumber: `${base}${suffixCode}`,
+            accountNumber,
             categoryId: category.id,
             subcategoryId: subcategory.id,
         };
@@ -323,10 +435,15 @@ async function generateNewAccountNumber(accountCategory, accountSubcategory, acc
 
 async function listAccountCategories() {
     log("debug", "Listing account categories", {}, getCallerInfo());
-    let query = "SELECT * FROM account_categories ORDER BY name ASC";
+    let query = "SELECT * FROM account_categories ORDER BY order_index ASC, name ASC";
     const result = {};
     result.categories = (await db.query(query)).rows;
-    query = "SELECT * FROM account_subcategories ORDER BY account_category_id ASC, order_index ASC, name ASC";
+    query = `
+        SELECT subcategories.*
+        FROM account_subcategories AS subcategories
+        JOIN account_categories AS categories ON categories.id = subcategories.account_category_id
+        ORDER BY categories.order_index ASC, categories.name ASC, subcategories.order_index ASC, subcategories.name ASC
+    `;
     result.subcategories = (await db.query(query)).rows;
     log("debug", "Account categories listed", { categoryCount: result.categories.length, subcategoryCount: result.subcategories.length }, getCallerInfo());
     return result;
@@ -406,6 +523,10 @@ async function updateAccountField({ account_id, field, value, user_id }) {
             return { success: false, message: numericResult.message };
         }
         resolvedValue = numericResult.value;
+        if (field === "account_number" && String(resolvedValue).length !== ACCOUNT_NUMBER_LENGTH) {
+            log("warn", "Invalid account number length during update", { account_id, value: resolvedValue }, getCallerInfo());
+            return { success: false, message: `Account number must be exactly ${ACCOUNT_NUMBER_LENGTH} digits.` };
+        }
     } else if (field === "statement_type") {
         const statementResult = normalizeStatementType(value);
         if (!statementResult.ok) {
@@ -497,14 +618,20 @@ async function setAccountStatus(accountId, status, userId) {
     }
 }
 
-async function addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription, changedByUserId = null) {
-    log("info", "Adding account category", { categoryName, accountNumberPrefix, initialSubcategoryName }, getCallerInfo());
+async function addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription, orderIndex, changedByUserId = null) {
+    log("info", "Adding account category", { categoryName, accountNumberPrefix, initialSubcategoryName, orderIndex }, getCallerInfo());
     sanitizeInput(categoryName);
     sanitizeInput(accountNumberPrefix);
     sanitizeInput(categoryDescription);
     sanitizeInput(initialSubcategoryName);
     sanitizeInput(initialSubcategoryDescription);
+    sanitizeInput(orderIndex);
     return db.transaction(async (client) => {
+        const normalizedPrefix = String(accountNumberPrefix ?? "").trim();
+        if (!/^\d{2}$/.test(normalizedPrefix) || normalizedPrefix.startsWith("0")) {
+            log("warn", "Invalid account number prefix for category", { categoryName, accountNumberPrefix }, getCallerInfo());
+            throw new Error(`Account number prefix must be a two-digit number between 10 and 99. Received: ${accountNumberPrefix}`);
+        }
         const categoryCheck = await client.query("SELECT id FROM account_categories WHERE name = $1", [categoryName]);
         if (categoryCheck.rows.length > 0) {
             log("warn", "Account category already exists", { categoryName }, getCallerInfo());
@@ -515,12 +642,18 @@ async function addCategory(categoryName, accountNumberPrefix, categoryDescriptio
             log("warn", "Account subcategory already exists", { initialSubcategoryName }, getCallerInfo());
             throw new Error(`Account subcategory with name "${initialSubcategoryName}" already exists.`);
         }
+        const resolvedCategoryOrderIndex = await resolveOrderIndexWithSpacing({
+            client,
+            requestedOrderIndex: orderIndex,
+            loadIndexes: () => listCategoryOrderIndexes(client),
+            rebalanceIndexes: () => rebalanceCategoryOrderIndexes(client),
+        });
         const categoryResult = await client.query(
             `
-            INSERT INTO account_categories (name, description, account_number_prefix)
-            VALUES ($1, $2, $3)
+            INSERT INTO account_categories (name, description, account_number_prefix, order_index)
+            VALUES ($1, $2, $3, $4)
             RETURNING *`,
-            [categoryName, categoryDescription || null, accountNumberPrefix],
+            [categoryName, categoryDescription || null, normalizedPrefix, resolvedCategoryOrderIndex],
         );
         if (categoryResult.rows.length === 0) {
             log("error", "Category creation failed", { categoryName }, getCallerInfo());
@@ -532,7 +665,7 @@ async function addCategory(categoryName, accountNumberPrefix, categoryDescriptio
             INSERT INTO account_subcategories (name, description, account_category_id, order_index)
             VALUES ($1, $2, $3, $4)
             RETURNING *`,
-            [initialSubcategoryName, initialSubcategoryDescription || null, category.id, 0],
+            [initialSubcategoryName, initialSubcategoryDescription || null, category.id, DEFAULT_ORDER_INDEX],
         );
         if (subcategoryResult.rows.length === 0) {
             log("error", "Subcategory creation failed", { initialSubcategoryName, categoryId: category.id }, getCallerInfo());
@@ -560,14 +693,12 @@ async function addSubcategory(subcategoryName, accountCategoryId, orderIndex, su
             log("warn", "Account subcategory already exists for category", { subcategoryName, accountCategoryId }, getCallerInfo());
             throw new Error(`Account subcategory with name "${subcategoryName}" already exists for category ID ${accountCategoryId}.`);
         }
-        let resolvedOrderIndex = Number.parseInt(orderIndex, 10);
-        if (!Number.isFinite(resolvedOrderIndex)) {
-            const nextIndexResult = await client.query(
-                "SELECT COALESCE(MAX(order_index), 0) + 1 AS next_index FROM account_subcategories WHERE account_category_id = $1",
-                [accountCategoryId],
-            );
-            resolvedOrderIndex = nextIndexResult.rows[0]?.next_index ?? 0;
-        }
+        const resolvedOrderIndex = await resolveOrderIndexWithSpacing({
+            client,
+            requestedOrderIndex: orderIndex,
+            loadIndexes: () => listSubcategoryOrderIndexes(client, accountCategoryId),
+            rebalanceIndexes: () => rebalanceSubcategoryOrderIndexes(client, accountCategoryId),
+        });
         const result = await client.query(
             `
             INSERT INTO account_subcategories (name, description, account_category_id, order_index)

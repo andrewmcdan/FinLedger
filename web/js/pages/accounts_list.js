@@ -345,6 +345,8 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                     } else if (column === "account_number") {
                         const input = createInput("number", rawValue, inputAttr);
                         input.step = "1";
+                        input.min = "1000000000";
+                        input.max = "9999999999";
                         cell.replaceChildren(input);
                     } else if (column === "account_description" || column === "comment") {
                         const textarea = createTextarea(rawValue, inputAttr, 2);
@@ -814,6 +816,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     const subcategoryNameInput = document.getElementById("add_category__subcategory_name_existing");
     const subcategoryDescriptionInput = document.getElementById("add_category__subcategory_description_existing");
     const accountPrefixInput = document.getElementById("account_number_prefix");
+    const orderIndexInput = document.getElementById("order_index");
     const populateCategorySelect = () => {
         if (!categorySelect) {
             return;
@@ -939,6 +942,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             const subcategoryDescription = subcategoryDescriptionInput ? subcategoryDescriptionInput.value.trim() : "";
             const initialSubcategoryName = initialSubcategoryNameInput ? initialSubcategoryNameInput.value.trim() : "";
             const initialSubcategoryDescription = initialSubcategoryDescriptionInput ? initialSubcategoryDescriptionInput.value.trim() : "";
+            const orderIndex = orderIndexInput ? orderIndexInput.value.trim() : "";
             try {
                 const response = await fetchWithAuth("/api/accounts/add-category", {
                     method: "POST",
@@ -955,6 +959,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                         subcategoryDescription,
                         initialSubcategoryName,
                         initialSubcategoryDescription,
+                        orderIndex,
                     }),
                 });
                 if (!response.ok) {

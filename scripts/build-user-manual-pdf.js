@@ -91,19 +91,6 @@ function collectSources(manualDir) {
     const sources = [];
     const warnings = [];
 
-    const topReadme = path.join(manualDir, "README.md");
-    if (fs.existsSync(topReadme)) {
-        sources.push({
-            key: "overview",
-            title: "Manual Framework",
-            anchor: "sec_manual_framework",
-            filePath: topReadme,
-            content: fs.readFileSync(topReadme, "utf8"),
-        });
-    } else {
-        warnings.push(`Missing top-level README: ${path.relative(REPO_ROOT, topReadme)}`);
-    }
-
     const sectionDirs = sortSectionDirs(
         fs.readdirSync(manualDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && SECTION_DIR_PATTERN.test(entry.name)),
     );

@@ -1,9 +1,10 @@
+-- Journal entry header table (one row per accounting entry).
 CREATE TABLE IF NOT EXISTS journal_entries (
     id SERIAL PRIMARY KEY,
     journal_type TEXT NOT NULL CHECK (journal_type IN ('general', 'adjusting')),
     entry_date TIMESTAMP NOT NULL DEFAULT NOW(),
     description TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('draft', 'approved', 'posted', 'voided')),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
     total_debits NUMERIC(18, 2) NOT NULL,
     total_credits NUMERIC(18, 2) NOT NULL,
     created_by INTEGER NOT NULL REFERENCES users(id),
@@ -15,12 +16,14 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     posted_at TIMESTAMP
 );
 
+-- Query helpers for posting workflows and date-based reporting.
 CREATE INDEX IF NOT EXISTS idx_journal_entries_entry_date
 ON journal_entries(entry_date);
 
 CREATE INDEX IF NOT EXISTS idx_journal_entries_status
 ON journal_entries(status);
 
+-- Journal line items (debit/credit rows) under each entry header.
 CREATE TABLE IF NOT EXISTS journal_entry_lines (
     id SERIAL PRIMARY KEY,
     journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
@@ -36,6 +39,7 @@ CREATE TABLE IF NOT EXISTS journal_entry_lines (
     updated_by INTEGER NOT NULL REFERENCES users(id)
 );
 
+-- Lookup indexes used by journal and reconciliation screens.
 CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_journal_entry_id
 ON journal_entry_lines(journal_entry_id);
 
@@ -48,6 +52,8 @@ ON journal_entry_lines(dc);
 CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_amount
 ON journal_entry_lines(amount);
 
+-- Ledger postings derived from approved/posted journal lines.
+-- pr_journal_ref stores the posting-reference notation used in ledgers.
 CREATE TABLE IF NOT EXISTS ledger_entries (
     id SERIAL PRIMARY KEY,
     account_id INTEGER NOT NULL REFERENCES accounts(id),

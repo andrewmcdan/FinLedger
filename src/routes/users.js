@@ -2,16 +2,27 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("node:crypto");
 const uploadNone = multer();
 const userIconRoot = path.resolve(__dirname, "./../../user-icons/");
 const allowedImageExts = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+const imageMimeToExt = new Map([
+    ["image/png", ".png"],
+    ["image/jpeg", ".jpg"],
+    ["image/gif", ".gif"],
+    ["image/webp", ".webp"],
+]);
 
 fs.mkdirSync(userIconRoot, { recursive: true });
 
 const profileStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, userIconRoot),
     filename: (req, file, cb) => {
-        cb(null, path.basename(file.originalname));
+        const extension = imageMimeToExt.get((file.mimetype || "").toLowerCase());
+        if (!extension) {
+            return cb(new Error("ERR_INVALID_FILE_TYPE"));
+        }
+        return cb(null, `${crypto.randomUUID()}${extension}`);
     },
 });
 
@@ -19,8 +30,9 @@ const uploadProfile = multer({
     storage: profileStorage,
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase();
-        if (!allowedImageExts.has(ext)) {
+        const ext = path.extname(file.originalname || "").toLowerCase();
+        const mimeExtension = imageMimeToExt.get((file.mimetype || "").toLowerCase());
+        if (!mimeExtension || !allowedImageExts.has(ext)) {
             return cb(new Error("ERR_INVALID_FILE_TYPE"));
         }
         return cb(null, true);
@@ -28,7 +40,6 @@ const uploadProfile = multer({
 });
 const router = express.Router();
 const {
-    getUserLoggedInStatus,
     getUserByUsername,
     setUserPassword,
     isAdmin,
@@ -58,6 +69,14 @@ const utilities = require("../utils/utilities.js");
 const { sendEmail } = require("../services/email.js");
 const db = require("../db/db.js");
 const { sendApiError, sendApiSuccess } = require("../utils/api_messages");
+
+const ensureAuthenticatedUser = (req, res, next) => {
+    if (!req.user?.id) {
+        log("warn", "Unauthorized upload request", { path: req.path }, utilities.getCallerInfo());
+        return sendApiError(res, 401, "ERR_UNAUTHORIZED");
+    }
+    return next();
+};
 
 router.get("/security-questions-list", async (req, res) => {
     log("debug", "Security questions list requested", { userId: req.user?.id }, utilities.getCallerInfo(), req.user?.id);
@@ -149,7 +168,7 @@ router.post("/email-user", async (req, res) => {
     }
 });
 
-router.get("/approve-user/:userId", async (req, res) => {
+router.patch("/approve-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         return sendApiError(res, 401, "ERR_UNAUTHORIZED");
@@ -180,7 +199,7 @@ router.get("/approve-user/:userId", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_APPROVED_SUCCESS");
 });
 
-router.get("/reject-user/:userId", async (req, res) => {
+router.patch("/reject-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized reject-user request", { path: req.path }, utilities.getCallerInfo());
@@ -204,11 +223,7 @@ router.get("/reject-user/:userId", async (req, res) => {
     log("info", `User ID ${userIdToReject} rejected by admin user ID ${requestingUserId}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
 
     try {
-        const emailResult = await sendEmail(
-            userData.email,
-            "Your FinLedger Access Request Was Not Approved",
-            `Dear ${userData.first_name},\n\nWe regret to inform you that your FinLedger access request was not approved at this time.\n\nIf you believe this is in error, please contact an administrator for further assistance.\n\nBest regards,\nThe FinLedger Team\n\n`,
-        );
+        const emailResult = await sendEmail(userData.email, "Your FinLedger Access Request Was Not Approved", `Dear ${userData.first_name},\n\nWe regret to inform you that your FinLedger access request was not approved at this time.\n\nIf you believe this is in error, please contact an administrator for further assistance.\n\nBest regards,\nThe FinLedger Team\n\n`);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send rejection email to ${userData.email} for user ID ${userIdToReject}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
         }
@@ -219,7 +234,7 @@ router.get("/reject-user/:userId", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_REJECTED_SUCCESS");
 });
 
-router.post("/create-user", uploadProfile.single("user_icon"), async (req, res) => {
+router.post("/create-user", ensureAuthenticatedUser, uploadProfile.single("user_icon"), async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         return sendApiError(res, 401, "ERR_UNAUTHORIZED");
@@ -324,7 +339,7 @@ router.post("/update-security-questions", async (req, res) => {
     }
 });
 
-router.post("/update-profile", uploadProfile.single("profile_image"), async (req, res) => {
+router.post("/update-profile", ensureAuthenticatedUser, uploadProfile.single("profile_image"), async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized update-profile request", { path: req.path }, utilities.getCallerInfo());
@@ -335,6 +350,13 @@ router.post("/update-profile", uploadProfile.single("profile_image"), async (req
     if (!userData) {
         log("warn", "Update profile user not found", { requestingUserId }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
+    }
+    // If the DB does not return the user_icon_path and a file was uploaded, then remove the any uploaded file and send an error.
+    if (req.file?.path && (userData.user_icon_path === undefined || userData.user_icon_path === "")) {
+        if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        return sendApiError(res, 500, "ERR_FAILED_TO_UPDATE_PROFILE_IMAGE");
     }
     const profileUpdates = {
         first_name: req.body.first_name,
@@ -425,11 +447,13 @@ router.post("/register_new_user", async (req, res) => {
 
         const adminResult = await listAdministratorContacts(newUser.id);
         const adminSubject = "New FinLedger Access Request Pending Approval";
-        const adminNotifyResults = await Promise.allSettled(adminResult.map((adminRow) => {
-            const adminFirstName = adminRow.first_name || "Administrator";
-            const adminBody = `Dear ${adminFirstName},\n\nA new user has requested access to FinLedger and is pending approval.\n\nName: ${first_name} ${last_name}\nEmail: ${email}\nRequested Role: ${role}\n\nPlease review this request in the user management area.\n\nBest regards,\nThe FinLedger Team\n\n`;
-            return sendEmail(adminRow.email, adminSubject, adminBody);
-        }));
+        const adminNotifyResults = await Promise.allSettled(
+            adminResult.map((adminRow) => {
+                const adminFirstName = adminRow.first_name || "Administrator";
+                const adminBody = `Dear ${adminFirstName},\n\nA new user has requested access to FinLedger and is pending approval.\n\nName: ${first_name} ${last_name}\nEmail: ${email}\nRequested Role: ${role}\n\nPlease review this request in the user management area.\n\nBest regards,\nThe FinLedger Team\n\n`;
+                return sendEmail(adminRow.email, adminSubject, adminBody);
+            }),
+        );
         for (let i = 0; i < adminNotifyResults.length; i += 1) {
             const result = adminNotifyResults[i];
             const adminEmail = adminResult[i]?.email;
@@ -440,11 +464,15 @@ router.post("/register_new_user", async (req, res) => {
             }
         }
 
-        await updateSecurityQuestions(newUser.id, [
-            { question: security_question_1, answer: security_answer_1 },
-            { question: security_question_2, answer: security_answer_2 },
-            { question: security_question_3, answer: security_answer_3 },
-        ], newUser.id);
+        await updateSecurityQuestions(
+            newUser.id,
+            [
+                { question: security_question_1, answer: security_answer_1 },
+                { question: security_question_2, answer: security_answer_2 },
+                { question: security_question_3, answer: security_answer_3 },
+            ],
+            newUser.id,
+        );
         return res.json({ user: newUser });
     } catch (error) {
         log("error", `Error registering new user: ${error}`, { function: "register_new_user" }, utilities.getCallerInfo());
@@ -452,7 +480,7 @@ router.post("/register_new_user", async (req, res) => {
     }
 });
 
-router.get("/reset-password/:email/:userName", async (req, res) => {
+router.patch("/reset-password/:email/:userName", async (req, res) => {
     const userNameToReset = req.params.userName;
     const emailToReset = req.params.email;
     log("info", "Password reset request received", { userNameToReset, emailToReset }, utilities.getCallerInfo());
@@ -477,10 +505,7 @@ router.get("/reset-password/:email/:userName", async (req, res) => {
     const resetLink = `${resetLinkUrlBase}/#/login?userId=${userData2.id}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
-    await db.query(
-        "UPDATE users SET reset_token = $1, reset_token_expires_at = $2, reset_failed_attempts = 0, updated_at = now() WHERE id = $3",
-        [resetToken, tokenExpiry, userData2.id],
-    );
+    await db.query("UPDATE users SET reset_token = $1, reset_token_expires_at = $2, reset_failed_attempts = 0, updated_at = now() WHERE id = $3", [resetToken, tokenExpiry, userData2.id]);
     const emailResult = await sendEmail(
         userData2.email,
         "FinLedger Password Reset Request",
@@ -508,6 +533,10 @@ router.get("/security-questions/:resetToken", async (req, res) => {
 router.post("/verify-security-answers/:resetToken", async (req, res) => {
     const resetToken = req.params.resetToken;
     const { securityAnswers, newPassword } = req.body;
+    if (!Array.isArray(securityAnswers) || securityAnswers.length !== 3) {
+        log("error", "Security answer verification requires exactly 3 answers.", { securityAnswers }, utilities.getCallerInfo());
+        return sendApiError(res, 400, "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED");
+    }
     log("info", "Verify security answers request received", {}, utilities.getCallerInfo());
     const userData = await getUserByResetToken(resetToken);
     if (!userData) {
@@ -521,10 +550,7 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     const verified = await verifySecurityAnswers(userData.id, securityAnswers);
     if (!verified) {
         log("warn", `Security answers verification failed for user ID ${userData.id} during password reset`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
-        const attemptResult = await db.query(
-            "UPDATE users SET reset_failed_attempts = LEAST(reset_failed_attempts + 1, 3), updated_at = now() WHERE id = $1 RETURNING reset_failed_attempts",
-            [userData.id],
-        );
+        const attemptResult = await db.query("UPDATE users SET reset_failed_attempts = LEAST(reset_failed_attempts + 1, 3), updated_at = now() WHERE id = $1 RETURNING reset_failed_attempts", [userData.id]);
         const failedAttempts = Number(attemptResult.rows[0]?.reset_failed_attempts || 0);
         if (failedAttempts >= 3) {
             log("warn", `Password reset verification locked after max attempts for user ID ${userData.id}`, { function: "verify-security-answers" }, utilities.getCallerInfo(), userData.id);
@@ -534,10 +560,7 @@ router.post("/verify-security-answers/:resetToken", async (req, res) => {
     }
     try {
         await changePassword(userData.id, newPassword);
-        await db.query(
-            "UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, reset_failed_attempts = 0, updated_at = now() WHERE id = $1",
-            [userData.id],
-        );
+        await db.query("UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, reset_failed_attempts = 0, updated_at = now() WHERE id = $1", [userData.id]);
         log("info", "Password reset successful via security answers", { userId: userData.id }, utilities.getCallerInfo(), userData.id);
         return sendApiSuccess(res, "MSG_PASSWORD_RESET_SUCCESS");
     } catch (error) {
@@ -578,7 +601,7 @@ router.post("/suspend-user", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_SUSPENDED_SUCCESS");
 });
 
-router.get("/reinstate-user/:userId", async (req, res) => {
+router.patch("/reinstate-user/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized reinstate-user request", { path: req.path }, utilities.getCallerInfo());
@@ -624,12 +647,13 @@ router.post("/update-user-field", async (req, res) => {
         log("warn", "Update user field target not found", { requestingUserId, userId }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
     }
-    const allowedFields = new Set(["fullname", "first_name", "last_name", "email", "role", "status", "address", "date_of_birth", "last_login_at", "password_expires_at", "suspension_start_at", "suspension_end_at", "temp_password"]);
+    const allowedFields = new Set(["fullname", "first_name", "last_name", "email", "role", "status", "address", "date_of_birth", "password_expires_at", "suspension_start_at", "suspension_end_at"]);
     if (!allowedFields.has(fieldName)) {
         log("warn", "Update user field rejected due to disallowed field", { requestingUserId, userId, fieldName }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 400, "ERR_FIELD_CANNOT_BE_UPDATED");
     }
     if (fieldName === "fullname") {
+        if (typeof newValue !== "string") return sendApiError(res, 400, "ERR_FIELD_CANNOT_BE_UPDATED");
         const nameParts = newValue.trim().split(" ");
         const firstName = nameParts.shift();
         const lastName = nameParts.join(" ");
@@ -665,7 +689,7 @@ router.post("/delete-user", async (req, res) => {
     return sendApiSuccess(res, "MSG_USER_DELETED_SUCCESS");
 });
 
-router.get("/reset-user-password/:userId", async (req, res) => {
+router.patch("/reset-user-password/:userId", async (req, res) => {
     const requestingUserId = req.user.id;
     if (!requestingUserId) {
         log("warn", "Unauthorized reset-user-password request", { path: req.path }, utilities.getCallerInfo());

@@ -1,3 +1,4 @@
+-- Adjustment header metadata tied to an adjusting journal entry.
 CREATE TABLE IF NOT EXISTS adjustment_metadata (
     id SERIAL PRIMARY KEY,
     journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
@@ -8,6 +9,7 @@ CREATE TABLE IF NOT EXISTS adjustment_metadata (
     notes TEXT
 );
 
+-- Individual debit/credit lines for each adjustment header.
 CREATE TABLE IF NOT EXISTS adjustment_lines (
     id SERIAL PRIMARY KEY,
     adjustment_metadata_id INTEGER NOT NULL REFERENCES adjustment_metadata(id) ON DELETE CASCADE,

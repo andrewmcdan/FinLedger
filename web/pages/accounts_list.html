@@ -79,10 +79,13 @@
                 <article>
                     <% allCategories.categories.forEach(function(category) { %>
                     <article class="data-row">
-                        <p class="value"><span><%= category.name %></span></p>
+                        <p class="value">
+                            <span><%= category.name %></span>
+                            <span class="meta"> (Order Index: <%= category.order_index %>)</span>
+                        </p>
                     </article>
                     <% allCategories.subcategories.filter(function(subcat) { return subcat.account_category_id === category.id; }).forEach(function(subcategory) { %>
-                    <article class="data-row" style="margin-left: 20px">&mdash; <%= subcategory.name %></article>
+                    <article class="data-row" style="margin-left: 20px">&mdash; <%= subcategory.name %> <span class="meta">(Order Index: <%= subcategory.order_index %>)</span></article>
                     <% }); }); %>
                 </article>
                 <article class="data-row">
@@ -210,6 +213,10 @@
                     <tr data-account-prefix-row>
                         <td><label for="account_number_prefix" title="Enter the account number prefix">Account Number Prefix:</label></td>
                         <td><input type="text" id="account_number_prefix" name="account_number_prefix" required /></td>
+                    </tr>
+                    <tr data-order-index-row>
+                        <td><label for="order_index" title="Enter the desired order index">Order Index (Optional):</label></td>
+                        <td><input type="number" id="order_index" name="order_index" /></td>
                     </tr>
                 </table>
                 <button type="submit" class="button-primary" id="save_category_button" title="Save the category">Save Category</button>

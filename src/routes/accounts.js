@@ -153,7 +153,7 @@ router.post("/add-category", async (req, res) => {
                 log("warn", "Add category request missing required fields", { userId }, utilities.getCallerInfo(), userId);
                 return sendApiError(res, 400, "ERR_CATEGORY_PREFIX_SUBCATEGORY_REQUIRED");
             }
-            result = await accountsController.addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription, userId);
+            result = await accountsController.addCategory(categoryName, accountNumberPrefix, categoryDescription, initialSubcategoryName, initialSubcategoryDescription, orderIndex, userId);
         }
         log("info", "Add category request completed", { userId, isSubcategory }, utilities.getCallerInfo(), userId);
         res.json(result);
@@ -176,7 +176,7 @@ router.delete("/category/:categoryId", async (req, res) => {
     const { categoryId } = req.params;
     try {
         log("info", "Delete category request received", { userId, categoryId }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.deleteCategory(categoryId, userId); 
+        const result = await accountsController.deleteCategory(categoryId, userId);
         log("info", "Delete category request completed", { userId, categoryId }, utilities.getCallerInfo(), userId);
         res.json(result);
     } catch (error) {
@@ -202,7 +202,7 @@ router.delete("/subcategory/:subcategoryId", async (req, res) => {
     const { subcategoryId } = req.params;
     try {
         log("info", "Delete subcategory request received", { userId, subcategoryId }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.deleteSubcategory(subcategoryId, userId); 
+        const result = await accountsController.deleteSubcategory(subcategoryId, userId);
         log("info", "Delete subcategory request completed", { userId, subcategoryId }, utilities.getCallerInfo(), userId);
         res.json(result);
     } catch (error) {
@@ -228,7 +228,7 @@ router.post("/set-account-status", async (req, res) => {
     const { account_id, is_active } = req.body;
     try {
         log("info", "Set account status request received", { userId, account_id, status: is_active ? "active" : "inactive" }, utilities.getCallerInfo(), userId);
-        const result = await accountsController.setAccountStatus(account_id, is_active?"active":"inactive", userId);
+        const result = await accountsController.setAccountStatus(account_id, is_active ? "active" : "inactive", userId);
         log("info", "Set account status request completed", { userId, account_id, status: is_active ? "active" : "inactive" }, utilities.getCallerInfo(), userId);
         res.json(result);
     } catch (error) {

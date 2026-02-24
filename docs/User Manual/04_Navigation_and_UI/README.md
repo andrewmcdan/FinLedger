@@ -1,119 +1,132 @@
 # Navigation and UI
 
-This section explains how users move through FinLedger and what UI patterns are used consistently across pages.
+This section describes current navigation patterns and shared UI behavior.
 
 ## Navigation Model
 
-FinLedger uses a single-page application (SPA) pattern.
+FinLedger uses a single-page application (SPA) shell.
 
-- The page frame (header and navigation) stays on screen.
-- Main content is loaded into the center content area.
-- URL hash routes control which page appears (for example `#/dashboard`).
-
-Default route:
-
-- If no route is provided, FinLedger loads `Dashboard`.
+- Header and navigation remain visible while route content changes.
+- Main page content renders in the central app container.
+- Hash routes control page selection (for example `#/dashboard`).
+- If no route is provided, the app loads `Dashboard`.
 
 ## Header Layout
 
-The global header includes:
+Global header elements:
 
 - FinLedger logo and product name
 - Logged-in user label (`You are logged in as ...`)
-- Calendar icon (opens pop-up calendar)
+- Calendar button (opens pop-up calendar)
 - Main navigation links
-- Profile button with user name and avatar
+- Profile button (name + avatar)
 
 Logo behavior:
 
-- Selecting the logo returns the user to `Dashboard`.
+- Selecting the logo navigates to `Dashboard`.
 
 ## Main Navigation
 
-Primary navigation links:
+Primary links:
 
 - `Dashboard`
-- `Accounts`
-- `Transactions`
-- `Reports`
+- `Accounts` (`#/accounts_list`)
+- `Transactions` (`#/transactions`)
+- `Reports` (`#/reports`)
 - `Help`
-- `Login` or `Logout` (depends on session state)
+- `Login` or `Logout` (based on session state)
 
-Active-page behavior:
+Route behavior:
 
-- The current route is highlighted in the navigation bar.
+- Active link is highlighted.
 - Browser title updates to `FinLedger - <Page Name>`.
 
 ## Route Access and Redirect Behavior
 
-Common route outcomes:
+Current outcomes:
 
-- Valid route: requested page loads into the main content area.
-- Unknown route: user is shown the Not Found page.
-- Not logged in or expired session: user is redirected to `Not Logged In` or `Login` depending on context.
-- Insufficient permission: user is redirected to `Not Authorized`.
-- Temporary password required: user is redirected to `Change Password`.
+- Valid route: page loads into the main content area.
+- Unknown route: `Not Found` page.
+- Missing/expired auth: `Not Logged In` or `Login` flow.
+- Unauthorized role: `Not Authorized`.
+- Temporary password required: `Change Password`.
+
+## Transactions Page Visibility by Role
+
+Transactions is now rendered server-side with role-aware sections.
+
+- `manager` and `accountant`: Journal, Journal Queue, and Ledger sections.
+- `administrator`: Ledger section only (read-only intent).
+- Other/unknown roles: Access-restricted message on Transactions page.
+
+## Global Message Line
+
+FinLedger uses a message line below the header for user feedback.
+
+- Messages are resolved from the message catalog.
+- Errors use error styling.
+- Success states use success styling.
+- Dismiss control clears the current message.
 
 ## Profile Menu
 
-The top-right profile control opens a menu with:
+Top-right profile menu actions:
 
 - `Go to profile`
 - `Logout`
 
-Interaction behavior:
+Interaction:
 
 - Opens on hover/focus.
-- Closes on mouse leave, route change, or `Esc`.
+- Closes on pointer leave, route change, or `Esc`.
 
 ## Help and Tooltips
 
-Help:
+Help behavior:
 
-- `Help` is a top-level navigation item.
-- The Help page is organized as expandable accordion topics.
-- Topics cover account access, profile/security, admin tools, reports, and support.
+- `Help` is a top-level page.
+- Help content is organized in expandable sections.
 
-Tooltips:
+Tooltip behavior:
 
-- Many interactive controls use hover text (`title`) for quick guidance.
-- Examples include page actions, table controls, and form inputs.
+- Many controls use `title` hover text for quick guidance.
 
 ## Calendar Widget
 
-The header calendar icon opens a pop-up calendar.
-
-Calendar controls:
+Calendar popup controls:
 
 - Previous month
 - Today
 - Next month
-- Month dropdown
-- Year dropdown
+- Month selector
+- Year selector
 
-Display behavior:
+Display:
 
-- Shows a month grid with the current day highlighted.
-- Closes when clicking outside the calendar popup.
+- Month grid with current day highlight.
+- Popup closes when clicking outside.
 
-## Loading and Page Transition Behavior
+## Loading and Transitions
 
-FinLedger uses a global loading overlay for page changes and long-running actions.
+Global loading overlay behavior:
 
-Behavior:
+- Displays during route and async page loads.
+- Hides after content load completes.
+- Uses a minimum display interval to reduce flicker.
 
-- Overlay appears during route/page loads.
-- Overlay hides after content finishes loading.
-- A short minimum display time is applied to prevent flashing.
+## Current Module UX Status
 
-## Layout Consistency Standards
+- `Dashboard`: operational admin/user workspace with live and static elements.
+- `Accounts`: primary account-management workflow is implemented.
+- `Transactions`: role-gated journal/queue/ledger UI scaffold is implemented; backend workflow integration is still in progress.
+- `Reports`: placeholder report UI is implemented; full report-generation workflows are still in progress.
 
-UI consistency expectations across pages:
+## Layout Consistency
 
-- Shared header/navigation frame
-- Consistent page title and subtitle pattern
-- Reusable card, table, form, and button styles
-- Consistent placement for notices and status feedback
-- Unified role-aware navigation behavior
+Shared UX patterns:
 
-These patterns support predictable navigation and reduce training time for end users.
+- Common header/navigation shell
+- Card/table layout components
+- Global message line
+- Global loading overlay
+- Role-aware control visibility
