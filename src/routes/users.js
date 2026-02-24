@@ -28,7 +28,6 @@ const uploadProfile = multer({
 });
 const router = express.Router();
 const {
-    getUserLoggedInStatus,
     getUserByUsername,
     setUserPassword,
     isAdmin,
@@ -624,12 +623,13 @@ router.post("/update-user-field", async (req, res) => {
         log("warn", "Update user field target not found", { requestingUserId, userId }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
     }
-    const allowedFields = new Set(["fullname", "first_name", "last_name", "email", "role", "status", "address", "date_of_birth", "last_login_at", "password_expires_at", "suspension_start_at", "suspension_end_at", "temp_password"]);
+    const allowedFields = new Set(["fullname", "first_name", "last_name", "email", "role", "status", "address", "date_of_birth", "password_expires_at", "suspension_start_at", "suspension_end_at"]);
     if (!allowedFields.has(fieldName)) {
         log("warn", "Update user field rejected due to disallowed field", { requestingUserId, userId, fieldName }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 400, "ERR_FIELD_CANNOT_BE_UPDATED");
     }
     if (fieldName === "fullname") {
+        if(typeof(newValue) !== "string") return sendApiError(res, 400, "ERR_FIELD_CANNOT_BE_UPDATED");
         const nameParts = newValue.trim().split(" ");
         const firstName = nameParts.shift();
         const lastName = nameParts.join(" ");

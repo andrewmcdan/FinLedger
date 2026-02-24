@@ -311,6 +311,8 @@ const updateUserProfile = async (userId, profileUpdates, changedByUserId = userI
         status: profileUpdates.status,
         suspension_start_at: profileUpdates.suspension_start_at,
         suspension_end_at: profileUpdates.suspension_end_at,
+        date_of_birth: profileUpdates.date_of_birth,
+        password_expires_at: profileUpdates.password_expires_at
     };
 
     const updates = [];
