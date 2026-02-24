@@ -85,7 +85,6 @@ Must require:
 - Messages must be short and clear
 - A designated message line must display system messages
 - Message must disappear once issue is corrected
-- TODO: Do a full-codebase audit to eliminate remaining hardcoded/legacy error text and enforce message-catalog usage everywhere.
 
 ------------------------------------------------------------
 

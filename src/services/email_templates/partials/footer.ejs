@@ -1,0 +1,30 @@
+<tr>
+  <td style="padding:8px 28px 0 28px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+      <tr>
+        <td style="border-top:1px solid #c9d6c9; font-size:0; line-height:0;">&nbsp;</td>
+      </tr>
+    </table>
+  </td>
+</tr>
+
+<tr>
+  <td align="left" style="padding:14px 28px 22px 28px;">
+    <% if (supportEmail) { %>
+      <p style="margin:0; font-family:'Space Grotesk','Avenir Next','Segoe UI',Arial,sans-serif; font-size:12px; line-height:18px; color:#2c2e31;">
+        Need help? Contact
+        <a href="mailto:<%= supportEmail %>" style="color:#0b7b6c; text-decoration:underline;"><%= supportEmail %></a>.
+      </p>
+    <% } %>
+
+    <% if (typeof footerNote !== "undefined" && footerNote) { %>
+      <p style="margin:10px 0 0 0; font-family:'Space Grotesk','Avenir Next','Segoe UI',Arial,sans-serif; font-size:12px; line-height:18px; color:#2c2e31;">
+        <%= footerNote %>
+      </p>
+    <% } %>
+
+    <p style="margin:10px 0 0 0; font-family:'Space Grotesk','Avenir Next','Segoe UI',Arial,sans-serif; font-size:12px; line-height:18px; color:#2c2e31;">
+      <%= companyName %> · <%= companyAddress %>
+    </p>
+  </td>
+</tr>

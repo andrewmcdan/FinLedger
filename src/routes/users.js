@@ -55,9 +55,22 @@ const {
 const { SECURITY_QUESTIONS } = require("../data/security_questions");
 const { log } = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
-const { sendEmail } = require("../services/email.js");
+const { sendTemplatedEmail } = require("../services/email.js");
 const db = require("../db/db.js");
 const { sendApiError, sendApiSuccess } = require("../utils/api_messages");
+
+const DEFAULT_FRONTEND_BASE_URL = "http://localhost:3050";
+
+function getFrontendBaseUrl() {
+    const rawBaseUrl = String(process.env.FRONTEND_BASE_URL || "").trim();
+    if (!rawBaseUrl) {
+        return DEFAULT_FRONTEND_BASE_URL;
+    }
+    if (/^https?:\/\//i.test(rawBaseUrl)) {
+        return rawBaseUrl.replace(/\/+$/, "");
+    }
+    return `http://${rawBaseUrl.replace(/\/+$/, "")}`;
+}
 
 router.get("/security-questions-list", async (req, res) => {
     log("debug", "Security questions list requested", { userId: req.user?.id }, utilities.getCallerInfo(), req.user?.id);
@@ -137,8 +150,20 @@ router.post("/email-user", async (req, res) => {
             return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
         }
         const user = userResult.rows[0];
-        const emailBody = `Dear ${user.first_name || username},\n\n${message}\n\nBest regards,\nFinLedger Team`;
-        const emailResult = await sendEmail(user.email, subject, emailBody);
+        const emailTextBody = `Dear ${user.first_name || username},\n\n${message}\n\nBest regards,\nFinLedger Team`;
+        const emailResult = await sendTemplatedEmail({
+            to: user.email,
+            subject,
+            templateName: "direct_message",
+            text: emailTextBody,
+            templateData: {
+                preheader: subject,
+                title: subject,
+                firstName: user.first_name || username,
+                message,
+                senderName: "FinLedger Team",
+            },
+        });
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send email to ${user.email} for username ${username}`, { function: "email-user" }, utilities.getCallerInfo(), requestingUserId);
         }
@@ -167,13 +192,25 @@ router.get("/approve-user/:userId", async (req, res) => {
     }
     await approveUser(userIdToApprove, requestingUserId);
     log("info", `User ID ${userIdToApprove} approved by admin user ID ${requestingUserId}`, { function: "approve-user" }, utilities.getCallerInfo(), requestingUserId);
-    const loginLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
-    const loginLink = `${loginLinkUrlBase}/#/login`;
-    const emailResult = await sendEmail(
-        userData.email,
-        "Your FinLedger Account Has Been Approved",
-        `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by an administrator. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nLogin here: ${loginLink}\n\nBest regards,\nThe FinLedger Team\n\n`,
-    );
+    const loginLink = `${getFrontendBaseUrl()}/#/login`;
+    const approvalSubject = "Your FinLedger Account Has Been Approved";
+    const approvalText = `Dear ${userData.first_name},\n\nWe are pleased to inform you that your FinLedger account has been approved by an administrator. You can now log in with your username and start using our services.\n\nUsername: ${userData.username}\n\nLogin here: ${loginLink}\n\nBest regards,\nThe FinLedger Team\n\n`;
+    const emailResult = await sendTemplatedEmail({
+        to: userData.email,
+        subject: approvalSubject,
+        templateName: "account_approved",
+        text: approvalText,
+        templateData: {
+            preheader: "Your account has been approved and is ready to use.",
+            title: "Account Approved",
+            firstName: userData.first_name || userData.username,
+            username: userData.username,
+            button: {
+                url: loginLink,
+                label: "Log In to FinLedger",
+            },
+        },
+    });
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
         log("warn", `Failed to send approval email to ${userData.email} for user ID ${userIdToApprove}`, { function: "approve-user" }, utilities.getCallerInfo(), requestingUserId);
     }
@@ -204,11 +241,20 @@ router.get("/reject-user/:userId", async (req, res) => {
     log("info", `User ID ${userIdToReject} rejected by admin user ID ${requestingUserId}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
 
     try {
-        const emailResult = await sendEmail(
-            userData.email,
-            "Your FinLedger Access Request Was Not Approved",
-            `Dear ${userData.first_name},\n\nWe regret to inform you that your FinLedger access request was not approved at this time.\n\nIf you believe this is in error, please contact an administrator for further assistance.\n\nBest regards,\nThe FinLedger Team\n\n`,
-        );
+        const rejectionSubject = "Your FinLedger Access Request Was Not Approved";
+        const rejectionText = `Dear ${userData.first_name},\n\nWe regret to inform you that your FinLedger access request was not approved at this time.\n\nIf you believe this is in error, please contact an administrator for further assistance.\n\nBest regards,\nThe FinLedger Team\n\n`;
+        const emailResult = await sendTemplatedEmail({
+            to: userData.email,
+            subject: rejectionSubject,
+            templateName: "account_rejected",
+            text: rejectionText,
+            templateData: {
+                preheader: "Your FinLedger access request was not approved.",
+                title: "Access Request Update",
+                firstName: userData.first_name || userData.username,
+                footerNote: "If this seems incorrect, please contact your system administrator.",
+            },
+        });
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send rejection email to ${userData.email} for user ID ${userIdToReject}`, { function: "reject-user" }, utilities.getCallerInfo(), requestingUserId);
         }
@@ -417,7 +463,19 @@ router.post("/register_new_user", async (req, res) => {
         log("info", "Register new user request received", { email, role }, utilities.getCallerInfo());
         const newUser = await createUser(first_name, last_name, email, password, role, address, date_of_birth, null);
         log("info", `New user registered with ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
-        const emailResult = await sendEmail(email, "Welcome to FinLedger - Registration Successful", `Dear ${first_name},\n\nThank you for registering with FinLedger. Your account is currently pending approval by an administrator. You will receive another email once your account has been approved.\n\nBest regards,\nThe FinLedger Team\n\n`);
+        const registrationSubject = "Welcome to FinLedger - Registration Successful";
+        const registrationText = `Dear ${first_name},\n\nThank you for registering with FinLedger. Your account is currently pending approval by an administrator. You will receive another email once your account has been approved.\n\nBest regards,\nThe FinLedger Team\n\n`;
+        const emailResult = await sendTemplatedEmail({
+            to: email,
+            subject: registrationSubject,
+            templateName: "registration_received",
+            text: registrationText,
+            templateData: {
+                preheader: "Your registration was received and is pending approval.",
+                title: "Registration Received",
+                firstName: first_name || "there",
+            },
+        });
         log("info", `Registration email sent to ${email} for new user ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send registration email to ${email} for new user ID ${newUser.id}`, { function: "register_new_user" }, utilities.getCallerInfo(), newUser.id);
@@ -428,7 +486,20 @@ router.post("/register_new_user", async (req, res) => {
         const adminNotifyResults = await Promise.allSettled(adminResult.map((adminRow) => {
             const adminFirstName = adminRow.first_name || "Administrator";
             const adminBody = `Dear ${adminFirstName},\n\nA new user has requested access to FinLedger and is pending approval.\n\nName: ${first_name} ${last_name}\nEmail: ${email}\nRequested Role: ${role}\n\nPlease review this request in the user management area.\n\nBest regards,\nThe FinLedger Team\n\n`;
-            return sendEmail(adminRow.email, adminSubject, adminBody);
+            return sendTemplatedEmail({
+                to: adminRow.email,
+                subject: adminSubject,
+                templateName: "admin_access_request",
+                text: adminBody,
+                templateData: {
+                    preheader: "A new FinLedger access request is waiting for review.",
+                    title: "New Access Request",
+                    adminFirstName,
+                    requestedName: `${first_name} ${last_name}`,
+                    requestedEmail: email,
+                    requestedRole: role,
+                },
+            });
         }));
         for (let i = 0; i < adminNotifyResults.length; i += 1) {
             const result = adminNotifyResults[i];
@@ -473,19 +544,32 @@ router.get("/reset-password/:email/:userName", async (req, res) => {
     }
     // Send an email with a password reset link
     const resetToken = utilities.generateRandomToken(128);
-    const resetLinkUrlBase = process.env.FRONTEND_BASE_URL || "http://localhost:3050";
-    const resetLink = `${resetLinkUrlBase}/#/login?userId=${userData2.id}&reset_token=${resetToken}`;
+    const resetLink = `${getFrontendBaseUrl()}/#/login?userId=${userData2.id}&reset_token=${resetToken}`;
     // Store the reset token and its expiration (e.g., 1 hour) in the database
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // 1 hour from now
     await db.query(
         "UPDATE users SET reset_token = $1, reset_token_expires_at = $2, reset_failed_attempts = 0, updated_at = now() WHERE id = $3",
         [resetToken, tokenExpiry, userData2.id],
     );
-    const emailResult = await sendEmail(
-        userData2.email,
-        "FinLedger Password Reset Request",
-        `Dear ${userData2.first_name},\n\nWe received a request to reset your FinLedger account password. Please use the link below to reset your password. This link will expire in 1 hour.\n\nPassword Reset Link: ${resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nBest regards,\nThe FinLedger Team\n\n`,
-    );
+    const passwordResetSubject = "FinLedger Password Reset Request";
+    const passwordResetText = `Dear ${userData2.first_name},\n\nWe received a request to reset your FinLedger account password. Please use the link below to reset your password. This link will expire in 1 hour.\n\nPassword Reset Link: ${resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nBest regards,\nThe FinLedger Team\n\n`;
+    const emailResult = await sendTemplatedEmail({
+        to: userData2.email,
+        subject: passwordResetSubject,
+        templateName: "password_reset_request",
+        text: passwordResetText,
+        templateData: {
+            preheader: "Use this secure link to reset your FinLedger password.",
+            title: "Password Reset Request",
+            firstName: userData2.first_name || userData2.username,
+            expiresIn: "1 hour",
+            button: {
+                url: resetLink,
+                label: "Reset Password",
+            },
+            footerNote: "If you did not request a password reset, you can ignore this email.",
+        },
+    });
     if (!emailResult.accepted || emailResult.accepted.length === 0) {
         log("warn", `Failed to send password reset email to ${userData2.email} for user ID ${userData2.id}`, { function: "reset-password" }, utilities.getCallerInfo(), userData2.id);
     }
@@ -686,7 +770,25 @@ router.get("/reset-user-password/:userId", async (req, res) => {
         // Ensure generated temporary password always satisfies complexity rules.
         const tempPassword = `A${utilities.generateRandomToken(11)}a1!`;
         await setUserPassword(userIdToReset, tempPassword, true, requestingUserId);
-        const emailResult = await sendEmail(userData.email, "FinLedger Password Reset by Administrator", `Dear ${userData.first_name},\n\nAn administrator has reset your FinLedger account password. Please use the temporary password below to log in and change your password immediately.\n\nTemporary Password: ${tempPassword}\n\nBest regards,\nThe FinLedger Team\n\n`);
+        const loginLink = `${getFrontendBaseUrl()}/#/login`;
+        const resetByAdminSubject = "FinLedger Password Reset by Administrator";
+        const resetByAdminText = `Dear ${userData.first_name},\n\nAn administrator has reset your FinLedger account password. Please use the temporary password below to log in and change your password immediately.\n\nTemporary Password: ${tempPassword}\n\nBest regards,\nThe FinLedger Team\n\n`;
+        const emailResult = await sendTemplatedEmail({
+            to: userData.email,
+            subject: resetByAdminSubject,
+            templateName: "admin_password_reset",
+            text: resetByAdminText,
+            templateData: {
+                preheader: "An administrator reset your FinLedger password.",
+                title: "Password Reset by Administrator",
+                firstName: userData.first_name || userData.username,
+                temporaryPassword: tempPassword,
+                button: {
+                    url: loginLink,
+                    label: "Log In to FinLedger",
+                },
+            },
+        });
         if (!emailResult.accepted || emailResult.accepted.length === 0) {
             log("warn", `Failed to send admin password reset email to ${userData.email} for user ID ${userIdToReset}`, { function: "reset-user-password" }, utilities.getCallerInfo(), userIdToReset);
         }

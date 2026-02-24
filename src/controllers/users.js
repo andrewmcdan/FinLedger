@@ -7,7 +7,20 @@ const fs = require("fs");
 const path = require("path");
 const logger = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
-const { sendEmail } = require("./../services/email");
+const { sendTemplatedEmail } = require("./../services/email");
+
+const DEFAULT_FRONTEND_BASE_URL = "http://localhost:3050";
+
+function getFrontendBaseUrl() {
+    const rawBaseUrl = String(process.env.FRONTEND_BASE_URL || "").trim();
+    if (!rawBaseUrl) {
+        return DEFAULT_FRONTEND_BASE_URL;
+    }
+    if (/^https?:\/\//i.test(rawBaseUrl)) {
+        return rawBaseUrl.replace(/\/+$/, "");
+    }
+    return `http://${rawBaseUrl.replace(/\/+$/, "")}`;
+}
 
 function checkPasswordComplexity(password) {
     if (password.length < 8) {
@@ -407,9 +420,27 @@ const createUser = async (firstName, lastName, email, password, role, address, d
         fs.renameSync(sourcePath, destPath);
     }
     if (tempPasswordFlag) {
+        const loginLink = `${getFrontendBaseUrl()}/#/login`;
         const emailSubject = "Your FinLedger Account Has Been Created";
         const emailBody = `Dear ${firstName} ${lastName},\n\nYour FinLedger account has been created successfully.\n\nUsername: ${createdUser.username}\nTemporary Password: ${password}\n\nPlease log in and change your password at your earliest convenience.\n\nBest regards,\nFinLedger Team`;
-        let result = await sendEmail(email, emailSubject, emailBody);
+        let result = await sendTemplatedEmail({
+            to: email,
+            subject: emailSubject,
+            templateName: "account_created_temp_password",
+            text: emailBody,
+            templateData: {
+                preheader: "Your FinLedger account is ready. Sign in with your temporary password.",
+                title: "Your Account Is Ready",
+                firstName,
+                lastName,
+                username: createdUser.username,
+                temporaryPassword: password,
+                button: {
+                    url: loginLink,
+                    label: "Log In to FinLedger",
+                },
+            },
+        });
         logger.log("info", `Sent account creation email to ${email} with result: ${JSON.stringify(result)}`, { function: "createUser" }, utilities.getCallerInfo());
     }
     return createdUser;
@@ -496,15 +527,38 @@ const sendPasswordExpiryWarnings = async () => {
     const pendingWarnings = result.rows.filter((row) => !warnedWithin24Hours.has(row.id));
     logger.log("debug", "Password expiry warnings queued", { pendingCount: pendingWarnings.length }, utilities.getCallerInfo());
 
+    const loginLink = `${getFrontendBaseUrl()}/#/login`;
     for (const row of pendingWarnings) {
         const trackResult = await db.query("INSERT INTO password_expiry_email_tracking (user_id, password_expires_at) VALUES ($1, $2) ON CONFLICT (user_id, password_expires_at, email_sent_date) DO NOTHING RETURNING id", [row.id, row.password_expires_at]);
         if (trackResult.rowCount === 0) {
             continue;
         }
         const daysLeft = Math.ceil((row.password_expires_at - new Date()) / (1000 * 60 * 60 * 24));
+        const expiresOn = row.password_expires_at?.toLocaleDateString?.("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        }) || row.password_expires_at?.toString?.();
         const emailSubject = "Password Expiration Warning";
         const emailBody = `Dear ${row.first_name} ${row.last_name},\n\nThis is a reminder that your password will expire in ${daysLeft} day(s) on ${row.password_expires_at.toDateString()}.\n\nPlease log in and change your password to avoid any disruption to your account access.\n\nBest regards,\nFinLedger Team`;
-        let emailResult = await sendEmail(row.email, emailSubject, emailBody);
+        let emailResult = await sendTemplatedEmail({
+            to: row.email,
+            subject: emailSubject,
+            templateName: "password_expiry_warning",
+            text: emailBody,
+            templateData: {
+                preheader: `Your FinLedger password expires in ${daysLeft} day(s).`,
+                title: "Password Expiration Warning",
+                firstName: row.first_name,
+                lastName: row.last_name,
+                daysLeft,
+                expiresOn,
+                button: {
+                    url: loginLink,
+                    label: "Update Password",
+                },
+            },
+        });
         logger.log("info", `Sent password expiration warning email to ${row.email} with result: ${JSON.stringify(emailResult)}`, { function: "sendPasswordExpiryWarnings" }, utilities.getCallerInfo(), row.id);
     }
     logger.log("debug", "Password expiry warnings complete", { processedCount: pendingWarnings.length }, utilities.getCallerInfo());
@@ -516,7 +570,19 @@ const suspendUsersWithExpiredPasswords = async () => {
     for (const row of result.rows) {
         const emailSubject = "Account Suspended Due to Expired Password";
         const emailBody = `Dear ${row.first_name} ${row.last_name},\n\nYour account has been suspended because your password has expired. Please contact the system administrator to reinstate your account and set a new password.\n\nBest regards,\nFinLedger Team`;
-        let emailResult = await sendEmail(row.email, emailSubject, emailBody);
+        let emailResult = await sendTemplatedEmail({
+            to: row.email,
+            subject: emailSubject,
+            templateName: "account_suspended_password_expired",
+            text: emailBody,
+            templateData: {
+                preheader: "Your FinLedger account has been suspended due to password expiration.",
+                title: "Account Suspended",
+                firstName: row.first_name,
+                lastName: row.last_name,
+                footerNote: "Contact your FinLedger administrator for reinstatement.",
+            },
+        });
         // update password_expiry_email_tracking to log this suspension email
         const passwordExpiresAtResult = await db.query("SELECT password_expires_at FROM users WHERE id = $1", [row.id]);
         await db.query("INSERT INTO password_expiry_email_tracking (user_id, password_expires_at) VALUES ($1, $2)", [row.id, passwordExpiresAtResult.rows[0].password_expires_at]);
