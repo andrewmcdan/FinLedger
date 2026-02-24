@@ -191,3 +191,60 @@ test("account create/update writes audit log with before and after images", asyn
     assert.equal(updateAudit.rows[0].a_image.comment, "updated comment");
     assert.ok(updateAudit.rows[0].changed_at);
 });
+
+test("no-op account updates do not write audit log entries", async () => {
+    const admin = await insertUser({ username: "acct-noop-admin", email: "acct-noop-admin@example.com", role: "administrator" });
+    const created = await accountsController.createAccount(
+        admin.id,
+        "No-op Audit Account",
+        "No-op audit account",
+        "debit",
+        "Assets",
+        "Current Assets",
+        0,
+        0,
+        0,
+        0,
+        1,
+        "BS",
+        "steady comment",
+        admin.id,
+    );
+
+    const countUpdates = async () => {
+        const result = await db.query(
+            "SELECT COUNT(*)::int AS total FROM audit_logs WHERE entity_type = 'accounts' AND entity_id = $1 AND action = 'update'",
+            [created.id],
+        );
+        return result.rows[0].total;
+    };
+
+    assert.equal(await countUpdates(), 0);
+
+    const noopResult = await accountsController.updateAccountField({
+        account_id: created.id,
+        field: "comment",
+        value: "steady comment",
+        user_id: admin.id,
+    });
+    assert.equal(noopResult.success, true);
+    assert.equal(await countUpdates(), 0);
+
+    const changedResult = await accountsController.updateAccountField({
+        account_id: created.id,
+        field: "comment",
+        value: "changed comment",
+        user_id: admin.id,
+    });
+    assert.equal(changedResult.success, true);
+    assert.equal(await countUpdates(), 1);
+
+    const secondNoopResult = await accountsController.updateAccountField({
+        account_id: created.id,
+        field: "comment",
+        value: "changed comment",
+        user_id: admin.id,
+    });
+    assert.equal(secondNoopResult.success, true);
+    assert.equal(await countUpdates(), 1);
+});

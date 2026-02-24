@@ -1,4 +1,5 @@
 const db = require("../db/db");
+const fs = require("fs");
 
 // Get LOG_TO_FILE, LOG_FILE_PATH, LOG_TO_FILE_LEVEL, LOG_TO_DB, DB_LOG_LEVEL, LOG_TO_CONSOLE, CONSOLE_LOG_LEVEL from environment variables
 const LOG_TO_FILE = process.env.LOG_TO_FILE === "true";
@@ -68,7 +69,6 @@ const log = async (level, message, context = null, source = "", user_id = null, 
 
     // Log to file
     if (!skipFile && LOG_TO_FILE && levelValue >= levels[LOG_TO_FILE_LEVEL]) {
-        const fs = require("fs");
         const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message} ${JSON.stringify(context)} ${sourceLabel}\n`;
         // If file doesn't exist, create it
         if (!fs.existsSync(LOG_FILE_PATH)) {
