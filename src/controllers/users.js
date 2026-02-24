@@ -381,7 +381,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
             createdUser = await db.transaction(async (client) => {
                 const username = await generateUniqueUsername(client, firstName, lastName);
                 const result = await client.query(
-                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
+                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash",
                     [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
                 );
                 await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
