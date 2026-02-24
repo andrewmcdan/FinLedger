@@ -507,6 +507,10 @@ router.get("/security-questions/:resetToken", async (req, res) => {
 router.post("/verify-security-answers/:resetToken", async (req, res) => {
     const resetToken = req.params.resetToken;
     const { securityAnswers, newPassword } = req.body;
+    if(!Array.isArray(securityAnswers) || securityAnswers.length !== 3){
+        log("error", "Security answer verification requires exactly 3 answers.", {securityAnswers}, utilities.getCallerInfo());
+        return sendApiError(res, 400, "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED");
+    }
     log("info", "Verify security answers request received", {}, utilities.getCallerInfo());
     const userData = await getUserByResetToken(resetToken);
     if (!userData) {

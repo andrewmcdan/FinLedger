@@ -558,14 +558,32 @@ test("Password reset flow: GET /reset-password issues token, then /security-ques
         assert.equal(qs.statusCode, 200);
         assert.ok(qs.body.security_questions);
 
-        const bad = await requestJson({
+        const bad1 = await requestJson({
             port,
             method: "POST",
             path: `/api/users/verify-security-answers/${dbUser.rows[0].reset_token}`,
             body: { securityAnswers: ["bad", "A2", "A3"], newPassword: "NewPass9!" },
         });
-        assert.equal(bad.statusCode, 403);
-        assert.equal(bad.body.errorCode, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
+        assert.equal(bad1.statusCode, 403);
+        assert.equal(bad1.body.errorCode, "ERR_SECURITY_ANSWER_VERIFICATION_FAILED");
+
+        const bad2 = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${dbUser.rows[0].reset_token}`,
+            body: { securityAnswers: ["bad", "A2"], newPassword: "NewPass9!" },
+        });
+        assert.equal(bad2.statusCode, 400);
+        assert.equal(bad2.body.errorCode, "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED");
+
+        const bad3 = await requestJson({
+            port,
+            method: "POST",
+            path: `/api/users/verify-security-answers/${dbUser.rows[0].reset_token}`,
+            body: { securityAnswers: "bad", newPassword: "NewPass9!" },
+        });
+        assert.equal(bad3.statusCode, 400);
+        assert.equal(bad3.body.errorCode, "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED");
 
         const ok = await requestJson({
             port,

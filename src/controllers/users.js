@@ -453,7 +453,7 @@ const getSecurityQuestionsForUser = async (userId) => {
 
 const verifySecurityAnswers = async (userId, answers) => {
     // answers should be an array of strings with the answers to the security questions in order
-    if (answers.length !== 3) {
+    if (!Array.isArray(answers) || answers.length !== 3) {
         logger.log("warn", "Invalid security answer payload length", { userId, length: answers.length }, utilities.getCallerInfo(), userId);
         const error = new Error("Exactly three answers must be provided");
         error.code = "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED";
