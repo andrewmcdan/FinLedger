@@ -32,15 +32,26 @@
                     <label for="journal_reference">Reference</label>
                     <input type="text" id="journal_reference" name="reference" placeholder="Optional reference code" title="Reference Code will be generated if not provided." />
                 </div>
-                <div class="field">
-                    <label for="journal_source_document">Source Document</label>
-                    <input type="file" id="journal_source_document" name="source_document" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png" />
-                </div>
             </div>
 
             <div class="field">
                 <label for="journal_entry_description">Description</label>
                 <textarea id="journal_entry_description" name="description" rows="2" placeholder="Describe the business event"></textarea>
+            </div>
+
+            <div class="field" data-journal-documents-container>
+                <div class="data-row">
+                    <p class="value">
+                        <span class="span-label">Attached Documents</span>
+                        <span class="span-actions">
+                            <button type="button" class="button-small" id="journal_add_document_button" data-journal-add-document-button>Add Document</button>
+                            <input type="file" id="journal_entry_document_input" name="journal_entry_documents" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.txt" multiple hidden />
+                        </span>
+                    </p>
+                </div>
+                <ul class="journal-entry-documents-list" id="journal_entry_documents_list" data-journal-entry-documents-list>
+                    <li class="meta" data-journal-entry-documents-empty>No documents attached. Documentation is required for all journal entries.</li>
+                </ul>
             </div>
 
             <div class="data-row">
@@ -287,5 +298,29 @@
             </article>
         </div>
     </section>
+    <% } %>
+
+    <% if (canJournalize) { %>
+    <div id="journal_line_documents_modal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-button" id="close_journal_line_documents_modal" aria-label="Close">&times;</span>
+            <h2 id="journal_line_documents_modal_title">Associate Documents to Journal Line</h2>
+            <p class="meta" data-journal-line-documents-target-line>Line --</p>
+            <form id="journal_line_documents_form" class="stack">
+                <div id="journal_line_documents_checklist" data-journal-line-documents-checklist class="journal-line-documents-checklist">
+                    <p class="meta">No documents available to associate.</p>
+                </div>
+                <div class="data-row">
+                    <p class="value">
+                        <span class="span-label"> </span>
+                        <span class="span-actions">
+                            <button type="button" class="button-small" id="journal_line_documents_cancel_button">Cancel</button>
+                            <button type="submit" class="button-small" id="journal_line_documents_apply_button">Apply</button>
+                        </span>
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
     <% } %>
 </section>

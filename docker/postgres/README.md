@@ -51,7 +51,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - account_name: text
 - account_number: bigint
 - account_description: text
-- normal_side: text
+- normal_side: text (debit, credit)
 - initial_balance: numeric
 - total_debits: numeric
 - total_credits: numeric
@@ -59,9 +59,9 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - created_at: timestamp with time zone
 - user_id: bigint (ref public.users.id)
 - account_order: integer
-- statement_type: text
+- statement_type: text (IS, BS, RE)
 - comment: text
-- status: text
+- status: text (active, inactive)
 - account_category_id: bigint (ref public.account_categories.id)
 - account_subcategory_id: bigint (ref public.account_subcategories.id)
 
@@ -69,7 +69,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - id: integer
 - adjustment_metadata_id: integer (ref public.adjustment_metadata.id)
 - account_id: integer (ref public.accounts.id)
-- dc: text
+- dc: text (debit, credit)
 - amount: numeric
 - line_description: text
 - created_at: timestamp without time zone
@@ -78,7 +78,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 ### public.adjustment_metadata
 - id: integer
 - journal_entry_id: integer (ref public.journal_entries.id)
-- adjustment_reason: text
+- adjustment_reason: text (prepaid_expense, accrual, depreciation, other)
 - period_end_date: timestamp without time zone
 - created_at: timestamp without time zone
 - created_by: integer (ref public.users.id)
@@ -96,7 +96,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 ### public.app_messages
 - code: text
 - message_text: text
-- category: text
+- category: text (error, success, info)
 - is_active: boolean
 - created_at: timestamp with time zone
 - updated_at: timestamp with time zone
@@ -120,6 +120,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - id: bigint
 - user_id: bigint (ref public.users.id)
 - title: text
+- original_file_name: text
 - file_name: uuid
 - file_extension: text
 - meta_data: jsonb
@@ -127,10 +128,10 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 
 ### public.journal_entries
 - id: integer
-- journal_type: text
+- journal_type: text (general, adjusting)
 - entry_date: timestamp without time zone
 - description: text
-- status: text
+- status: text (pending, approved, rejected)
 - total_debits: numeric
 - total_credits: numeric
 - created_by: integer (ref public.users.id)
@@ -141,15 +142,32 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - approved_at: timestamp without time zone
 - posted_at: timestamp without time zone
 
+### public.journal_entry_documents
+- id: integer
+- journal_entry_id: integer (ref public.journal_entries.id)
+- document_id: bigint (ref public.documents.id)
+- created_at: timestamp without time zone
+- created_by: integer (ref public.users.id)
+- updated_at: timestamp without time zone
+- updated_by: integer (ref public.users.id)
+
+### public.journal_entry_line_documents
+- id: integer
+- journal_entry_line_id: integer (ref public.journal_entry_lines.id)
+- document_id: bigint (ref public.documents.id)
+- created_at: timestamp without time zone
+- created_by: integer (ref public.users.id)
+- updated_at: timestamp without time zone
+- updated_by: integer (ref public.users.id)
+
 ### public.journal_entry_lines
 - id: integer
 - journal_entry_id: integer (ref public.journal_entries.id)
 - line_no: integer
 - account_id: integer (ref public.accounts.id)
-- dc: text
+- dc: text (debit, credit)
 - amount: numeric
 - line_description: text
-- source_document_id: integer (ref public.documents.id)
 - created_at: timestamp without time zone
 - created_by: integer (ref public.users.id)
 - updated_at: timestamp without time zone
@@ -159,7 +177,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - id: integer
 - account_id: integer (ref public.accounts.id)
 - entry_date: timestamp without time zone
-- dc: text
+- dc: text (debit, credit)
 - amount: numeric
 - description: text
 - journal_entry_line_id: integer (ref public.journal_entry_lines.id)
@@ -199,10 +217,10 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 
 ### public.statement_runs
 - id: integer
-- statement_type: text
+- statement_type: text (IS, BS, RE)
 - company_name: text
 - title_line: text
-- data_line_type: text
+- data_line_type: text (as_of_date, period_ending)
 - date_value: timestamp without time zone
 - created_at: timestamp without time zone
 - created_by: integer (ref public.users.id)
@@ -217,7 +235,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 
 ### public.trial_balance_runs
 - id: integer
-- run_type: text
+- run_type: text (unadjusted, adjusted)
 - as_of_date: timestamp without time zone
 - created_at: timestamp without time zone
 - created_by: integer (ref public.users.id)
@@ -232,13 +250,14 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - last_name: text
 - address: text
 - date_of_birth: date
-- role: text
-- status: text
+- role: text (administrator, manager, accountant)
+- status: text (pending, active, suspended, deactivated, rejected)
 - profile_image_url: text
 - password_hash: text
 - password_changed_at: timestamp with time zone
 - password_expires_at: timestamp with time zone
 - failed_login_attempts: integer
+- last_login_attempt_at: timestamp with time zone
 - last_login_at: timestamp with time zone
 - suspension_start_at: timestamp with time zone
 - suspension_end_at: timestamp with time zone
@@ -255,4 +274,3 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - user_icon_path: uuid
 - temp_password: boolean
 - reset_failed_attempts: integer
-- last_login_attempt_at: timestamp with time zone

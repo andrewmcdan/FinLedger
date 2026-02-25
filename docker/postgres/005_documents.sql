@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS documents (
   id BIGSERIAL PRIMARY KEY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  original_file_name TEXT NOT NULL,
   file_name UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
   file_extension TEXT NOT NULL,
   meta_data JSONB NOT NULL,

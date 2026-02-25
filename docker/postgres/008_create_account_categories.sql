@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS account_categories (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     account_number_prefix VARCHAR(10) UNIQUE,
-    order_index INT DEFAULT 10
+    order_index INT NOT NULL DEFAULT 10
 );
 
 -- Child subcategories scoped to a parent category.
@@ -17,12 +17,18 @@ CREATE TABLE IF NOT EXISTS account_subcategories (
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    order_index INT DEFAULT 0
+    order_index INT NOT NULL DEFAULT 10
 );
 
--- Backward-compatible guard for databases created before order_index existed.
+-- Keep order defaults explicit for idempotent runs.
 ALTER TABLE account_categories
-    ADD COLUMN IF NOT EXISTS order_index INT DEFAULT 10;
+    ALTER COLUMN order_index SET DEFAULT 10;
+
+ALTER TABLE account_subcategories
+    ALTER COLUMN order_index SET DEFAULT 10;
+
+CREATE INDEX IF NOT EXISTS idx_account_categories_order_index
+ON account_categories(order_index);
 
 -- Seed default category set with explicit ordering and two-digit numbering prefixes.
 INSERT INTO account_categories (name, description, account_number_prefix, order_index) VALUES
@@ -47,3 +53,27 @@ INSERT INTO account_subcategories (account_category_id, name, description, order
 ((SELECT id FROM account_categories WHERE name = 'Expenses'), 'Operating Expenses', 'Costs related to normal business operations', 10),
 ((SELECT id FROM account_categories WHERE name = 'Expenses'), 'Non-operating Expenses', 'Costs not related to core business operations', 20)
 ON CONFLICT (name) DO NOTHING;
+
+-- Account table is created before categories. Add FK constraints after both exist.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'accounts_account_category_id_fkey'
+    ) THEN
+        ALTER TABLE accounts
+            ADD CONSTRAINT accounts_account_category_id_fkey
+            FOREIGN KEY (account_category_id) REFERENCES account_categories(id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'accounts_account_subcategory_id_fkey'
+    ) THEN
+        ALTER TABLE accounts
+            ADD CONSTRAINT accounts_account_subcategory_id_fkey
+            FOREIGN KEY (account_subcategory_id) REFERENCES account_subcategories(id);
+    END IF;
+END $$;

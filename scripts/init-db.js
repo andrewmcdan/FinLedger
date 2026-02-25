@@ -239,6 +239,41 @@ function formatColumnType(row) {
     return row.data_type;
 }
 
+function parseSqlStringLiterals(segment) {
+    const values = [];
+    const regex = /'((?:''|[^'])*)'/g;
+    let match = regex.exec(segment);
+    while (match) {
+        values.push(match[1].replace(/''/g, "'"));
+        match = regex.exec(segment);
+    }
+    return values;
+}
+
+function extractLimitedOptions(checkExpression, columnName) {
+    if (!checkExpression || !columnName) {
+        return [];
+    }
+
+    const escapedColumn = columnName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const normalized = checkExpression.replace(/\s+/g, " ");
+
+    const anyArrayRegex = new RegExp(`\\b${escapedColumn}\\b\\s*=\\s*ANY\\s*\\(\\s*ARRAY\\[(.*?)\\]\\s*\\)`, "i");
+    const inRegex = new RegExp(`\\b${escapedColumn}\\b\\s+IN\\s*\\((.*?)\\)`, "i");
+
+    const anyArrayMatch = normalized.match(anyArrayRegex);
+    if (anyArrayMatch && anyArrayMatch[1]) {
+        return parseSqlStringLiterals(anyArrayMatch[1]);
+    }
+
+    const inMatch = normalized.match(inRegex);
+    if (inMatch && inMatch[1]) {
+        return parseSqlStringLiterals(inMatch[1]);
+    }
+
+    return [];
+}
+
 async function getDbStructure(client) {
     const { rows } = await client.query(`
         SELECT c.table_schema,
@@ -268,6 +303,37 @@ async function getDbStructure(client) {
         });
     }
     return tables;
+}
+
+async function getColumnCheckOptionsMap(client) {
+    const { rows } = await client.query(`
+        SELECT
+            n.nspname AS table_schema,
+            c.relname AS table_name,
+            a.attname AS column_name,
+            pg_get_expr(con.conbin, con.conrelid) AS check_expression
+        FROM pg_constraint con
+        JOIN pg_class c
+          ON c.oid = con.conrelid
+        JOIN pg_namespace n
+          ON n.oid = c.relnamespace
+        JOIN pg_attribute a
+          ON a.attrelid = c.oid
+         AND a.attnum = ANY(con.conkey)
+        WHERE con.contype = 'c'
+          AND n.nspname NOT IN ('information_schema', 'pg_catalog');
+    `);
+
+    const optionsByColumn = new Map();
+    for (const row of rows) {
+        const options = extractLimitedOptions(row.check_expression, row.column_name);
+        if (options.length === 0) {
+            continue;
+        }
+        const key = `${row.table_schema}.${row.table_name}.${row.column_name}`;
+        optionsByColumn.set(key, options);
+    }
+    return optionsByColumn;
 }
 
 async function getForeignKeyMap(client) {
@@ -318,6 +384,7 @@ async function updateDbStructureReadme(client) {
     const header = "## DB-Structure";
     const tables = await getDbStructure(client);
     const foreignKeys = await getForeignKeyMap(client);
+    const checkOptions = await getColumnCheckOptionsMap(client);
     const lines = [header, ""];
 
     if (tables.size === 0) {
@@ -329,7 +396,16 @@ async function updateDbStructureReadme(client) {
             for (const column of columns) {
                 const fkKey = `${schemaName}.${baseTable}.${column.name}`;
                 const fkTarget = foreignKeys.get(fkKey);
-                const suffix = fkTarget ? ` (ref ${fkTarget})` : "";
+                const checkOptionsKey = `${schemaName}.${baseTable}.${column.name}`;
+                const options = checkOptions.get(checkOptionsKey);
+                const annotations = [];
+                if (fkTarget) {
+                    annotations.push(`ref ${fkTarget}`);
+                }
+                if (Array.isArray(options) && options.length > 0) {
+                    annotations.push(options.join(", "));
+                }
+                const suffix = annotations.length > 0 ? ` (${annotations.join("; ")})` : "";
                 lines.push(`- ${column.name}: ${column.type}${suffix}`);
             }
             lines.push("");
