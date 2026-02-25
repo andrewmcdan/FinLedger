@@ -346,7 +346,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
             await safeDeleteFile(filePath);
         }
         if (duplicateReferenceCode) {
-            throw createCodeError("ERR_INVALID_SELECTION");
+            throw createCodeError("ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE");
         }
         throw error;
     }

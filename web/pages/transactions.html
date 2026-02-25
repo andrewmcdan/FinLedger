@@ -28,15 +28,16 @@
                         <option value="adjusting">Adjusting</option>
                     </select>
                 </div>
-                <div class="field">
+                <div class="field" data-journal-reference-field>
                     <label for="journal_reference">Reference</label>
                     <input type="text" id="journal_reference" name="reference" placeholder="Optional reference code" title="Reference Code will be generated if not provided." />
+                    <p class="journal-reference-tip" data-journal-reference-tip role="status" aria-live="polite" aria-hidden="true">Not available</p>
                 </div>
             </div>
 
             <div class="field">
                 <label for="journal_entry_description">Description</label>
-                <textarea id="journal_entry_description" name="description" rows="2" placeholder="Describe the business event"></textarea>
+                <textarea id="journal_entry_description" name="description" rows="2" placeholder="Required: Describe the business event"></textarea>
             </div>
 
             <div class="field" data-journal-documents-container>

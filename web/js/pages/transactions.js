@@ -20,6 +20,11 @@ let draftJournalDocumentCounter = 1;
 let journalAttachedDocuments = [];
 let lineDocumentAssociations = new Map();
 let pendingLineDocumentSelections = new Set();
+const JOURNAL_REFERENCE_CHECK_DEBOUNCE_MS = 350;
+const JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE = "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE";
+const JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE = "ERR_JOURNAL_REFERENCE_CODE_CHECK_PENDING";
+const JOURNAL_ENTRY_NOT_BALANCED_ERROR_CODE = "ERR_JOURNAL_ENTRY_NOT_BALANCED";
+let refreshJournalSubmitButtonStateFn = () => {};
 
 const loadAccounts = async () => {
     try {
@@ -38,6 +43,10 @@ const loadAccounts = async () => {
 };
 
 const updateJournalEntryTotals = (journalLinesContainer) => {
+    if (!journalLinesContainer) {
+        refreshJournalSubmitButtonStateFn();
+        return;
+    }
     const debitCells = journalLinesContainer.querySelectorAll("[data-debit-inputs]");
     const creditCells = journalLinesContainer.querySelectorAll("[data-credit-inputs]");
     console.log("Updating totals. Debit cells:", debitCells, "Credit cells:", creditCells);
@@ -79,6 +88,7 @@ const updateJournalEntryTotals = (journalLinesContainer) => {
             differenceEl.classList.add("unbalanced");
         }
     }
+    refreshJournalSubmitButtonStateFn();
 };
 
 const getTodayIsoDate = () => {
@@ -299,6 +309,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         if (addLineButton) {
             addLineButton.addEventListener("click", async () => {
                 draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+                updateJournalEntryTotals(draftJournalLines);
             });
         }
 
@@ -347,6 +358,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                     });
                     lineDocumentAssociations = nextLineDocumentAssociations;
                     syncVisibleJournalLineDocumentsModal();
+                    updateJournalEntryTotals(draftJournalLines);
                 }
             }
         });
@@ -359,9 +371,268 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     const journalEntryForm = document.getElementById("journal_entry_form");
     const journalTypeSelect = document.getElementById("journal_type");
     const journalReferenceInput = document.getElementById("journal_reference");
+    const journalReferenceField = document.querySelector("[data-journal-reference-field]");
+    const journalReferenceTip = document.querySelector("[data-journal-reference-tip]");
     const journalDescriptionInput = document.getElementById("journal_entry_description");
     const journalSubmitButton = document.getElementById("journal_submit_button");
     const journalResetButton = document.getElementById("journal_reset_button");
+    let journalReferenceAvailabilityDebounceTimerId = null;
+    let journalReferenceAvailabilityRequestSequence = 0;
+    let journalReferenceLastCheckedCode = "";
+    let journalReferenceLastKnownAvailable = true;
+    let journalReferenceLastAnnouncedUnavailableCode = "";
+    let journalReferenceUnavailableTipMessage = "Not available";
+    let journalReferenceAvailabilityPending = false;
+    let isJournalSubmissionInFlight = false;
+    let journalSubmitBlockingIssueCodes = [];
+
+    const getJournalEntryBalanceState = () => {
+        if (!draftJournalLines) {
+            return {
+                totalDebits: 0,
+                totalCredits: 0,
+                difference: 0,
+                hasInvalidAmounts: false,
+            };
+        }
+        const rows = Array.from(draftJournalLines.querySelectorAll("tr"));
+        let totalDebits = 0;
+        let totalCredits = 0;
+        let hasInvalidAmounts = false;
+        rows.forEach((row) => {
+            const debitInput = row.querySelector("input[data-debit-inputs]");
+            const creditInput = row.querySelector("input[data-credit-inputs]");
+            const debitAmount = parseCurrencyInput(debitInput?.value || "");
+            const creditAmount = parseCurrencyInput(creditInput?.value || "");
+            if (Number.isNaN(debitAmount) || Number.isNaN(creditAmount)) {
+                hasInvalidAmounts = true;
+                return;
+            }
+            totalDebits += debitAmount;
+            totalCredits += creditAmount;
+        });
+        totalDebits = Number(totalDebits.toFixed(2));
+        totalCredits = Number(totalCredits.toFixed(2));
+        return {
+            totalDebits,
+            totalCredits,
+            difference: Number((totalDebits - totalCredits).toFixed(2)),
+            hasInvalidAmounts,
+        };
+    };
+
+    const getJournalSubmitBlockingIssues = () => {
+        const issues = [];
+        const hasAttachedDocuments = Array.isArray(journalAttachedDocuments) && journalAttachedDocuments.length > 0;
+        if (!hasAttachedDocuments) {
+            issues.push("ERR_NO_FILE_UPLOADED");
+        }
+
+        const balanceState = getJournalEntryBalanceState();
+        const isBalanced = !balanceState.hasInvalidAmounts && balanceState.difference === 0;
+        if (!isBalanced) {
+            issues.push(JOURNAL_ENTRY_NOT_BALANCED_ERROR_CODE);
+        }
+
+        const normalizedReferenceCode = String(journalReferenceInput?.value || "").trim();
+        if (normalizedReferenceCode.length > 0) {
+            if (journalReferenceAvailabilityPending || journalReferenceLastCheckedCode !== normalizedReferenceCode) {
+                issues.push(JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE);
+            } else if (!journalReferenceLastKnownAvailable) {
+                issues.push(JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE);
+            }
+        }
+
+        return issues;
+    };
+
+    const focusInputForBlockingIssue = (issueCode) => {
+        if (issueCode === "ERR_NO_FILE_UPLOADED") {
+            addJournalDocumentButton?.focus();
+            return;
+        }
+        if (issueCode === JOURNAL_ENTRY_NOT_BALANCED_ERROR_CODE) {
+            draftJournalLines?.querySelector("input[data-debit-inputs], input[data-credit-inputs]")?.focus();
+            return;
+        }
+        if (issueCode === JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE || issueCode === JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE) {
+            journalReferenceInput?.focus();
+        }
+    };
+
+    const refreshJournalSubmitButtonState = () => {
+        if (!journalSubmitButton) {
+            return;
+        }
+
+        journalSubmitBlockingIssueCodes = getJournalSubmitBlockingIssues();
+        const isSoftDisabled = journalSubmitBlockingIssueCodes.length > 0;
+        const isHardDisabled = isJournalSubmissionInFlight;
+
+        journalSubmitButton.disabled = isHardDisabled;
+        journalSubmitButton.classList.toggle("is-soft-disabled", isSoftDisabled);
+        journalSubmitButton.setAttribute("aria-disabled", isSoftDisabled || isHardDisabled ? "true" : "false");
+    };
+    refreshJournalSubmitButtonStateFn = refreshJournalSubmitButtonState;
+
+    const hydrateJournalReferenceUnavailableTipMessage = async () => {
+        try {
+            const messagesHelper = await loadMessagesHelper();
+            const resolvedMessage = await messagesHelper.getMessage(
+                JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE,
+                {},
+                journalReferenceUnavailableTipMessage,
+            );
+            if (typeof resolvedMessage === "string" && resolvedMessage.trim()) {
+                journalReferenceUnavailableTipMessage = resolvedMessage.trim();
+            }
+        } catch (error) {
+            // Keep fallback tip text when message catalog is unavailable.
+        }
+        if (journalReferenceTip) {
+            journalReferenceTip.textContent = journalReferenceUnavailableTipMessage;
+        }
+    };
+
+    const announceJournalReferenceUnavailable = async (normalizedReferenceCode) => {
+        if (!normalizedReferenceCode || journalReferenceLastAnnouncedUnavailableCode === normalizedReferenceCode) {
+            return;
+        }
+        journalReferenceLastAnnouncedUnavailableCode = normalizedReferenceCode;
+        if (typeof showErrorModalFn === "function") {
+            await showErrorModalFn(JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE, false);
+        }
+    };
+
+    const clearJournalReferenceAvailabilityDebounce = () => {
+        if (journalReferenceAvailabilityDebounceTimerId === null) {
+            return;
+        }
+        clearTimeout(journalReferenceAvailabilityDebounceTimerId);
+        journalReferenceAvailabilityDebounceTimerId = null;
+    };
+
+    const setJournalReferenceAvailabilityUi = (isAvailable) => {
+        const isUnavailable = !isAvailable;
+        if (journalReferenceField) {
+            journalReferenceField.classList.toggle("is-unavailable", isUnavailable);
+        }
+        if (journalReferenceTip) {
+            journalReferenceTip.classList.toggle("is-visible", isUnavailable);
+            journalReferenceTip.setAttribute("aria-hidden", isUnavailable ? "false" : "true");
+        }
+        if (journalReferenceInput) {
+            journalReferenceInput.setAttribute("aria-invalid", isUnavailable ? "true" : "false");
+        }
+        refreshJournalSubmitButtonState();
+    };
+
+    const clearJournalReferenceAvailabilityState = () => {
+        clearJournalReferenceAvailabilityDebounce();
+        journalReferenceAvailabilityRequestSequence += 1;
+        journalReferenceLastCheckedCode = "";
+        journalReferenceLastKnownAvailable = true;
+        journalReferenceLastAnnouncedUnavailableCode = "";
+        journalReferenceAvailabilityPending = false;
+        setJournalReferenceAvailabilityUi(true);
+    };
+
+    const validateJournalReferenceAvailability = async (rawReferenceCode, { force = false, showUnavailableMessage = true } = {}) => {
+        const normalizedReferenceCode = String(rawReferenceCode || "").trim();
+        if (!normalizedReferenceCode) {
+            journalReferenceLastCheckedCode = "";
+            journalReferenceLastKnownAvailable = true;
+            journalReferenceLastAnnouncedUnavailableCode = "";
+            journalReferenceAvailabilityPending = false;
+            setJournalReferenceAvailabilityUi(true);
+            return true;
+        }
+
+        if (!force && journalReferenceLastCheckedCode === normalizedReferenceCode) {
+            journalReferenceAvailabilityPending = false;
+            setJournalReferenceAvailabilityUi(journalReferenceLastKnownAvailable);
+            return journalReferenceLastKnownAvailable;
+        }
+
+        const requestSequence = ++journalReferenceAvailabilityRequestSequence;
+        journalReferenceAvailabilityPending = true;
+        refreshJournalSubmitButtonState();
+        try {
+            const query = new URLSearchParams({ reference_code: normalizedReferenceCode });
+            const res = await fetchWithAuth(`/api/transactions/reference-code-available?${query.toString()}`);
+            if (requestSequence !== journalReferenceAvailabilityRequestSequence) {
+                return journalReferenceLastKnownAvailable;
+            }
+            journalReferenceAvailabilityPending = false;
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                journalReferenceLastCheckedCode = "";
+                journalReferenceLastKnownAvailable = true;
+                journalReferenceLastAnnouncedUnavailableCode = "";
+                setJournalReferenceAvailabilityUi(true);
+                return true;
+            }
+            const isAvailable = data?.is_available === true;
+            journalReferenceLastCheckedCode = normalizedReferenceCode;
+            journalReferenceLastKnownAvailable = isAvailable;
+            if (isAvailable) {
+                journalReferenceLastAnnouncedUnavailableCode = "";
+            }
+            setJournalReferenceAvailabilityUi(isAvailable);
+            if (!isAvailable && showUnavailableMessage) {
+                await announceJournalReferenceUnavailable(normalizedReferenceCode);
+            }
+            return isAvailable;
+        } catch (error) {
+            if (requestSequence !== journalReferenceAvailabilityRequestSequence) {
+                return journalReferenceLastKnownAvailable;
+            }
+            journalReferenceAvailabilityPending = false;
+            journalReferenceLastCheckedCode = "";
+            journalReferenceLastKnownAvailable = true;
+            journalReferenceLastAnnouncedUnavailableCode = "";
+            setJournalReferenceAvailabilityUi(true);
+            return true;
+        }
+    };
+
+    const scheduleJournalReferenceAvailabilityValidation = (rawReferenceCode) => {
+        const normalizedReferenceCode = String(rawReferenceCode || "").trim();
+        clearJournalReferenceAvailabilityDebounce();
+        if (!normalizedReferenceCode) {
+            clearJournalReferenceAvailabilityState();
+            return;
+        }
+        if (journalReferenceLastCheckedCode !== normalizedReferenceCode) {
+            setJournalReferenceAvailabilityUi(true);
+            journalReferenceLastAnnouncedUnavailableCode = "";
+            journalReferenceAvailabilityPending = true;
+            refreshJournalSubmitButtonState();
+        } else {
+            journalReferenceAvailabilityPending = false;
+            refreshJournalSubmitButtonState();
+        }
+        journalReferenceAvailabilityDebounceTimerId = window.setTimeout(() => {
+            void validateJournalReferenceAvailability(normalizedReferenceCode);
+        }, JOURNAL_REFERENCE_CHECK_DEBOUNCE_MS);
+    };
+
+    if (journalReferenceInput) {
+        journalReferenceInput.addEventListener("input", () => {
+            scheduleJournalReferenceAvailabilityValidation(journalReferenceInput.value);
+        });
+        journalReferenceInput.addEventListener("blur", () => {
+            clearJournalReferenceAvailabilityDebounce();
+            const normalizedReferenceCode = String(journalReferenceInput.value || "").trim();
+            if (!normalizedReferenceCode) {
+                clearJournalReferenceAvailabilityState();
+                return;
+            }
+            void validateJournalReferenceAvailability(normalizedReferenceCode, { force: true });
+        });
+    }
+    void hydrateJournalReferenceUnavailableTipMessage();
+    clearJournalReferenceAvailabilityState();
 
     const addJournalDocumentButton = document.querySelector("[data-journal-add-document-button]");
     const journalEntryDocumentInput = document.getElementById("journal_entry_document_input");
@@ -392,9 +663,11 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             journalEntryDocumentInput.value = "";
             renderJournalAttachedDocumentsList();
             syncVisibleJournalLineDocumentsModal();
+            refreshJournalSubmitButtonState();
         });
     }
     renderJournalAttachedDocumentsList();
+    refreshJournalSubmitButtonState();
 
     const journalLineDocumentsModal = document.getElementById("journal_line_documents_modal");
     const closeJournalLineDocumentsModalButton = document.getElementById("close_journal_line_documents_modal");
@@ -440,6 +713,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         if (journalReferenceInput) {
             journalReferenceInput.value = "";
         }
+        clearJournalReferenceAvailabilityState();
         if (journalDescriptionInput) {
             journalDescriptionInput.value = "";
         }
@@ -515,6 +789,14 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         const journalType = String(journalTypeSelect?.value || "general").toLowerCase();
         const description = String(journalDescriptionInput?.value || "").trim();
         const referenceCode = String(journalReferenceInput?.value || "").trim();
+        if (referenceCode) {
+            clearJournalReferenceAvailabilityDebounce();
+            const isReferenceCodeAvailable = await validateJournalReferenceAvailability(referenceCode, { force: true, showUnavailableMessage: false });
+            if (!isReferenceCodeAvailable) {
+                journalReferenceInput?.focus();
+                throw new Error(JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE);
+            }
+        }
         if (!description) {
             throw new Error("ERR_PLEASE_FILL_ALL_FIELDS");
         }
@@ -552,10 +834,9 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             }
         });
 
+        isJournalSubmissionInFlight = true;
+        refreshJournalSubmitButtonState();
         showLoadingOverlayFn();
-        if (journalSubmitButton) {
-            journalSubmitButton.disabled = true;
-        }
         try {
             const res = await fetchWithAuth("/api/transactions/new-journal-entry", {
                 method: "POST",
@@ -572,13 +853,12 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                 throw new Error(apiError);
             }
             if (typeof showMessageModalFn === "function") {
-                await showMessageModalFn(data?.messageCode || "MSG_FILE_UPLOADED_SUCCESS", true);
+                await showMessageModalFn(data?.messageCode || "MSG_JOURNAL_ENTRY_CREATED_SUCCESS", true);
             }
             await resetJournalEntryDraft();
         } finally {
-            if (journalSubmitButton) {
-                journalSubmitButton.disabled = false;
-            }
+            isJournalSubmissionInFlight = false;
+            refreshJournalSubmitButtonState();
             hideLoadingOverlayFn();
         }
     };
@@ -636,6 +916,13 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
 
     if (journalSubmitButton) {
         journalSubmitButton.addEventListener("click", async () => {
+            refreshJournalSubmitButtonState();
+            if (!isJournalSubmissionInFlight && journalSubmitBlockingIssueCodes.length > 0) {
+                const firstBlockingIssueCode = journalSubmitBlockingIssueCodes[0];
+                focusInputForBlockingIssue(firstBlockingIssueCode);
+                showErrorModalFn(firstBlockingIssueCode, false);
+                return;
+            }
             try {
                 await submitJournalEntryForApproval();
             } catch (error) {
@@ -668,6 +955,13 @@ async function loadDomHelpers() {
     const module = await import(moduleUrl);
     const { createCell, createInput, createSelect, createTextarea } = module;
     return { createCell, createInput, createSelect, createTextarea };
+}
+
+async function loadMessagesHelper() {
+    const moduleUrl = new URL("/js/utils/messages.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    const { getMessage } = module;
+    return { getMessage };
 }
 
 async function loadFetchWithAuth() {

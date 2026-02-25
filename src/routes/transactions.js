@@ -54,7 +54,7 @@ const docStorage = multer.diskStorage({
 
 const uploadDoc = multer({
     storage: docStorage,
-    limits: { fileSize: 15 * 1024 * 1024, files: 20 },
+    limits: { fileSize: 15 * 1024 * 1024, files: 50 },
     fileFilter: (req, file, cb) => {
         if (!getDocumentExtension(file)) {
             return cb(new Error("ERR_INVALID_FILE_TYPE"));
@@ -155,7 +155,7 @@ router.post("/new-journal-entry", ensureNotAdminUser, uploadDoc.array("documents
             ...payload,
             uploaded_documents: uploadedDocuments,
         });
-        return sendApiSuccess(res, "MSG_FILE_UPLOADED_SUCCESS", {
+        return sendApiSuccess(res, "MSG_JOURNAL_ENTRY_CREATED_SUCCESS", {
             journal_entry: creationResult,
             uploaded_documents: creationResult?.documents || [],
         });
@@ -165,7 +165,13 @@ router.post("/new-journal-entry", ensureNotAdminUser, uploadDoc.array("documents
         if (error?.code === "ERR_UNAUTHORIZED") {
             return sendApiError(res, 401, "ERR_UNAUTHORIZED");
         }
-        if (error?.code === "ERR_PLEASE_FILL_ALL_FIELDS" || error?.code === "ERR_INVALID_SELECTION" || error?.code === "ERR_NO_FILE_UPLOADED" || error?.code === "ERR_INVALID_FILE_TYPE") {
+        if (
+            error?.code === "ERR_PLEASE_FILL_ALL_FIELDS"
+            || error?.code === "ERR_INVALID_SELECTION"
+            || error?.code === "ERR_NO_FILE_UPLOADED"
+            || error?.code === "ERR_INVALID_FILE_TYPE"
+            || error?.code === "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE"
+        ) {
             return sendApiError(res, 400, error.code);
         }
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
