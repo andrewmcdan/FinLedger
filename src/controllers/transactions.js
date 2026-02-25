@@ -39,6 +39,48 @@ const normalizeLineAmount = (amount) => {
     return Number(numericAmount.toFixed(2));
 };
 
+const normalizeReferenceCode = (referenceCode) => {
+    if (referenceCode === null || referenceCode === undefined) {
+        return null;
+    }
+    const normalizedReferenceCode = String(referenceCode).trim();
+    if (!normalizedReferenceCode) {
+        return null;
+    }
+    return normalizedReferenceCode;
+};
+
+const buildAutoReferenceCode = (journalEntryId) => {
+    return `JE-${String(journalEntryId).padStart(8, "0")}`;
+};
+
+const isReferenceCodeAvailable = async (referenceCode, excludeJournalEntryId = null) => {
+    const normalizedReferenceCode = normalizeReferenceCode(referenceCode);
+    if (!normalizedReferenceCode) {
+        throw createCodeError("ERR_PLEASE_FILL_ALL_FIELDS");
+    }
+
+    let parsedExcludeJournalEntryId = null;
+    if (excludeJournalEntryId !== null && excludeJournalEntryId !== undefined && String(excludeJournalEntryId).trim() !== "") {
+        const candidate = Number(excludeJournalEntryId);
+        if (!Number.isSafeInteger(candidate) || candidate <= 0) {
+            throw createCodeError("ERR_INVALID_SELECTION");
+        }
+        parsedExcludeJournalEntryId = candidate;
+    }
+
+    const result = await db.query(
+        `SELECT 1
+         FROM journal_entries
+         WHERE reference_code = $1
+           AND ($2::INTEGER IS NULL OR id <> $2)
+         LIMIT 1`,
+        [normalizedReferenceCode, parsedExcludeJournalEntryId],
+    );
+
+    return result.rowCount === 0;
+};
+
 const safeDeleteFile = async (filePath) => {
     if (!filePath || !fs.existsSync(filePath)) {
         return;
@@ -186,12 +228,14 @@ const createJournalEntry = async (userId, entryData = {}) => {
                 throw createCodeError("ERR_INVALID_SELECTION");
             }
 
+            const providedReferenceCode = normalizeReferenceCode(entryData.reference_code);
+
             const journalEntryInsertResult = await client.query(
                 `INSERT INTO journal_entries
-                    (journal_type, entry_date, description, status, total_debits, total_credits, created_by, updated_by)
+                    (journal_type, entry_date, description, status, total_debits, total_credits, created_by, updated_by, reference_code)
                  VALUES
-                    ($1, $2, $3, 'pending', $4, $5, $6, $6)
-                 RETURNING id, journal_type, entry_date, description, status, total_debits, total_credits, created_at`,
+                    ($1, $2, $3, 'pending', $4, $5, $6, $6, $7)
+                 RETURNING id, journal_type, entry_date, description, status, total_debits, total_credits, created_at, reference_code`,
                 [
                     journalType,
                     normalizeEntryDate(entryData.entry_date),
@@ -199,9 +243,23 @@ const createJournalEntry = async (userId, entryData = {}) => {
                     totalDebits,
                     totalCredits,
                     numericUserId,
+                    providedReferenceCode,
                 ],
             );
-            const journalEntry = journalEntryInsertResult.rows[0];
+            const journalEntry = { ...journalEntryInsertResult.rows[0] };
+            if (!journalEntry.reference_code) {
+                const generatedReferenceCode = buildAutoReferenceCode(journalEntry.id);
+                const referenceCodeUpdateResult = await client.query(
+                    `UPDATE journal_entries
+                     SET reference_code = $1,
+                         updated_at = now(),
+                         updated_by = $2
+                     WHERE id = $3
+                     RETURNING reference_code`,
+                    [generatedReferenceCode, numericUserId, journalEntry.id],
+                );
+                journalEntry.reference_code = referenceCodeUpdateResult.rows[0]?.reference_code || generatedReferenceCode;
+            }
 
             const persistedLines = [];
             for (const line of normalizedLines) {
@@ -266,6 +324,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
 
             return {
                 id: journalEntry.id,
+                reference_code: journalEntry.reference_code,
                 journal_type: journalEntry.journal_type,
                 entry_date: journalEntry.entry_date,
                 description: journalEntry.description,
@@ -279,11 +338,15 @@ const createJournalEntry = async (userId, entryData = {}) => {
 
         return result;
     } catch (error) {
+        const duplicateReferenceCode = error?.code === "23505" && error?.constraint === "journal_entries_reference_code_key";
         for (const filePath of movedFilePaths) {
             await safeDeleteFile(filePath);
         }
         for (const filePath of temporaryPaths) {
             await safeDeleteFile(filePath);
+        }
+        if (duplicateReferenceCode) {
+            throw createCodeError("ERR_INVALID_SELECTION");
         }
         throw error;
     }
@@ -291,4 +354,5 @@ const createJournalEntry = async (userId, entryData = {}) => {
 
 module.exports = {
     createJournalEntry,
+    isReferenceCodeAvailable,
 };

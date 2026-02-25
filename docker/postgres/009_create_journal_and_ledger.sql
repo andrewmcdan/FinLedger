@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_by INTEGER REFERENCES users(id),
     approved_at TIMESTAMP,
-    posted_at TIMESTAMP
+    posted_at TIMESTAMP,
+    reference_code TEXT UNIQUE
 );
 
 -- Query helpers for posting workflows and date-based reporting.
@@ -22,6 +23,12 @@ ON journal_entries(entry_date);
 
 CREATE INDEX IF NOT EXISTS idx_journal_entries_status
 ON journal_entries(status);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_journal_type
+ON journal_entries(journal_type);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_reference_code
+ON journal_entries(reference_code);
 
 -- Journal line items (debit/credit rows) under each entry header.
 CREATE TABLE IF NOT EXISTS journal_entry_lines (

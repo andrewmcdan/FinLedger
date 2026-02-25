@@ -22,7 +22,7 @@ const documentMimeToExt = new Map([
 fs.mkdirSync(userDocsRoot, { recursive: true });
 
 const router = express.Router();
-const { createJournalEntry } = require("../controllers/transactions");
+const { createJournalEntry, isReferenceCodeAvailable } = require("../controllers/transactions");
 const { log } = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const { sendApiError, sendApiSuccess } = require("../utils/api_messages");
@@ -52,86 +52,6 @@ const docStorage = multer.diskStorage({
     },
 });
 
-/*
- * uploadDoc payload contract (multipart/form-data)
- *
- * Required form-data fields:
- *   - payload: JSON string with journal entry data (schema below)
- *   - documents: one or more files (uploaded as repeated "documents" fields)
- *   - each file is persisted on disk as <documents.file_name UUID from DB><file_extension>
- *
- * JSON schema for "payload":
- * {
- *   "journal_type": "general" | "adjusting",
- *   "entry_date": "YYYY-MM-DD",
- *   "description": "string",
- *   "documents": [
- *     {
- *       "client_document_id": "string",
- *       "title": "string",
- *       "upload_index": 0,
- *       "meta_data": { "category": "invoice", "source": "vendor_portal" }
- *     }
- *   ],
- *   "journal_entry_document_ids": ["client_document_id", "..."],
- *   "lines": [
- *     {
- *       "line_no": 1,
- *       "account_id": 1200,
- *       "dc": "debit" | "credit",
- *       "amount": "123.45",
- *       "line_description": "Optional line memo",
- *       "document_ids": ["client_document_id", "..."]
- *     }
- *   ]
- * }
- *
- * Full example payload JSON:
- * {
- *   "journal_type": "general",
- *   "entry_date": "2026-02-25",
- *   "description": "Office supplies purchase",
- *   "documents": [
- *     {
- *       "client_document_id": "doc-invoice-001",
- *       "title": "Vendor Invoice 1023",
- *       "upload_index": 0,
- *       "meta_data": {
- *         "category": "invoice",
- *         "source": "vendor_portal"
- *       }
- *     },
- *     {
- *       "client_document_id": "doc-receipt-001",
- *       "title": "Credit Card Receipt",
- *       "upload_index": 1,
- *       "meta_data": {
- *         "category": "receipt",
- *         "vendor": "Office Supply Co."
- *       }
- *     }
- *   ],
- *   "journal_entry_document_ids": ["doc-invoice-001", "doc-receipt-001"],
- *   "lines": [
- *     {
- *       "line_no": 1,
- *       "account_id": 6100,
- *       "dc": "debit",
- *       "amount": "149.99",
- *       "line_description": "Office supplies expense",
- *       "document_ids": ["doc-invoice-001", "doc-receipt-001"]
- *     },
- *     {
- *       "line_no": 2,
- *       "account_id": 1010,
- *       "dc": "credit",
- *       "amount": "149.99",
- *       "line_description": "Cash paid",
- *       "document_ids": ["doc-receipt-001"]
- *     }
- *   ]
- * }
- */
 const uploadDoc = multer({
     storage: docStorage,
     limits: { fileSize: 15 * 1024 * 1024, files: 20 },
@@ -161,18 +81,6 @@ const removeUploadedFiles = (files = []) => {
     }
 };
 
-const ensureAuthenticatedUser = async (req, res, next) => {
-    if (!req.user?.id || !req.user?.token) {
-        log("warn", "Unauthorized upload request", { path: req.path }, utilities.getCallerInfo());
-        return sendApiError(res, 401, "ERR_UNAUTHORIZED");
-    }
-    if (!(await getUserLoggedInStatus(req.user.id, req.user.token))) {
-        log("warn", "Invalid token for authenticated user", { userId: req.user.id }, utilities.getCallerInfo());
-        return sendApiError(res, 401, "ERR_UNAUTHORIZED");
-    }
-    return next();
-};
-
 const ensureNotAdminUser = async (req, res, next) => {
     if (await isAdmin(req.user.id, req.user.token)) {
         log("warn", "Admin users are not allowed to perform this action", { userId: req.user.id }, utilities.getCallerInfo());
@@ -181,7 +89,40 @@ const ensureNotAdminUser = async (req, res, next) => {
     return next();
 };
 
-router.post("/new-journal-entry", ensureAuthenticatedUser, ensureNotAdminUser, uploadDoc.array("documents", 20), async (req, res) => {
+router.get("/reference-code-available", ensureNotAdminUser, async (req, res) => {
+    const referenceCode = String(req.query?.reference_code || "").trim();
+    if (!referenceCode) {
+        return sendApiError(res, 400, "ERR_PLEASE_FILL_ALL_FIELDS");
+    }
+
+    const excludeJournalEntryId = req.query?.exclude_journal_entry_id;
+    const parsedExcludeJournalEntryId = excludeJournalEntryId === undefined || excludeJournalEntryId === null || String(excludeJournalEntryId).trim() === ""
+        ? null
+        : Number(excludeJournalEntryId);
+    if (parsedExcludeJournalEntryId !== null && (!Number.isSafeInteger(parsedExcludeJournalEntryId) || parsedExcludeJournalEntryId <= 0)) {
+        return sendApiError(res, 400, "ERR_INVALID_SELECTION");
+    }
+
+    try {
+        const available = await isReferenceCodeAvailable(referenceCode, parsedExcludeJournalEntryId);
+        return res.json({
+            reference_code: referenceCode,
+            is_available: available,
+        });
+    } catch (error) {
+        if (error?.code === "ERR_PLEASE_FILL_ALL_FIELDS" || error?.code === "ERR_INVALID_SELECTION") {
+            return sendApiError(res, 400, error.code);
+        }
+        log("error", "Failed to validate journal reference code availability", {
+            userId: req.user?.id,
+            referenceCode,
+            error: error.message,
+        }, utilities.getCallerInfo(), req.user?.id);
+        return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
+    }
+});
+
+router.post("/new-journal-entry", ensureNotAdminUser, uploadDoc.array("documents", 20), async (req, res) => {
     const payloadRaw = req.body?.payload;
     if (!payloadRaw) {
         removeUploadedFiles(req.files);

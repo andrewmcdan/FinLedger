@@ -12,7 +12,7 @@ const getIsAdmin = async () => {
     return data.is_admin === true || data.isAdmin === true;
 };
 
-let showLoadingOverlayFn, hideLoadingOverlayFn, showErrorModalFn;
+let showLoadingOverlayFn, hideLoadingOverlayFn, showErrorModalFn, showMessageModalFn;
 let accountsList = [];
 let draftJournalLineCounter = 1;
 let formatNumberAsCurrencyFn, formatNumberWithCommasFn;
@@ -79,6 +79,22 @@ const updateJournalEntryTotals = (journalLinesContainer) => {
             differenceEl.classList.add("unbalanced");
         }
     }
+};
+
+const getTodayIsoDate = () => {
+    return new Date().toISOString().split("T")[0];
+};
+
+const parseCurrencyInput = (value) => {
+    const normalized = String(value || "").replace(/[^0-9.-]/g, "");
+    if (!normalized) {
+        return 0;
+    }
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+        return Number.NaN;
+    }
+    return parsed;
 };
 
 const getLineDocumentAssociationSet = (lineNumber) => {
@@ -266,10 +282,11 @@ const buildJournalLine = async (rowNum) => {
     return row;
 };
 
-export default async function initTransactions({ showLoadingOverlay, hideLoadingOverlay, showErrorModal }) {
+export default async function initTransactions({ showLoadingOverlay, hideLoadingOverlay, showErrorModal, showMessageModal }) {
     showLoadingOverlayFn = showLoadingOverlay;
     hideLoadingOverlayFn = hideLoadingOverlay;
     showErrorModalFn = showErrorModal;
+    showMessageModalFn = showMessageModal;
     await loadAccounts();
     console.log("Accounts list:", accountsList);
 
@@ -337,9 +354,14 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
 
     const journalEntryDateInput = document.getElementById("journal_entry_date");
     if (journalEntryDateInput) {
-        const today = new Date().toISOString().split("T")[0];
-        journalEntryDateInput.value = today;
+        journalEntryDateInput.value = getTodayIsoDate();
     }
+    const journalEntryForm = document.getElementById("journal_entry_form");
+    const journalTypeSelect = document.getElementById("journal_type");
+    const journalReferenceInput = document.getElementById("journal_reference");
+    const journalDescriptionInput = document.getElementById("journal_entry_description");
+    const journalSubmitButton = document.getElementById("journal_submit_button");
+    const journalResetButton = document.getElementById("journal_reset_button");
 
     const addJournalDocumentButton = document.querySelector("[data-journal-add-document-button]");
     const journalEntryDocumentInput = document.getElementById("journal_entry_document_input");
@@ -390,6 +412,177 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         journalLineDocumentsModal.setAttribute("aria-hidden", "true");
     };
 
+    const rebuildDefaultJournalLines = async () => {
+        if (!draftJournalLines) {
+            return;
+        }
+        draftJournalLines.replaceChildren();
+        draftJournalLineCounter = 1;
+        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+        updateJournalEntryTotals(draftJournalLines);
+    };
+
+    const resetJournalEntryDraft = async () => {
+        hideJournalLineDocumentsModal();
+        journalAttachedDocuments = [];
+        draftJournalDocumentCounter = 1;
+        lineDocumentAssociations = new Map();
+        pendingLineDocumentSelections = new Set();
+        if (journalEntryDocumentInput) {
+            journalEntryDocumentInput.value = "";
+        }
+        renderJournalAttachedDocumentsList();
+        await rebuildDefaultJournalLines();
+        if (journalEntryDateInput) {
+            journalEntryDateInput.value = getTodayIsoDate();
+        }
+        if (journalReferenceInput) {
+            journalReferenceInput.value = "";
+        }
+        if (journalDescriptionInput) {
+            journalDescriptionInput.value = "";
+        }
+        if (journalTypeSelect) {
+            journalTypeSelect.value = "general";
+        }
+        syncVisibleJournalLineDocumentsModal();
+    };
+
+    const buildLinesPayload = () => {
+        if (!draftJournalLines) {
+            return [];
+        }
+        const rows = Array.from(draftJournalLines.querySelectorAll("tr"));
+        const lines = [];
+        let totalDebits = 0;
+        let totalCredits = 0;
+
+        rows.forEach((row, index) => {
+            const accountSelect = row.querySelector("select");
+            const description = row.querySelector("input[data-line-note]")?.value?.trim() || "";
+            const debitInput = row.querySelector("input[data-debit-inputs]");
+            const creditInput = row.querySelector("input[data-credit-inputs]");
+            const debitAmount = parseCurrencyInput(debitInput?.value || "");
+            const creditAmount = parseCurrencyInput(creditInput?.value || "");
+            if (Number.isNaN(debitAmount) || Number.isNaN(creditAmount)) {
+                throw new Error("ERR_INVALID_SELECTION");
+            }
+            const hasDebit = debitAmount > 0;
+            const hasCredit = creditAmount > 0;
+            if (!hasDebit && !hasCredit) {
+                return;
+            }
+            if (hasDebit && hasCredit) {
+                throw new Error("ERR_INVALID_SELECTION");
+            }
+            const accountId = Number(accountSelect?.value);
+            if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+                throw new Error("ERR_INVALID_SELECTION");
+            }
+            const lineNoText = row.querySelector("td")?.textContent?.trim() || String(index + 1);
+            const lineNo = Number.isSafeInteger(Number(lineNoText)) ? Number(lineNoText) : (index + 1);
+            const lineDocIds = Array.from(lineDocumentAssociations.get(String(lineNo)) || []);
+
+            const dc = hasDebit ? "debit" : "credit";
+            const amount = hasDebit ? debitAmount : creditAmount;
+            lines.push({
+                line_no: lines.length + 1,
+                account_id: accountId,
+                dc,
+                amount: amount.toFixed(2),
+                line_description: description || null,
+                document_ids: lineDocIds,
+            });
+            if (dc === "debit") {
+                totalDebits += amount;
+            } else {
+                totalCredits += amount;
+            }
+        });
+
+        const roundedDebits = Number(totalDebits.toFixed(2));
+        const roundedCredits = Number(totalCredits.toFixed(2));
+        if (lines.length < 2 || roundedDebits <= 0 || roundedCredits <= 0 || roundedDebits !== roundedCredits) {
+            throw new Error("ERR_INVALID_SELECTION");
+        }
+
+        return lines;
+    };
+
+    const submitJournalEntryForApproval = async () => {
+        const entryDate = journalEntryDateInput?.value || getTodayIsoDate();
+        const journalType = String(journalTypeSelect?.value || "general").toLowerCase();
+        const description = String(journalDescriptionInput?.value || "").trim();
+        const referenceCode = String(journalReferenceInput?.value || "").trim();
+        if (!description) {
+            throw new Error("ERR_PLEASE_FILL_ALL_FIELDS");
+        }
+        if (!Array.isArray(journalAttachedDocuments) || journalAttachedDocuments.length === 0) {
+            throw new Error("ERR_NO_FILE_UPLOADED");
+        }
+        const lines = buildLinesPayload();
+
+        const payloadDocuments = journalAttachedDocuments.map((doc, index) => ({
+            client_document_id: doc.id,
+            title: doc.name,
+            upload_index: index,
+            meta_data: {
+                original_name: doc.name,
+                file_size: doc.size,
+                last_modified: doc.lastModified,
+            },
+        }));
+
+        const payload = {
+            journal_type: journalType,
+            entry_date: entryDate,
+            description,
+            reference_code: referenceCode || null,
+            documents: payloadDocuments,
+            journal_entry_document_ids: journalAttachedDocuments.map((doc) => doc.id),
+            lines,
+        };
+
+        const formData = new FormData();
+        formData.append("payload", JSON.stringify(payload));
+        journalAttachedDocuments.forEach((doc) => {
+            if (doc.file instanceof File) {
+                formData.append("documents", doc.file, doc.name);
+            }
+        });
+
+        showLoadingOverlayFn();
+        if (journalSubmitButton) {
+            journalSubmitButton.disabled = true;
+        }
+        try {
+            const res = await fetchWithAuth("/api/transactions/new-journal-entry", {
+                method: "POST",
+                body: formData,
+            });
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (parseError) {
+                data = null;
+            }
+            if (!res.ok) {
+                const apiError = data?.errorCode || data?.error || "ERR_INTERNAL_SERVER";
+                throw new Error(apiError);
+            }
+            if (typeof showMessageModalFn === "function") {
+                await showMessageModalFn(data?.messageCode || "MSG_FILE_UPLOADED_SUCCESS", true);
+            }
+            await resetJournalEntryDraft();
+        } finally {
+            if (journalSubmitButton) {
+                journalSubmitButton.disabled = false;
+            }
+            hideLoadingOverlayFn();
+        }
+    };
+
     if (journalLineDocumentsChecklist && journalLineDocumentsModal) {
         journalLineDocumentsChecklist.addEventListener("change", (event) => {
             const target = event.target;
@@ -432,6 +625,32 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     if (cancelJournalLineDocumentsButton) {
         cancelJournalLineDocumentsButton.addEventListener("click", () => {
             hideJournalLineDocumentsModal();
+        });
+    }
+
+    if (journalEntryForm) {
+        journalEntryForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+        });
+    }
+
+    if (journalSubmitButton) {
+        journalSubmitButton.addEventListener("click", async () => {
+            try {
+                await submitJournalEntryForApproval();
+            } catch (error) {
+                showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+            }
+        });
+    }
+
+    if (journalResetButton) {
+        journalResetButton.addEventListener("click", async () => {
+            try {
+                await resetJournalEntryDraft();
+            } catch (error) {
+                showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+            }
         });
     }
 }
