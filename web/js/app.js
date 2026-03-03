@@ -356,7 +356,13 @@ async function fetchPageMarkup(pageName) {
     if (response.ok) return response.text();
     console.log("Fetch page markup failed:", response.status);
     if (response.status === 401) {
-        let resJson = await response.clone().json();
+        let resJson = null;
+        try{
+            resJson = await response.clone().json();
+        }catch(err){
+            console.error(err);
+            return;
+        }
         const errorCode = resJson?.errorCode;
         const unauthenticatedCodes = new Set([
             "ERR_MISSING_AUTH_HEADER",

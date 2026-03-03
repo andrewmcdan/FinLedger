@@ -108,15 +108,6 @@ router.post("/login", async (req, res) => {
         return sendApiError(res, 401, "ERR_INVALID_USERNAME_OR_PASSWORD");
     }
 
-    // If the user is suspended, block login
-    if(user.status === "suspended") {
-        const now = new Date();
-        if(user.suspension_end_at && now < user.suspension_end_at) {
-            log("warn", `Blocked login attempt for suspended user. User id: ${user.id}`, { function: "login" }, utilities.getCallerInfo(), user.id);
-            return sendApiError(res, 403, "ERR_ACCOUNT_SUSPENDED_UNTIL", { suspension_end_at: user.suspension_end_at });
-        }
-    }
-
     // If the user is found, not suspended, and password is correct, create a JWT token and save it in the DB.
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "24h" });
 

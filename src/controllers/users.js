@@ -324,6 +324,8 @@ const updateUserProfile = async (userId, profileUpdates, changedByUserId = userI
         status: profileUpdates.status,
         suspension_start_at: profileUpdates.suspension_start_at,
         suspension_end_at: profileUpdates.suspension_end_at,
+        date_of_birth: profileUpdates.date_of_birth,
+        password_expires_at: profileUpdates.password_expires_at
     };
 
     const updates = [];
@@ -392,7 +394,7 @@ const createUser = async (firstName, lastName, email, password, role, address, d
             createdUser = await db.transaction(async (client) => {
                 const username = await generateUniqueUsername(client, firstName, lastName);
                 const result = await client.query(
-                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash, user_icon_path",
+                    "INSERT INTO users (username, email, password_hash, first_name, last_name, role, address, date_of_birth, status, temp_password, created_at, password_changed_at, password_expires_at, user_icon_path) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5, $6, $7, $8, 'pending', $9, now(), now(), now() + interval '90 days', gen_random_uuid()) RETURNING id, user_icon_path, username, password_hash",
                     [username, email, password, firstName, lastName, role, address, dateOfBirth, tempPasswordFlag],
                 );
                 await savePasswordToHistory(result.rows[0].id, result.rows[0].password_hash, client);
@@ -482,7 +484,7 @@ const getSecurityQuestionsForUser = async (userId) => {
 
 const verifySecurityAnswers = async (userId, answers) => {
     // answers should be an array of strings with the answers to the security questions in order
-    if (answers.length !== 3) {
+    if (!Array.isArray(answers) || answers.length !== 3) {
         logger.log("warn", "Invalid security answer payload length", { userId, length: answers.length }, utilities.getCallerInfo(), userId);
         const error = new Error("Exactly three answers must be provided");
         error.code = "ERR_EXACTLY_THREE_SECURITY_QA_REQUIRED";
