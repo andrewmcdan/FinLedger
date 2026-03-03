@@ -1,0 +1,37 @@
+<tr>
+  <td align="left" style="padding:18px 28px; background-color:#04280c;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+      <tr>
+        <td align="left" style="vertical-align:middle;">
+          <% if (logoUrl) { %>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+              <tr>
+                <td style="padding:6px; border-radius:12px; background-color:#ffffff;">
+                  <img
+                    src="<%= logoUrl %>"
+                    width="120"
+                    height="36"
+                    alt="<%= companyName %>"
+                    border="0"
+                    style="display:block; width:120px; height:36px; object-fit:contain;"
+                  />
+                </td>
+              </tr>
+            </table>
+          <% } else { %>
+            <span style="font-family:'Space Grotesk','Avenir Next','Segoe UI',Arial,sans-serif; font-size:20px; font-weight:700; color:#ffffff;">
+              <%= companyName %>
+            </span>
+          <% } %>
+        </td>
+        <td align="right" style="vertical-align:middle;">
+          <% if (headerRightText) { %>
+            <span style="font-family:'Space Grotesk','Avenir Next','Segoe UI',Arial,sans-serif; font-size:12px; color:#d7ead6;">
+              <%= headerRightText %>
+            </span>
+          <% } %>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>

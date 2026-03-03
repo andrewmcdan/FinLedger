@@ -14,14 +14,21 @@ const emailModulePath = path.resolve(__dirname, "../../src/services/email.js");
 const serverModulePath = path.resolve(__dirname, "../../src/server.js");
 
 // Stub email so route tests don't actually send anything.
+const recordEmail = ({ to, subject, body }) => {
+    emailCalls.push({ to, subject, body });
+    return { accepted: [to], messageId: "test" };
+};
+
 require.cache[emailModulePath] = {
     id: emailModulePath,
     filename: emailModulePath,
     loaded: true,
     exports: {
         sendEmail: async (to, subject, body) => {
-            emailCalls.push({ to, subject, body });
-            return { accepted: [to], messageId: "test" };
+            return recordEmail({ to, subject, body });
+        },
+        sendTemplatedEmail: async ({ to, subject, text }) => {
+            return recordEmail({ to, subject, body: text || "" });
         },
     },
 };
