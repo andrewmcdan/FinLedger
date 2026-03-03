@@ -24,9 +24,6 @@ require.cache[emailModulePath] = {
     filename: emailModulePath,
     loaded: true,
     exports: {
-        sendEmail: async (to, subject, body) => {
-            return recordEmail({ to, subject, body });
-        },
         sendTemplatedEmail: async ({ to, subject, text }) => {
             return recordEmail({ to, subject, body: text || "" });
         },

@@ -138,6 +138,5 @@ function sendEmail(to, subject, body, text = null, options = {}) {
 }
 
 module.exports = {
-    sendEmail,
     sendTemplatedEmail,
 };

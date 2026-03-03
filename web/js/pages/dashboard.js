@@ -116,12 +116,42 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             });
         });
     }
-    const tableColumns = ["fullname", "email", "role", "status", "last_login_at", "suspension_start_at", "suspension_end_at", "address", "password_expires_at"];
+    const tableColumns = ["fullname", "email", "role", "status", "last_login_at", "suspension_start_at", "suspension_end_at", "date_of_birth", "address", "password_expires_at"];
     const dateColumns = ["last_login_at", "suspension_start_at", "suspension_end_at", "password_expires_at"];
+    const dateOnlyColumns = new Set(["date_of_birth"]);
+    const dateDisplayColumns = new Set(["created_at", "last_login_at", "suspension_start_at", "suspension_end_at", "password_expires_at", "date_of_birth"]);
+    const dateTimeDisplayColumns = new Set(["created_at", "last_login_at", "suspension_start_at", "suspension_end_at", "password_expires_at"]);
     const nullableDateColumns = new Set(["suspension_start_at", "suspension_end_at", "password_expires_at"]);
+    const formatDateValue = (value) => {
+        if (!value) return "";
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return String(value);
+        return parsed.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    };
+    const formatDateTimeValue = (value) => {
+        if (!value) return "";
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return String(value);
+        return parsed.toLocaleString(undefined, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+        });
+    };
     const getDisplayValue = (user, column) => {
         if (column === "fullname") {
             return `${user.first_name || ""} ${user.last_name || ""}`.trim();
+        }
+        if (dateDisplayColumns.has(column)) {
+            if (nullableDateColumns.has(column) && !user[column]) {
+                return "N/A";
+            }
+            if (dateTimeDisplayColumns.has(column)) {
+                return formatDateTimeValue(user[column]);
+            }
+            return formatDateValue(user[column]);
         }
         if (nullableDateColumns.has(column)) {
             return user[column] ? user[column] : "N/A";
@@ -136,7 +166,11 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             cell.removeEventListener("dblclick", handleClick);
             const value = column === "fullname" ? `${user.first_name || ""} ${user.last_name || ""}`.trim() : (user[column] ?? "");
             const inputAttr = `data-input-${column}-${user.id}`;
-            if (isDate) {
+            if (dateOnlyColumns.has(column)) {
+                const dateValue = value ? new Date(value).toISOString().slice(0, 10) : "";
+                const input = createInput("date", dateValue, inputAttr);
+                cell.replaceChildren(input);
+            } else if (isDate) {
                 const dateValue = value ? new Date(value).toISOString().slice(0, 16) : "";
                 const input = createInput("datetime-local", dateValue, inputAttr);
                 cell.replaceChildren(input);
@@ -259,13 +293,13 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             row.appendChild(createCell({ text: fullName, dataAttr: `data-fullname-${user.id}` }));
             row.appendChild(createCell({ text: user.status ?? "", dataAttr: `data-status-${user.id}` }));
             row.appendChild(createCell({ text: user.role ?? "", dataAttr: `data-role-${user.id}` }));
-            row.appendChild(createCell({ text: user.created_at ?? "", dataAttr: `data-created_at-${user.id}` }));
-            row.appendChild(createCell({ text: user.last_login_at ?? "", dataAttr: `data-last_login_at-${user.id}` }));
-            row.appendChild(createCell({ text: user.password_expires_at ? user.password_expires_at : "N/A", dataAttr: `data-password_expires_at-${user.id}` }));
-            row.appendChild(createCell({ text: user.suspension_start_at ? user.suspension_start_at : "N/A", dataAttr: `data-suspension_start_at-${user.id}` }));
-            row.appendChild(createCell({ text: user.suspension_end_at ? user.suspension_end_at : "N/A", dataAttr: `data-suspension_end_at-${user.id}` }));
+            row.appendChild(createCell({ text: getDisplayValue(user, "created_at"), dataAttr: `data-created_at-${user.id}` }));
+            row.appendChild(createCell({ text: getDisplayValue(user, "last_login_at"), dataAttr: `data-last_login_at-${user.id}` }));
+            row.appendChild(createCell({ text: getDisplayValue(user, "password_expires_at"), dataAttr: `data-password_expires_at-${user.id}` }));
+            row.appendChild(createCell({ text: getDisplayValue(user, "suspension_start_at"), dataAttr: `data-suspension_start_at-${user.id}` }));
+            row.appendChild(createCell({ text: getDisplayValue(user, "suspension_end_at"), dataAttr: `data-suspension_end_at-${user.id}` }));
             row.appendChild(createCell({ text: user.email ?? "", dataAttr: `data-email-${user.id}` }));
-            row.appendChild(createCell({ text: user.date_of_birth ?? "", dataAttr: `data-date_of_birth-${user.id}` }));
+            row.appendChild(createCell({ text: getDisplayValue(user, "date_of_birth"), dataAttr: `data-date_of_birth-${user.id}` }));
             row.appendChild(createCell({ text: user.address ?? "", dataAttr: `data-address-${user.id}` }));
             row.appendChild(createCell({ text: user.temp_password ? "True" : "False", dataAttr: `data-temp_password-${user.id}` }));
             usersTableBody.appendChild(row);

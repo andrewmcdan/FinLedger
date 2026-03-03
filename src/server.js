@@ -52,14 +52,15 @@ if (require.main === module) {
         async () => {
             try {
                 await usersController.logoutInactiveUsers();
+                await usersController.activateScheduledSuspensions();
                 await usersController.unsuspendExpiredSuspensions();
                 await usersController.resetStaleFailedLoginAttempts();
             } catch (error) {
                 logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
             }
         },
-        10 * 60 * 1000,
-    ); // every 10 minutes
+        5 * 60 * 1000,
+    ); // every 5 minutes
 
     setInterval(
         async () => {
