@@ -12,6 +12,7 @@ const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
 const auditLogsRoutes = require("./routes/audit_logs");
 const messagesRoutes = require("./routes/messages");
+const transactionsRoutes = require("./routes/transactions");
 const { dashboard, accountsList, forgotPasswordSubmit, profile, transactions } = require("./routes/rendered_routes");
 
 const app = express();
@@ -35,6 +36,7 @@ app.use(express.static("web"));
 app.use("/api/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/accounts", accountsRoutes);
+app.use("/api/transactions", transactionsRoutes);
 app.use("/api/audit-logs", auditLogsRoutes);
 app.use("/images", imageRoutes);
 

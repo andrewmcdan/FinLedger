@@ -133,7 +133,14 @@ function requestJson({ port, method, path: reqPath, headers = {}, body = null })
                     data += chunk;
                 });
                 res.on("end", () => {
-                    const parsed = data ? JSON.parse(data) : null;
+                    let parsed = null;
+                    if (data) {
+                        try {
+                            parsed = JSON.parse(data);
+                        } catch {
+                            parsed = null;
+                        }
+                    }
                     resolve({ statusCode: res.statusCode, body: parsed, rawBody: data });
                 });
             },
@@ -177,7 +184,14 @@ function requestMultipart({ port, method, path: reqPath, headers = {}, fields = 
                     data += chunk;
                 });
                 res.on("end", () => {
-                    const parsed = data ? JSON.parse(data) : null;
+                    let parsed = null;
+                    if (data) {
+                        try {
+                            parsed = JSON.parse(data);
+                        } catch {
+                            parsed = null;
+                        }
+                    }
                     resolve({ statusCode: res.statusCode, body: parsed, rawBody: data });
                 });
             },
@@ -330,7 +344,7 @@ test("POST /api/users/email-user sends email for admin and 400s on missing field
     }
 });
 
-test("GET /api/users/approve-user/:userId approves pending user (and emails)", async () => {
+test("PATCH /api/users/approve-user/:userId approves pending user (and emails)", async () => {
     const admin = await insertUser({ username: "admin4", email: "admin4@example.com", role: "administrator" });
     const pending = await insertUser({ username: "pend", email: "pend@example.com", status: "pending", firstName: "Pen" });
     const token = "admin4-token";
@@ -342,7 +356,7 @@ test("GET /api/users/approve-user/:userId approves pending user (and emails)", a
         const { port } = server.address();
         const res = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/approve-user/${pending.id}`,
             headers: authHeaders({ userId: admin.id, token }),
         });
@@ -357,7 +371,7 @@ test("GET /api/users/approve-user/:userId approves pending user (and emails)", a
     }
 });
 
-test("GET /api/users/approve-user/:userId rejects non-pending users", async () => {
+test("PATCH /api/users/approve-user/:userId rejects non-pending users", async () => {
     const admin = await insertUser({ username: "admin5", email: "admin5@example.com", role: "administrator" });
     const active = await insertUser({ username: "act", email: "act@example.com", status: "active" });
     const token = "admin5-token";
@@ -369,7 +383,7 @@ test("GET /api/users/approve-user/:userId rejects non-pending users", async () =
         const { port } = server.address();
         const res = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/approve-user/${active.id}`,
             headers: authHeaders({ userId: admin.id, token }),
         });
@@ -380,7 +394,7 @@ test("GET /api/users/approve-user/:userId rejects non-pending users", async () =
     }
 });
 
-test("GET /api/users/reject-user/:userId rejects pending user and sends rejection email", async () => {
+test("PATCH /api/users/reject-user/:userId rejects pending user and sends rejection email", async () => {
     const admin = await insertUser({ username: "admin-reject", email: "admin-reject@example.com", role: "administrator" });
     const pending = await insertUser({ username: "rejectme", email: "rejectme@example.com", status: "pending", firstName: "Reject" });
     const token = "admin-reject-token";
@@ -392,7 +406,7 @@ test("GET /api/users/reject-user/:userId rejects pending user and sends rejectio
         const { port } = server.address();
         const res = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/reject-user/${pending.id}`,
             headers: authHeaders({ userId: admin.id, token }),
         });
@@ -529,7 +543,7 @@ test("POST /api/users/register_new_user is public, creates pending user, and ema
     }
 });
 
-test("Password reset flow: GET /reset-password issues token, then /security-questions and /verify-security-answers", async () => {
+test("Password reset flow: PATCH /reset-password issues token, then /security-questions and /verify-security-answers", async () => {
     const token = "token-reset";
     const user = await insertUser({
         username: "resetuser",
@@ -549,7 +563,7 @@ test("Password reset flow: GET /reset-password issues token, then /security-ques
 
         const issue = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/reset-password/${encodeURIComponent(user.email)}/${encodeURIComponent(user.username)}`,
         });
         assert.equal(issue.statusCode, 200);
@@ -627,7 +641,7 @@ test("Password reset flow locks after three incorrect security-answer attempts",
 
         const issue = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/reset-password/${encodeURIComponent(user.email)}/${encodeURIComponent(user.username)}`,
         });
         assert.equal(issue.statusCode, 200);
@@ -677,7 +691,7 @@ test("Password reset flow locks after three incorrect security-answer attempts",
 
         const reissue = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/reset-password/${encodeURIComponent(user.email)}/${encodeURIComponent(user.username)}`,
         });
         assert.equal(reissue.statusCode, 200);
@@ -722,7 +736,7 @@ test("Admin user management endpoints: suspend, reinstate, update-user-field, de
 
         const reinstate = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/reinstate-user/${user.id}`,
             headers: authHeaders({ userId: admin.id, token }),
         });
@@ -739,7 +753,7 @@ test("Admin user management endpoints: suspend, reinstate, update-user-field, de
 
         const resetPw = await requestJson({
             port,
-            method: "GET",
+            method: "PATCH",
             path: `/api/users/reset-user-password/${user.id}`,
             headers: authHeaders({ userId: admin.id, token }),
         });

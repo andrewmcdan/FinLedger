@@ -1,6 +1,8 @@
 -- Core identity and profile table used by authentication and user management.
 -- This table stores login state, lifecycle state (pending/active/suspended/etc.),
 -- password metadata, and password-reset/security-question data.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
   username TEXT UNIQUE,
@@ -30,7 +32,10 @@ CREATE TABLE IF NOT EXISTS users (
   security_question_3 TEXT,
   security_answer_hash_3 TEXT,
   reset_token TEXT,
-  reset_token_expires_at TIMESTAMPTZ
+  reset_token_expires_at TIMESTAMPTZ,
+  user_icon_path UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  temp_password BOOLEAN NOT NULL DEFAULT FALSE,
+  reset_failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (reset_failed_attempts >= 0)
 );
 
 -- Historical password hashes for password-reuse prevention checks.
@@ -41,3 +46,8 @@ CREATE TABLE IF NOT EXISTS password_history (
   password_hash TEXT NOT NULL,
   changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Supports scheduled stale failed-login-attempt resets for active users.
+CREATE INDEX IF NOT EXISTS idx_users_last_login_attempt_active_failed
+  ON users (last_login_attempt_at)
+  WHERE status = 'active' AND failed_login_attempts > 0;

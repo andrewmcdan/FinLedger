@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_by INTEGER REFERENCES users(id),
     approved_at TIMESTAMP,
-    posted_at TIMESTAMP
+    posted_at TIMESTAMP,
+    reference_code TEXT UNIQUE
 );
 
 -- Query helpers for posting workflows and date-based reporting.
@@ -22,6 +23,12 @@ ON journal_entries(entry_date);
 
 CREATE INDEX IF NOT EXISTS idx_journal_entries_status
 ON journal_entries(status);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_journal_type
+ON journal_entries(journal_type);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entries_reference_code
+ON journal_entries(reference_code);
 
 -- Journal line items (debit/credit rows) under each entry header.
 CREATE TABLE IF NOT EXISTS journal_entry_lines (
@@ -32,7 +39,6 @@ CREATE TABLE IF NOT EXISTS journal_entry_lines (
     dc TEXT NOT NULL CHECK (dc IN ('debit', 'credit')),
     amount NUMERIC(18, 2) NOT NULL,
     line_description TEXT,
-    source_document_id INTEGER REFERENCES documents(id),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by INTEGER NOT NULL REFERENCES users(id),
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -51,6 +57,42 @@ ON journal_entry_lines(dc);
 
 CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_amount
 ON journal_entry_lines(amount);
+
+-- Entry-level supporting documents (many-to-many).
+CREATE TABLE IF NOT EXISTS journal_entry_documents (
+    id SERIAL PRIMARY KEY,
+    journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+    document_id BIGINT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER NOT NULL REFERENCES users(id),
+    UNIQUE (journal_entry_id, document_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entry_documents_journal_entry_id
+ON journal_entry_documents(journal_entry_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entry_documents_document_id
+ON journal_entry_documents(document_id);
+
+-- Line-level supporting documents (many-to-many).
+CREATE TABLE IF NOT EXISTS journal_entry_line_documents (
+    id SERIAL PRIMARY KEY,
+    journal_entry_line_id INTEGER NOT NULL REFERENCES journal_entry_lines(id) ON DELETE CASCADE,
+    document_id BIGINT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER NOT NULL REFERENCES users(id),
+    UNIQUE (journal_entry_line_id, document_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entry_line_documents_journal_entry_line_id
+ON journal_entry_line_documents(journal_entry_line_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entry_line_documents_document_id
+ON journal_entry_line_documents(document_id);
 
 -- Ledger postings derived from approved/posted journal lines.
 -- pr_journal_ref stores the posting-reference notation used in ledgers.

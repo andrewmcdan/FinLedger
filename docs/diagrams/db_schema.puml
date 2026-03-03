@@ -177,7 +177,28 @@ package "Journals & Ledger" {
     dc : TEXT
     amount : NUMERIC(18,2)
     line_description : TEXT
-    source_document_id : INTEGER <<FK>>
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+    updated_at : TIMESTAMP
+    updated_by : INTEGER <<FK>>
+  }
+
+  entity "journal_entry_documents" as journal_entry_documents {
+    *id : SERIAL <<PK>>
+    --
+    journal_entry_id : INTEGER <<FK>>
+    document_id : BIGINT <<FK>>
+    created_at : TIMESTAMP
+    created_by : INTEGER <<FK>>
+    updated_at : TIMESTAMP
+    updated_by : INTEGER <<FK>>
+  }
+
+  entity "journal_entry_line_documents" as journal_entry_line_documents {
+    *id : SERIAL <<PK>>
+    --
+    journal_entry_line_id : INTEGER <<FK>>
+    document_id : BIGINT <<FK>>
     created_at : TIMESTAMP
     created_by : INTEGER <<FK>>
     updated_at : TIMESTAMP
@@ -306,6 +327,8 @@ users ||--o{ account_audits : changed_by
 users ||--o{ account_metadata_edits : changed_by
 users ||--o{ journal_entries : created/updated/approved
 users ||--o{ journal_entry_lines : created/updated
+users ||--o{ journal_entry_documents : created/updated
+users ||--o{ journal_entry_line_documents : created/updated
 users ||--o{ ledger_entries : created/updated/posted
 users ||--o{ trial_balance_runs : created_by
 users ||--o{ adjustment_metadata : created_by
@@ -327,12 +350,15 @@ accounts ||--o{ trial_balance_lines : account_id
 accounts ||--o{ adjustment_lines : account_id
 
 journal_entries ||--o{ journal_entry_lines : journal_entry_id
+journal_entries ||--o{ journal_entry_documents : journal_entry_id
 journal_entries ||--o{ ledger_entries : journal_entry_id
 journal_entries ||--o{ adjustment_metadata : journal_entry_id
 
 journal_entry_lines ||--o{ ledger_entries : journal_entry_line_id
+journal_entry_lines ||--o{ journal_entry_line_documents : journal_entry_line_id
 
-documents ||--o{ journal_entry_lines : source_document_id
+documents ||--o{ journal_entry_documents : document_id
+documents ||--o{ journal_entry_line_documents : document_id
 
 trial_balance_runs ||--o{ trial_balance_lines : trial_balance_run_id
 
