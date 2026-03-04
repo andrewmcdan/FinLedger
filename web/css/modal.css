@@ -85,3 +85,6 @@
     white-space: nowrap;
 }
 
+.big-modal .modal-content{
+    max-width: 95%;
+}

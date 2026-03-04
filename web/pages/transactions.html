@@ -324,4 +324,25 @@
         </div>
     </div>
     <% } %>
+    <% if (canViewJournalQueue) { %>
+    <div id="journal_entry_detail_modal" class="modal big-modal is-visible" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-button" id="close_journal_entry_detail_modal" aria-label="Close">&times;</span>
+            <h2 id="journal_entry_detail_modal_title">Journal Entry Details</h2>
+            <p class="meta" data-journal-entry-detail-id></p>
+            <div >
+                <data-journal-details>
+                </data-journal-details>
+            </div>
+            <div class="data-row">
+                <p class="value">
+                    <span class="span-label"> </span>
+                    <span class="span-actions">
+                        <button type="button" class="button-small" id="journal_entry_detail_close_button">Close</button>
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
+    <% } %>
 </section>
