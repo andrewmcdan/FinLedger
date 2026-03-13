@@ -216,6 +216,19 @@ const listAdministratorContacts = async (excludeUserId = null) => {
     return adminResult.rows;
 };
 
+const listManagerContacts = async (excludeUserId = null) => {
+    logger.log("debug", "Listing manager contacts", { excludeUserId }, utilities.getCallerInfo());
+    const values = [];
+    let whereClause = "role = 'manager' AND status = 'active' AND email IS NOT NULL AND email <> ''";
+    if (excludeUserId !== null && excludeUserId !== undefined) {
+        values.push(excludeUserId);
+        whereClause += " AND id <> $1";
+    }
+    const managerResult = await db.query(`SELECT id, email, first_name FROM users WHERE ${whereClause} ORDER BY id ASC`, values);
+    logger.log("debug", "Manager contacts listed", { count: managerResult.rowCount }, utilities.getCallerInfo());
+    return managerResult.rows;
+};
+
 const listLoggedInUsers = async () => {
     logger.log("debug", "Listing logged-in users", {}, utilities.getCallerInfo());
     const loggedInUsersResult = await db.query("SELECT id, user_id, login_at, logout_at FROM logged_in_users ORDER BY id ASC");
@@ -634,6 +647,7 @@ module.exports = {
     getUserById,
     listUsers,
     listAdministratorContacts,
+    listManagerContacts,
     listLoggedInUsers,
     approveUser,
     createUser,

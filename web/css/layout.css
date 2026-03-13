@@ -682,6 +682,41 @@ button.button-small,
     font-weight: 600;
 }
 
+.badge--pending {
+    background: rgba(221, 138, 4, 0.15);
+    color: #8c5700;
+}
+
+.badge--approved {
+    background: rgba(18, 132, 73, 0.15);
+    color: #0f6b3c;
+}
+
+.badge--rejected {
+    background: rgba(196, 48, 48, 0.15);
+    color: #a32c2c;
+}
+
+.journal-line-doc-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.journal-line-doc-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    background: rgba(11, 123, 108, 0.06);
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .table {
     width: 100%;
     border-collapse: collapse;

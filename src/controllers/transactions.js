@@ -5,6 +5,8 @@ const { log } = require("./../utils/logger");
 const utilities = require("./../utils/utilities");
 
 const userDocsRoot = path.resolve(__dirname, "./../../user-docs/");
+const JOURNAL_STATUSES = new Set(["pending", "approved", "rejected", "all"]);
+const MAX_QUEUE_LIMIT = 200;
 
 const createCodeError = (code) => {
     const error = new Error(code);
@@ -50,6 +52,71 @@ const normalizeReferenceCode = (referenceCode) => {
     return normalizedReferenceCode;
 };
 
+const normalizeJournalStatus = (status, { allowAll = true } = {}) => {
+    const normalizedStatus = String(status || "pending").trim().toLowerCase();
+    if (allowAll && normalizedStatus === "all") {
+        return "all";
+    }
+    if (!["pending", "approved", "rejected"].includes(normalizedStatus)) {
+        throw createCodeError("ERR_INVALID_SELECTION");
+    }
+    return normalizedStatus;
+};
+
+const normalizeDateFilter = (dateValue) => {
+    if (dateValue === undefined || dateValue === null || String(dateValue).trim() === "") {
+        return null;
+    }
+    const normalized = String(dateValue).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+        throw createCodeError("ERR_INVALID_SELECTION");
+    }
+    return normalized;
+};
+
+const parsePositiveInteger = (value, fallback) => {
+    if (value === undefined || value === null || String(value).trim() === "") {
+        return fallback;
+    }
+    const parsed = Number.parseInt(String(value), 10);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+        throw createCodeError("ERR_INVALID_SELECTION");
+    }
+    return parsed;
+};
+
+const parseQueueLimit = (value) => {
+    const parsed = parsePositiveInteger(value, 25);
+    return Math.min(Math.max(parsed, 1), MAX_QUEUE_LIMIT);
+};
+
+const normalizeSearch = (search) => {
+    const normalizedSearch = String(search || "").trim();
+    if (!normalizedSearch) {
+        return "";
+    }
+    return normalizedSearch.slice(0, 120);
+};
+
+const normalizeJournalEntryId = (journalEntryId) => {
+    const parsed = Number(journalEntryId);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+        throw createCodeError("ERR_INVALID_SELECTION");
+    }
+    return parsed;
+};
+
+const normalizeManagerComment = (comment, { required = false } = {}) => {
+    const normalized = String(comment || "").trim();
+    if (required && !normalized) {
+        throw createCodeError("ERR_JOURNAL_REJECTION_REASON_REQUIRED");
+    }
+    if (!normalized) {
+        return null;
+    }
+    return normalized.slice(0, 2000);
+};
+
 const buildAutoReferenceCode = (journalEntryId) => {
     return `JE-${String(journalEntryId).padStart(8, "0")}`;
 };
@@ -90,6 +157,24 @@ const safeDeleteFile = async (filePath) => {
     } catch (error) {
         log("warn", "Failed to remove file during journal-entry rollback", { filePath, error: error.message }, utilities.getCallerInfo());
     }
+};
+
+const applyJournalLinePostingToAccount = async ({ client, accountId, dc, amount }) => {
+    const debitAmount = dc === "debit" ? amount : 0;
+    const creditAmount = dc === "credit" ? amount : 0;
+
+    await client.query(
+        `UPDATE accounts
+         SET total_debits = total_debits + $1,
+             total_credits = total_credits + $2,
+             balance = CASE
+                 WHEN normal_side = 'debit'
+                     THEN COALESCE(initial_balance, 0) + (total_debits + $1) - (total_credits + $2)
+                 ELSE COALESCE(initial_balance, 0) - (total_debits + $1) + (total_credits + $2)
+             END
+         WHERE id = $3`,
+        [debitAmount, creditAmount, accountId],
+    );
 };
 
 const createJournalEntry = async (userId, entryData = {}) => {
@@ -331,6 +416,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
                 status: journalEntry.status,
                 total_debits: journalEntry.total_debits,
                 total_credits: journalEntry.total_credits,
+                manager_comment: null,
                 documents: persistedDocuments,
                 lines: persistedLines,
             };
@@ -352,7 +438,344 @@ const createJournalEntry = async (userId, entryData = {}) => {
     }
 };
 
+const listJournalQueue = async ({ status, fromDate, toDate, search, limit, offset } = {}) => {
+    const normalizedStatus = normalizeJournalStatus(status, { allowAll: true });
+    const normalizedFromDate = normalizeDateFilter(fromDate);
+    const normalizedToDate = normalizeDateFilter(toDate);
+    const normalizedSearch = normalizeSearch(search);
+    const normalizedLimit = parseQueueLimit(limit);
+    const normalizedOffset = parsePositiveInteger(offset, 0);
+
+    const whereClauses = [];
+    const params = [];
+
+    if (normalizedStatus !== "all") {
+        params.push(normalizedStatus);
+        whereClauses.push(`je.status = $${params.length}`);
+    }
+
+    if (normalizedFromDate) {
+        params.push(normalizedFromDate);
+        whereClauses.push(`je.entry_date::date >= $${params.length}::date`);
+    }
+
+    if (normalizedToDate) {
+        params.push(normalizedToDate);
+        whereClauses.push(`je.entry_date::date <= $${params.length}::date`);
+    }
+
+    if (normalizedSearch) {
+        params.push(`%${normalizedSearch}%`);
+        const searchParamRef = `$${params.length}`;
+        whereClauses.push(`(
+            je.description ILIKE ${searchParamRef}
+            OR COALESCE(je.reference_code, '') ILIKE ${searchParamRef}
+            OR TO_CHAR(je.entry_date::date, 'YYYY-MM-DD') ILIKE ${searchParamRef}
+            OR EXISTS (
+                SELECT 1
+                FROM journal_entry_lines jel
+                JOIN accounts a ON a.id = jel.account_id
+                WHERE jel.journal_entry_id = je.id
+                  AND (
+                      a.account_name ILIKE ${searchParamRef}
+                      OR jel.amount::text ILIKE ${searchParamRef}
+                  )
+            )
+        )`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+    const totalResult = await db.query(
+        `SELECT COUNT(*)::int AS total
+         FROM journal_entries je
+         ${whereSql}`,
+        params,
+    );
+
+    const rowsParams = [...params, normalizedLimit, normalizedOffset];
+    const rowsResult = await db.query(
+        `SELECT
+            je.id,
+            je.reference_code,
+            je.journal_type,
+            je.entry_date,
+            je.description,
+            je.status,
+            je.manager_comment,
+            je.total_debits,
+            je.total_credits,
+            je.created_by,
+            creator.username AS created_by_username,
+            je.approved_by,
+            approver.username AS approved_by_username,
+            je.created_at,
+            je.updated_at,
+            je.approved_at,
+            je.posted_at
+         FROM journal_entries je
+         JOIN users creator ON creator.id = je.created_by
+         LEFT JOIN users approver ON approver.id = je.approved_by
+         ${whereSql}
+         ORDER BY je.entry_date DESC, je.id DESC
+         LIMIT $${rowsParams.length - 1}
+         OFFSET $${rowsParams.length}`,
+        rowsParams,
+    );
+
+    return {
+        rows: rowsResult.rows,
+        total: totalResult.rows[0]?.total || 0,
+        limit: normalizedLimit,
+        offset: normalizedOffset,
+    };
+};
+
+const getJournalEntryDetail = async (journalEntryId) => {
+    const normalizedJournalEntryId = normalizeJournalEntryId(journalEntryId);
+
+    const entryResult = await db.query(
+        `SELECT
+            je.id,
+            je.reference_code,
+            je.journal_type,
+            je.entry_date,
+            je.description,
+            je.status,
+            je.manager_comment,
+            je.total_debits,
+            je.total_credits,
+            je.created_by,
+            creator.username AS created_by_username,
+            je.approved_by,
+            approver.username AS approved_by_username,
+            je.created_at,
+            je.updated_at,
+            je.approved_at,
+            je.posted_at
+         FROM journal_entries je
+         JOIN users creator ON creator.id = je.created_by
+         LEFT JOIN users approver ON approver.id = je.approved_by
+         WHERE je.id = $1`,
+        [normalizedJournalEntryId],
+    );
+
+    if (entryResult.rowCount === 0) {
+        throw createCodeError("ERR_JOURNAL_ENTRY_NOT_FOUND");
+    }
+
+    const documentsResult = await db.query(
+        `SELECT
+            d.id,
+            d.title,
+            d.original_file_name,
+            d.file_extension,
+            d.upload_at
+         FROM journal_entry_documents jed
+         JOIN documents d ON d.id = jed.document_id
+         WHERE jed.journal_entry_id = $1
+         ORDER BY d.upload_at ASC, d.id ASC`,
+        [normalizedJournalEntryId],
+    );
+
+    const linesResult = await db.query(
+        `SELECT
+            jel.id,
+            jel.line_no,
+            jel.account_id,
+            a.account_name,
+            jel.dc,
+            jel.amount,
+            jel.line_description
+         FROM journal_entry_lines jel
+         JOIN accounts a ON a.id = jel.account_id
+         WHERE jel.journal_entry_id = $1
+         ORDER BY jel.line_no ASC, jel.id ASC`,
+        [normalizedJournalEntryId],
+    );
+
+    const lineDocumentsResult = await db.query(
+        `SELECT
+            jeld.journal_entry_line_id,
+            d.id,
+            d.title,
+            d.original_file_name,
+            d.file_extension,
+            d.upload_at
+         FROM journal_entry_line_documents jeld
+         JOIN documents d ON d.id = jeld.document_id
+         JOIN journal_entry_lines jel ON jel.id = jeld.journal_entry_line_id
+         WHERE jel.journal_entry_id = $1
+         ORDER BY jeld.journal_entry_line_id ASC, d.upload_at ASC, d.id ASC`,
+        [normalizedJournalEntryId],
+    );
+
+    const docsByLineId = new Map();
+    for (const row of lineDocumentsResult.rows) {
+        if (!docsByLineId.has(row.journal_entry_line_id)) {
+            docsByLineId.set(row.journal_entry_line_id, []);
+        }
+        docsByLineId.get(row.journal_entry_line_id).push({
+            id: row.id,
+            title: row.title,
+            original_file_name: row.original_file_name,
+            file_extension: row.file_extension,
+            upload_at: row.upload_at,
+        });
+    }
+
+    const lines = linesResult.rows.map((line) => ({
+        ...line,
+        documents: docsByLineId.get(line.id) || [],
+    }));
+
+    return {
+        journal_entry: entryResult.rows[0],
+        documents: documentsResult.rows,
+        lines,
+    };
+};
+
+const approveJournalEntry = async ({ journalEntryId, managerUserId, managerComment }) => {
+    const normalizedJournalEntryId = normalizeJournalEntryId(journalEntryId);
+    const normalizedManagerUserId = normalizeJournalEntryId(managerUserId);
+    const normalizedManagerComment = normalizeManagerComment(managerComment, { required: false });
+
+    return db.transaction(async (client) => {
+        const journalEntryResult = await client.query(
+            `SELECT id, status, entry_date, description, reference_code
+             FROM journal_entries
+             WHERE id = $1
+             FOR UPDATE`,
+            [normalizedJournalEntryId],
+        );
+
+        if (journalEntryResult.rowCount === 0) {
+            throw createCodeError("ERR_JOURNAL_ENTRY_NOT_FOUND");
+        }
+
+        const journalEntry = journalEntryResult.rows[0];
+        if (journalEntry.status !== "pending") {
+            throw createCodeError("ERR_JOURNAL_ENTRY_NOT_PENDING");
+        }
+
+        let referenceCode = journalEntry.reference_code;
+        if (!referenceCode) {
+            referenceCode = buildAutoReferenceCode(normalizedJournalEntryId);
+            await client.query(
+                `UPDATE journal_entries
+                 SET reference_code = $1,
+                     updated_at = now(),
+                     updated_by = $2
+                 WHERE id = $3`,
+                [referenceCode, normalizedManagerUserId, normalizedJournalEntryId],
+            );
+        }
+
+        const linesResult = await client.query(
+            `SELECT id, account_id, dc, amount, line_description
+             FROM journal_entry_lines
+             WHERE journal_entry_id = $1
+             ORDER BY line_no ASC, id ASC`,
+            [normalizedJournalEntryId],
+        );
+
+        for (const line of linesResult.rows) {
+            const ledgerInsertResult = await client.query(
+                `INSERT INTO ledger_entries
+                    (account_id, entry_date, dc, amount, description, journal_entry_line_id, journal_entry_id, pr_journal_ref, created_by, updated_by, posted_at, posted_by)
+                 VALUES
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, now(), $9)
+                 ON CONFLICT (journal_entry_line_id) DO NOTHING
+                 RETURNING id`,
+                [
+                    line.account_id,
+                    journalEntry.entry_date,
+                    line.dc,
+                    line.amount,
+                    line.line_description || journalEntry.description || null,
+                    line.id,
+                    normalizedJournalEntryId,
+                    referenceCode,
+                    normalizedManagerUserId,
+                ],
+            );
+
+            // Keep posting idempotent: only roll up account totals when the ledger row is newly inserted.
+            if (ledgerInsertResult.rowCount === 0) {
+                continue;
+            }
+
+            await applyJournalLinePostingToAccount({
+                client,
+                accountId: line.account_id,
+                dc: line.dc,
+                amount: Number(line.amount),
+            });
+        }
+
+        const approvedResult = await client.query(
+            `UPDATE journal_entries
+             SET status = 'approved',
+                 manager_comment = $1,
+                 approved_by = $2,
+                 approved_at = now(),
+                 posted_at = now(),
+                 updated_by = $2,
+                 updated_at = now()
+             WHERE id = $3
+             RETURNING id, reference_code, journal_type, entry_date, description, status, manager_comment, total_debits, total_credits, created_by, approved_by, approved_at, posted_at`,
+            [normalizedManagerComment, normalizedManagerUserId, normalizedJournalEntryId],
+        );
+
+        return approvedResult.rows[0];
+    }, normalizedManagerUserId);
+};
+
+const rejectJournalEntry = async ({ journalEntryId, managerUserId, managerComment }) => {
+    const normalizedJournalEntryId = normalizeJournalEntryId(journalEntryId);
+    const normalizedManagerUserId = normalizeJournalEntryId(managerUserId);
+    const normalizedManagerComment = normalizeManagerComment(managerComment, { required: true });
+
+    return db.transaction(async (client) => {
+        const journalEntryResult = await client.query(
+            `SELECT id, status
+             FROM journal_entries
+             WHERE id = $1
+             FOR UPDATE`,
+            [normalizedJournalEntryId],
+        );
+
+        if (journalEntryResult.rowCount === 0) {
+            throw createCodeError("ERR_JOURNAL_ENTRY_NOT_FOUND");
+        }
+
+        const journalEntry = journalEntryResult.rows[0];
+        if (journalEntry.status !== "pending") {
+            throw createCodeError("ERR_JOURNAL_ENTRY_NOT_PENDING");
+        }
+
+        const rejectResult = await client.query(
+            `UPDATE journal_entries
+             SET status = 'rejected',
+                 manager_comment = $1,
+                 updated_by = $2,
+                 updated_at = now()
+             WHERE id = $3
+             RETURNING id, reference_code, journal_type, entry_date, description, status, manager_comment, total_debits, total_credits, created_by, approved_by, approved_at, posted_at`,
+            [normalizedManagerComment, normalizedManagerUserId, normalizedJournalEntryId],
+        );
+
+        return rejectResult.rows[0];
+    }, normalizedManagerUserId);
+};
+
 module.exports = {
+    JOURNAL_STATUSES,
     createJournalEntry,
     isReferenceCodeAvailable,
+    listJournalQueue,
+    getJournalEntryDetail,
+    approveJournalEntry,
+    rejectJournalEntry,
 };

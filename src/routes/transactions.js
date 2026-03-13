@@ -22,11 +22,19 @@ const documentMimeToExt = new Map([
 fs.mkdirSync(userDocsRoot, { recursive: true });
 
 const router = express.Router();
-const { createJournalEntry, isReferenceCodeAvailable } = require("../controllers/transactions");
+const {
+    createJournalEntry,
+    isReferenceCodeAvailable,
+    listJournalQueue,
+    getJournalEntryDetail,
+    approveJournalEntry,
+    rejectJournalEntry,
+} = require("../controllers/transactions");
 const { log } = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const { sendApiError, sendApiSuccess } = require("../utils/api_messages");
-const { getUserLoggedInStatus, isAdmin } = require("../controllers/users.js");
+const { isAdmin, isManager, listManagerContacts, getUserById } = require("../controllers/users.js");
+const { sendEmail } = require("../services/email.js");
 
 const getDocumentExtension = (file) => {
     const ext = path.extname(file?.originalname || "").toLowerCase();
@@ -68,7 +76,7 @@ const removeUploadedFiles = (files = []) => {
         if (!file?.path || !fs.existsSync(file.path)) {
             continue;
         }
-        // Check that file is within the userDocsRoot directory before attempting to delete
+        // Check that file is within the userDocsRoot directory before attempting to delete.
         if (!path.resolve(file.path).startsWith(userDocsRoot)) {
             log("warn", "Attempted to remove file outside of user documents directory", { path: file.path }, utilities.getCallerInfo());
             continue;
@@ -87,6 +95,70 @@ const ensureNotAdminUser = async (req, res, next) => {
         return sendApiError(res, 403, "ERR_FORBIDDEN");
     }
     return next();
+};
+
+const ensureManagerUser = async (req, res, next) => {
+    if (await isAdmin(req.user.id, req.user.token)) {
+        log("warn", "Admin users are not allowed to perform manager journal approval actions", { userId: req.user.id }, utilities.getCallerInfo());
+        return sendApiError(res, 403, "ERR_FORBIDDEN");
+    }
+    const manager = await isManager(req.user.id, req.user.token);
+    if (!manager) {
+        log("warn", "Non-manager attempted manager-only journal approval action", { userId: req.user.id }, utilities.getCallerInfo(), req.user.id);
+        return sendApiError(res, 403, "ERR_FORBIDDEN_MANAGER_APPROVAL_REQUIRED");
+    }
+    return next();
+};
+
+const notifyManagersOfJournalSubmission = async ({ submitterUserId, journalEntry }) => {
+    try {
+        const managerContacts = await listManagerContacts();
+        if (!Array.isArray(managerContacts) || managerContacts.length === 0) {
+            return;
+        }
+
+        const submitter = await getUserById(submitterUserId);
+        const submitterLabel = submitter?.username || `User #${submitterUserId}`;
+        const entryDate = journalEntry?.entry_date ? new Date(journalEntry.entry_date).toISOString().slice(0, 10) : "N/A";
+        const referenceCode = journalEntry?.reference_code || `JE-${journalEntry?.id || "N/A"}`;
+        const subject = `Journal Entry Submitted for Approval: ${referenceCode}`;
+        const body = [
+            "A journal entry has been submitted and is awaiting manager approval.",
+            "",
+            `Reference: ${referenceCode}`,
+            `Journal Entry ID: ${journalEntry?.id || "N/A"}`,
+            `Entry Date: ${entryDate}`,
+            `Submitted By: ${submitterLabel}`,
+            `Description: ${journalEntry?.description || "(none)"}`,
+            `Total Debits: ${journalEntry?.total_debits || "0.00"}`,
+            `Total Credits: ${journalEntry?.total_credits || "0.00"}`,
+            "",
+            "Please review this entry in FinLedger > Transactions > Journal Queue.",
+        ].join("\n");
+
+        const sendResults = await Promise.allSettled(
+            managerContacts.map((manager) => sendEmail(manager.email, subject, body)),
+        );
+
+        sendResults.forEach((result, index) => {
+            if (result.status === "fulfilled") {
+                return;
+            }
+            const manager = managerContacts[index];
+            log("warn", "Failed to notify manager of journal submission", {
+                managerId: manager?.id,
+                managerEmail: manager?.email,
+                journalEntryId: journalEntry?.id,
+                error: result.reason?.message || "unknown error",
+            }, utilities.getCallerInfo(), submitterUserId);
+        });
+    } catch (error) {
+        log("warn", "Manager journal submission notification failed", {
+            submitterUserId,
+            journalEntryId: journalEntry?.id,
+            error: error.message,
+        }, utilities.getCallerInfo(), submitterUserId);
+    }
 };
 
 router.get("/reference-code-available", ensureNotAdminUser, async (req, res) => {
@@ -116,6 +188,110 @@ router.get("/reference-code-available", ensureNotAdminUser, async (req, res) => 
         log("error", "Failed to validate journal reference code availability", {
             userId: req.user?.id,
             referenceCode,
+            error: error.message,
+        }, utilities.getCallerInfo(), req.user?.id);
+        return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
+    }
+});
+
+router.get("/journal-queue", ensureNotAdminUser, async (req, res) => {
+    try {
+        const queueResult = await listJournalQueue({
+            status: req.query?.status,
+            fromDate: req.query?.from_date,
+            toDate: req.query?.to_date,
+            search: req.query?.search,
+            limit: req.query?.limit,
+            offset: req.query?.offset,
+        });
+        return res.json({
+            journal_entries: queueResult.rows,
+            pagination: {
+                total: queueResult.total,
+                limit: queueResult.limit,
+                offset: queueResult.offset,
+            },
+        });
+    } catch (error) {
+        if (error?.code === "ERR_INVALID_SELECTION") {
+            return sendApiError(res, 400, "ERR_INVALID_SELECTION");
+        }
+        log("error", "Failed to list journal queue", { userId: req.user?.id, error: error.message }, utilities.getCallerInfo(), req.user?.id);
+        return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
+    }
+});
+
+router.get("/journal-entry/:journalEntryId", ensureNotAdminUser, async (req, res) => {
+    try {
+        const detail = await getJournalEntryDetail(req.params.journalEntryId);
+        return res.json(detail);
+    } catch (error) {
+        if (error?.code === "ERR_INVALID_SELECTION") {
+            return sendApiError(res, 400, "ERR_INVALID_SELECTION");
+        }
+        if (error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND") {
+            return sendApiError(res, 404, "ERR_JOURNAL_ENTRY_NOT_FOUND");
+        }
+        log("error", "Failed to fetch journal entry detail", {
+            userId: req.user?.id,
+            journalEntryId: req.params?.journalEntryId,
+            error: error.message,
+        }, utilities.getCallerInfo(), req.user?.id);
+        return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
+    }
+});
+
+router.patch("/journal-entry/:journalEntryId/approve", ensureManagerUser, async (req, res) => {
+    try {
+        const approvalResult = await approveJournalEntry({
+            journalEntryId: req.params.journalEntryId,
+            managerUserId: req.user.id,
+            managerComment: req.body?.manager_comment,
+        });
+        return sendApiSuccess(res, "MSG_JOURNAL_ENTRY_APPROVED_SUCCESS", { journal_entry: approvalResult });
+    } catch (error) {
+        if (error?.code === "ERR_INVALID_SELECTION") {
+            return sendApiError(res, 400, "ERR_INVALID_SELECTION");
+        }
+        if (error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND") {
+            return sendApiError(res, 404, "ERR_JOURNAL_ENTRY_NOT_FOUND");
+        }
+        if (error?.code === "ERR_JOURNAL_ENTRY_NOT_PENDING") {
+            return sendApiError(res, 400, "ERR_JOURNAL_ENTRY_NOT_PENDING");
+        }
+        log("error", "Failed to approve journal entry", {
+            userId: req.user?.id,
+            journalEntryId: req.params?.journalEntryId,
+            error: error.message,
+        }, utilities.getCallerInfo(), req.user?.id);
+        return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
+    }
+});
+
+router.patch("/journal-entry/:journalEntryId/reject", ensureManagerUser, async (req, res) => {
+    try {
+        const rejectionResult = await rejectJournalEntry({
+            journalEntryId: req.params.journalEntryId,
+            managerUserId: req.user.id,
+            managerComment: req.body?.manager_comment,
+        });
+        return sendApiSuccess(res, "MSG_JOURNAL_ENTRY_REJECTED_SUCCESS", { journal_entry: rejectionResult });
+    } catch (error) {
+        if (error?.code === "ERR_INVALID_SELECTION") {
+            return sendApiError(res, 400, "ERR_INVALID_SELECTION");
+        }
+        if (error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND") {
+            return sendApiError(res, 404, "ERR_JOURNAL_ENTRY_NOT_FOUND");
+        }
+        if (error?.code === "ERR_JOURNAL_ENTRY_NOT_PENDING") {
+            return sendApiError(res, 400, "ERR_JOURNAL_ENTRY_NOT_PENDING");
+        }
+        if (error?.code === "ERR_JOURNAL_REJECTION_REASON_REQUIRED") {
+            return sendApiError(res, 400, "ERR_JOURNAL_REJECTION_REASON_REQUIRED");
+        }
+        log("error", "Failed to reject journal entry", {
+            userId: req.user?.id,
+            journalEntryId: req.params?.journalEntryId,
             error: error.message,
         }, utilities.getCallerInfo(), req.user?.id);
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
@@ -155,6 +331,13 @@ router.post("/new-journal-entry", ensureNotAdminUser, uploadDoc.array("documents
             ...payload,
             uploaded_documents: uploadedDocuments,
         });
+
+        // Non-blocking notification path. Journal creation remains successful if email dispatch fails.
+        await notifyManagersOfJournalSubmission({
+            submitterUserId: req.user.id,
+            journalEntry: creationResult,
+        });
+
         return sendApiSuccess(res, "MSG_JOURNAL_ENTRY_CREATED_SUCCESS", {
             journal_entry: creationResult,
             uploaded_documents: creationResult?.documents || [],

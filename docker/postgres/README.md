@@ -77,7 +77,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 
 ### public.adjustment_metadata
 - id: integer
-- journal_entry_id: integer
+- journal_entry_id: integer (ref public.journal_entries.id)
 - adjustment_reason: text (prepaid_expense, accrual, depreciation, other)
 - period_end_date: timestamp without time zone
 - created_at: timestamp without time zone
@@ -142,10 +142,11 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - approved_at: timestamp without time zone
 - posted_at: timestamp without time zone
 - reference_code: text
+- manager_comment: text
 
 ### public.journal_entry_documents
 - id: integer
-- journal_entry_id: integer
+- journal_entry_id: integer (ref public.journal_entries.id)
 - document_id: bigint (ref public.documents.id)
 - created_at: timestamp without time zone
 - created_by: integer (ref public.users.id)
@@ -163,7 +164,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 
 ### public.journal_entry_lines
 - id: integer
-- journal_entry_id: integer
+- journal_entry_id: integer (ref public.journal_entries.id)
 - line_no: integer
 - account_id: integer (ref public.accounts.id)
 - dc: text (debit, credit)
@@ -182,7 +183,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - amount: numeric
 - description: text
 - journal_entry_line_id: integer (ref public.journal_entry_lines.id)
-- journal_entry_id: integer
+- journal_entry_id: integer (ref public.journal_entries.id)
 - pr_journal_ref: text
 - created_at: timestamp without time zone
 - created_by: integer (ref public.users.id)

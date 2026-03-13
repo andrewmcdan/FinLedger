@@ -101,7 +101,7 @@
         </form>
     </section>
     <% } %> <% if (canViewJournalQueue) { %>
-    <section class="card stack" aria-labelledby="journal_queue_title">
+    <section class="card stack" aria-labelledby="journal_queue_title" data-journal-queue-section data-can-approve="<%= canApprove ? 'true' : 'false' %>">
         <h2 id="journal_queue_title">Journal Queue</h2>
         <p class="meta">Review pending, approved, and rejected journal entries.</p>
 
@@ -160,23 +160,7 @@
                 </thead>
                 <tbody data-journal-queue>
                     <tr>
-                        <td>JE-000124</td>
-                        <td>2026-02-23</td>
-                        <td>Customer payment received</td>
-                        <td>acct_user</td>
-                        <td>$2,500.00</td>
-                        <td>$2,500.00</td>
-                        <td><span class="badge">Pending</span></td>
-                        <td class="meta">-</td>
-                        <td>
-                            <button type="button" class="button-small">View</button>
-                            <% if (canApprove) { %>
-                            <button type="button" class="button-small">Approve</button>
-                            <button type="button" class="button-small">Reject</button>
-                            <% } else { %>
-                            <span class="meta">Manager approval required</span>
-                            <% } %>
-                        </td>
+                        <td colspan="9" class="meta">Loading journal queue...</td>
                     </tr>
                 </tbody>
             </table>
@@ -299,6 +283,77 @@
             </article>
         </div>
     </section>
+    <% } %>
+
+    <% if (canViewJournalQueue) { %>
+    <div id="journal_queue_view_modal" class="modal" aria-hidden="true">
+        <div class="modal-content stack">
+            <span class="close-button" id="close_journal_queue_view_modal" aria-label="Close">&times;</span>
+            <h2>Journal Entry Review</h2>
+            <p class="meta" data-journal-queue-modal-reference>Reference: --</p>
+
+            <div class="grid" data-journal-queue-modal-summary>
+                <article class="notice">Status: <strong data-journal-queue-modal-status>--</strong></article>
+                <article class="notice">Prepared By: <strong data-journal-queue-modal-created-by>--</strong></article>
+                <article class="notice">Entry Date: <strong data-journal-queue-modal-entry-date>--</strong></article>
+                <article class="notice">Debits: <strong data-journal-queue-modal-total-debits>--</strong></article>
+                <article class="notice">Credits: <strong data-journal-queue-modal-total-credits>--</strong></article>
+                <article class="notice">Type: <strong data-journal-queue-modal-journal-type>--</strong></article>
+            </div>
+
+            <div class="field">
+                <label for="journal_queue_modal_description">Description</label>
+                <textarea id="journal_queue_modal_description" rows="2" readonly data-journal-queue-modal-description></textarea>
+            </div>
+
+            <div class="field">
+                <label>Attached Documents</label>
+                <ul class="journal-entry-documents-list" data-journal-queue-modal-documents>
+                    <li class="meta">No documents attached.</li>
+                </ul>
+            </div>
+
+            <div class="table-scroll">
+                <table class="table table--wide">
+                    <thead>
+                        <tr>
+                            <th>Line</th>
+                            <th>Account</th>
+                            <th>Line Description</th>
+                            <th>Debit</th>
+                            <th>Credit</th>
+                            <th>Line Docs</th>
+                        </tr>
+                    </thead>
+                    <tbody data-journal-queue-modal-lines>
+                        <tr>
+                            <td colspan="6" class="meta">No journal lines available.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="field">
+                <label for="journal_queue_manager_comment">Manager Comment</label>
+                <textarea id="journal_queue_manager_comment" rows="3" data-journal-queue-manager-comment placeholder="Required when rejecting."></textarea>
+            </div>
+
+            <div class="data-row">
+                <p class="value">
+                    <span class="span-label"> </span>
+                    <span class="span-actions">
+                        <button type="button" class="button-small" id="journal_queue_modal_close_button">Close</button>
+                        <% if (canApprove) { %>
+                        <button type="button" class="button-small" id="journal_queue_modal_approve_button">Approve</button>
+                        <button type="button" class="button-small" id="journal_queue_modal_reject_button">Reject</button>
+                        <% } else { %>
+                        <span class="meta">Manager approval required</span>
+                        <% } %>
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
     <% } %>
 
     <% if (canJournalize) { %>

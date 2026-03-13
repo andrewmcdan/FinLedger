@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     entry_date TIMESTAMP NOT NULL DEFAULT NOW(),
     description TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+    manager_comment TEXT,
     total_debits NUMERIC(18, 2) NOT NULL,
     total_credits NUMERIC(18, 2) NOT NULL,
     created_by INTEGER NOT NULL REFERENCES users(id),
@@ -16,6 +17,9 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     posted_at TIMESTAMP,
     reference_code TEXT UNIQUE
 );
+
+ALTER TABLE journal_entries
+    ADD COLUMN IF NOT EXISTS manager_comment TEXT;
 
 -- Query helpers for posting workflows and date-based reporting.
 CREATE INDEX IF NOT EXISTS idx_journal_entries_entry_date
@@ -113,3 +117,6 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
     posted_at TIMESTAMP,
     posted_by INTEGER REFERENCES users(id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_entries_journal_entry_line_id_unique
+ON ledger_entries(journal_entry_line_id);

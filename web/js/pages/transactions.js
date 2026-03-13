@@ -3,15 +3,6 @@ const { fetchWithAuth } = authHelpers;
 const domHelpers = await loadDomHelpers();
 const { createCell, createInput, createSelect, createTextarea } = domHelpers;
 
-const getIsAdmin = async () => {
-    const res = await fetchWithAuth("/api/auth/status");
-    if (!res.ok) {
-        return false;
-    }
-    const data = await res.json();
-    return data.is_admin === true || data.isAdmin === true;
-};
-
 let showLoadingOverlayFn, hideLoadingOverlayFn, showErrorModalFn, showMessageModalFn;
 let accountsList = [];
 let draftJournalLineCounter = 1;
@@ -49,21 +40,16 @@ const updateJournalEntryTotals = (journalLinesContainer) => {
     }
     const debitCells = journalLinesContainer.querySelectorAll("[data-debit-inputs]");
     const creditCells = journalLinesContainer.querySelectorAll("[data-credit-inputs]");
-    console.log("Updating totals. Debit cells:", debitCells, "Credit cells:", creditCells);
     let totalDebit = 0;
     let totalCredit = 0;
     debitCells.forEach((input) => {
-        console.log("Processing debit input:", input);
         const value = parseFloat(input.value.replace(/[^0-9.-]/g, ""));
-        console.log("Debit input value:", input.value, "Parsed value:", value);
         if (!isNaN(value)) {
             totalDebit += value;
         }
     });
     creditCells.forEach((input) => {
-        console.log("Processing credit input:", input);
         const value = parseFloat(input.value.replace(/[^0-9.-]/g, ""));
-        console.log("Credit input value:", input.value, "Parsed value:", value);
         if (!isNaN(value)) {
             totalCredit += value;
         }
@@ -105,6 +91,63 @@ const parseCurrencyInput = (value) => {
         return Number.NaN;
     }
     return parsed;
+};
+
+const formatDateForDisplay = (value) => {
+    if (!value) {
+        return "--";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return String(value);
+    }
+    return parsed.toISOString().slice(0, 10);
+};
+
+const formatReferenceCode = (entry) => {
+    if (entry?.reference_code) {
+        return String(entry.reference_code);
+    }
+    if (!entry?.id) {
+        return "--";
+    }
+    return `JE-${String(entry.id).padStart(8, "0")}`;
+};
+
+const normalizeQueueStatus = (status) => {
+    const normalized = String(status || "").trim().toLowerCase();
+    if (!normalized) {
+        return "pending";
+    }
+    if (["pending", "approved", "rejected", "all"].includes(normalized)) {
+        return normalized;
+    }
+    return "pending";
+};
+
+const toQueueStatusLabel = (status) => {
+    const normalized = normalizeQueueStatus(status);
+    if (normalized === "approved") {
+        return "Approved";
+    }
+    if (normalized === "rejected") {
+        return "Rejected";
+    }
+    if (normalized === "all") {
+        return "All";
+    }
+    return "Pending";
+};
+
+const toQueueBadgeClass = (status) => {
+    const normalized = normalizeQueueStatus(status);
+    if (normalized === "approved") {
+        return "badge badge--approved";
+    }
+    if (normalized === "rejected") {
+        return "badge badge--rejected";
+    }
+    return "badge badge--pending";
 };
 
 const getLineDocumentAssociationSet = (lineNumber) => {
@@ -298,7 +341,450 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     showErrorModalFn = showErrorModal;
     showMessageModalFn = showMessageModal;
     await loadAccounts();
-    console.log("Accounts list:", accountsList);
+    const numericHelpers = await loadNumericHelpers();
+    formatNumberAsCurrencyFn = numericHelpers.formatNumberAsCurrency;
+    formatNumberWithCommasFn = numericHelpers.formatNumberWithCommas;
+
+    const formatCurrencyDisplay = (value) => {
+        const numericValue = Number(value);
+        const normalizedValue = Number.isFinite(numericValue) ? numericValue : 0;
+        if (typeof formatNumberAsCurrencyFn === "function") {
+            return formatNumberAsCurrencyFn(normalizedValue);
+        }
+        return `$${normalizedValue.toFixed(2)}`;
+    };
+
+    const journalQueueSection = document.querySelector("[data-journal-queue-section]");
+    const journalQueueTableBody = document.querySelector("[data-journal-queue]");
+    const queueStatusFilter = document.querySelector("[data-queue-status-filter]");
+    const queueFromDateInput = document.querySelector("[data-queue-from-date]");
+    const queueToDateInput = document.querySelector("[data-queue-to-date]");
+    const queueSearchInput = document.querySelector("[data-queue-search]");
+    const queueApplyFiltersButton = document.getElementById("queue_apply_filters_button");
+    const queueClearFiltersButton = document.getElementById("queue_clear_filters_button");
+    const queueRefreshButton = document.querySelector("[data-refresh]");
+    const queueStatusLabel = document.querySelector("[data-status]");
+    const canApproveQueueEntries = journalQueueSection?.dataset?.canApprove === "true";
+    let activeQueueJournalEntryId = null;
+    let queueModalBusy = false;
+    let queueFetchSequence = 0;
+
+    const queueModal = document.getElementById("journal_queue_view_modal");
+    const closeQueueModalButtonTop = document.getElementById("close_journal_queue_view_modal");
+    const closeQueueModalButtonBottom = document.getElementById("journal_queue_modal_close_button");
+    const queueModalReferenceLabel = document.querySelector("[data-journal-queue-modal-reference]");
+    const queueModalStatusLabel = document.querySelector("[data-journal-queue-modal-status]");
+    const queueModalCreatedByLabel = document.querySelector("[data-journal-queue-modal-created-by]");
+    const queueModalEntryDateLabel = document.querySelector("[data-journal-queue-modal-entry-date]");
+    const queueModalTotalDebitsLabel = document.querySelector("[data-journal-queue-modal-total-debits]");
+    const queueModalTotalCreditsLabel = document.querySelector("[data-journal-queue-modal-total-credits]");
+    const queueModalJournalTypeLabel = document.querySelector("[data-journal-queue-modal-journal-type]");
+    const queueModalDescription = document.querySelector("[data-journal-queue-modal-description]");
+    const queueModalDocumentsList = document.querySelector("[data-journal-queue-modal-documents]");
+    const queueModalLinesBody = document.querySelector("[data-journal-queue-modal-lines]");
+    const queueModalManagerCommentInput = document.getElementById("journal_queue_manager_comment");
+    const queueModalApproveButton = document.getElementById("journal_queue_modal_approve_button");
+    const queueModalRejectButton = document.getElementById("journal_queue_modal_reject_button");
+
+    const markQueueUpdated = (label = null) => {
+        if (!queueStatusLabel) {
+            return;
+        }
+        if (label) {
+            queueStatusLabel.textContent = label;
+            return;
+        }
+        const now = new Date();
+        queueStatusLabel.textContent = `Updated ${now.toISOString().slice(11, 19)}`;
+    };
+
+    const setQueueModalVisible = (visible) => {
+        if (!queueModal) {
+            return;
+        }
+        queueModal.classList.toggle("is-visible", visible);
+        queueModal.setAttribute("aria-hidden", visible ? "false" : "true");
+    };
+
+    const closeQueueModal = () => {
+        activeQueueJournalEntryId = null;
+        setQueueModalVisible(false);
+    };
+
+    const setQueueDecisionButtonsState = ({ pending = false, busy = false } = {}) => {
+        if (queueModalApproveButton) {
+            queueModalApproveButton.disabled = !pending || busy;
+        }
+        if (queueModalRejectButton) {
+            queueModalRejectButton.disabled = !pending || busy;
+        }
+        if (queueModalManagerCommentInput) {
+            queueModalManagerCommentInput.readOnly = !pending || !canApproveQueueEntries || busy;
+        }
+    };
+
+    const buildQueueRow = (entry) => {
+        const row = document.createElement("tr");
+        row.setAttribute("data-journal-queue-row-id", String(entry.id));
+
+        const idCell = createCell({ text: formatReferenceCode(entry) });
+        const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
+        const descriptionCell = createCell({ text: entry.description || "-", isLongText: true });
+        const createdByCell = createCell({ text: entry.created_by_username || "-" });
+        const debitCell = createCell({ text: formatCurrencyDisplay(entry.total_debits) });
+        const creditCell = createCell({ text: formatCurrencyDisplay(entry.total_credits) });
+        const statusCell = createCell({});
+        const statusBadge = document.createElement("span");
+        statusBadge.className = toQueueBadgeClass(entry.status);
+        statusBadge.textContent = toQueueStatusLabel(entry.status);
+        statusCell.appendChild(statusBadge);
+        const managerCommentCell = createCell({ text: entry.manager_comment || "-", isLongText: true });
+        const actionsCell = createCell({});
+        const viewButton = document.createElement("button");
+        viewButton.type = "button";
+        viewButton.className = "button-small";
+        viewButton.textContent = "View";
+        viewButton.setAttribute("data-journal-queue-view-button", "");
+        viewButton.setAttribute("data-journal-entry-id", String(entry.id));
+        actionsCell.appendChild(viewButton);
+
+        row.appendChild(idCell);
+        row.appendChild(dateCell);
+        row.appendChild(descriptionCell);
+        row.appendChild(createdByCell);
+        row.appendChild(debitCell);
+        row.appendChild(creditCell);
+        row.appendChild(statusCell);
+        row.appendChild(managerCommentCell);
+        row.appendChild(actionsCell);
+        return row;
+    };
+
+    const renderQueueRows = (entries = []) => {
+        if (!journalQueueTableBody) {
+            return;
+        }
+        journalQueueTableBody.replaceChildren();
+        if (!Array.isArray(entries) || entries.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: "No journal entries found for the selected filters." });
+            cell.colSpan = 9;
+            cell.className = "meta";
+            row.appendChild(cell);
+            journalQueueTableBody.appendChild(row);
+            return;
+        }
+
+        entries.forEach((entry) => {
+            journalQueueTableBody.appendChild(buildQueueRow(entry));
+        });
+    };
+
+    const renderQueueModalDocuments = (documents = []) => {
+        if (!queueModalDocumentsList) {
+            return;
+        }
+        queueModalDocumentsList.replaceChildren();
+        if (!Array.isArray(documents) || documents.length === 0) {
+            const empty = document.createElement("li");
+            empty.className = "meta";
+            empty.textContent = "No documents attached.";
+            queueModalDocumentsList.appendChild(empty);
+            return;
+        }
+
+        documents.forEach((doc, index) => {
+            const item = document.createElement("li");
+            item.className = "journal-entry-document-item";
+            const title = doc.title || doc.original_file_name || `Document ${index + 1}`;
+            const extension = doc.file_extension || "";
+            const uploadedAt = formatDateForDisplay(doc.upload_at);
+            item.textContent = `${index + 1}. ${title}${extension ? ` (${extension})` : ""} - ${uploadedAt}`;
+            queueModalDocumentsList.appendChild(item);
+        });
+    };
+
+    const renderQueueModalLines = (lines = []) => {
+        if (!queueModalLinesBody) {
+            return;
+        }
+        queueModalLinesBody.replaceChildren();
+
+        if (!Array.isArray(lines) || lines.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: "No journal lines available." });
+            cell.colSpan = 6;
+            cell.className = "meta";
+            row.appendChild(cell);
+            queueModalLinesBody.appendChild(row);
+            return;
+        }
+
+        lines.forEach((line) => {
+            const row = document.createElement("tr");
+            const lineNumberCell = createCell({ text: line.line_no });
+            const accountCell = createCell({ text: line.account_name || line.account_id || "-" });
+            const descriptionCell = createCell({ text: line.line_description || "-", isLongText: true });
+            const debitCell = createCell({ text: line.dc === "debit" ? formatCurrencyDisplay(line.amount) : "$0.00" });
+            const creditCell = createCell({ text: line.dc === "credit" ? formatCurrencyDisplay(line.amount) : "$0.00" });
+            const lineDocsCell = createCell({});
+
+            if (Array.isArray(line.documents) && line.documents.length > 0) {
+                const docsContainer = document.createElement("div");
+                docsContainer.className = "journal-line-doc-pills";
+                line.documents.forEach((doc) => {
+                    const docPill = document.createElement("span");
+                    docPill.className = "journal-line-doc-pill";
+                    docPill.title = doc.title || doc.original_file_name || "Document";
+                    docPill.textContent = doc.title || doc.original_file_name || "Document";
+                    docsContainer.appendChild(docPill);
+                });
+                lineDocsCell.appendChild(docsContainer);
+            } else {
+                lineDocsCell.textContent = "-";
+            }
+
+            row.appendChild(lineNumberCell);
+            row.appendChild(accountCell);
+            row.appendChild(descriptionCell);
+            row.appendChild(debitCell);
+            row.appendChild(creditCell);
+            row.appendChild(lineDocsCell);
+            queueModalLinesBody.appendChild(row);
+        });
+    };
+
+    const hydrateQueueModal = (detail) => {
+        const journalEntry = detail?.journal_entry || {};
+        if (queueModalReferenceLabel) {
+            queueModalReferenceLabel.textContent = `Reference: ${formatReferenceCode(journalEntry)}`;
+        }
+        if (queueModalStatusLabel) {
+            queueModalStatusLabel.textContent = toQueueStatusLabel(journalEntry.status);
+        }
+        if (queueModalCreatedByLabel) {
+            queueModalCreatedByLabel.textContent = journalEntry.created_by_username || "--";
+        }
+        if (queueModalEntryDateLabel) {
+            queueModalEntryDateLabel.textContent = formatDateForDisplay(journalEntry.entry_date);
+        }
+        if (queueModalTotalDebitsLabel) {
+            queueModalTotalDebitsLabel.textContent = formatCurrencyDisplay(journalEntry.total_debits);
+        }
+        if (queueModalTotalCreditsLabel) {
+            queueModalTotalCreditsLabel.textContent = formatCurrencyDisplay(journalEntry.total_credits);
+        }
+        if (queueModalJournalTypeLabel) {
+            const normalizedJournalType = String(journalEntry.journal_type || "").trim();
+            queueModalJournalTypeLabel.textContent = normalizedJournalType ? `${normalizedJournalType.charAt(0).toUpperCase()}${normalizedJournalType.slice(1)}` : "--";
+        }
+        if (queueModalDescription) {
+            queueModalDescription.value = journalEntry.description || "";
+        }
+        if (queueModalManagerCommentInput) {
+            queueModalManagerCommentInput.value = journalEntry.manager_comment || "";
+            queueModalManagerCommentInput.placeholder = canApproveQueueEntries && journalEntry.status === "pending"
+                ? "Required when rejecting."
+                : "Manager comment (if provided).";
+        }
+        renderQueueModalDocuments(detail?.documents || []);
+        renderQueueModalLines(detail?.lines || []);
+        setQueueDecisionButtonsState({
+            pending: canApproveQueueEntries && normalizeQueueStatus(journalEntry.status) === "pending",
+            busy: false,
+        });
+    };
+
+    const openQueueModalForJournalEntry = async (journalEntryId) => {
+        if (!queueModal) {
+            return;
+        }
+        const normalizedJournalEntryId = Number(journalEntryId);
+        if (!Number.isSafeInteger(normalizedJournalEntryId) || normalizedJournalEntryId <= 0) {
+            showErrorModalFn("ERR_INVALID_SELECTION", false);
+            return;
+        }
+
+        queueModalBusy = true;
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(`/api/transactions/journal-entry/${normalizedJournalEntryId}`);
+            const detail = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(detail?.errorCode || detail?.error || "ERR_INTERNAL_SERVER");
+            }
+            activeQueueJournalEntryId = normalizedJournalEntryId;
+            hydrateQueueModal(detail);
+            setQueueModalVisible(true);
+        } catch (error) {
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            queueModalBusy = false;
+            hideLoadingOverlayFn();
+        }
+    };
+
+    const loadJournalQueue = async () => {
+        if (!journalQueueTableBody) {
+            return;
+        }
+
+        const currentSequence = ++queueFetchSequence;
+        const status = normalizeQueueStatus(queueStatusFilter?.value || "pending");
+        const fromDate = String(queueFromDateInput?.value || "").trim();
+        const toDate = String(queueToDateInput?.value || "").trim();
+        const search = String(queueSearchInput?.value || "").trim();
+
+        const query = new URLSearchParams({ status, limit: "100", offset: "0" });
+        if (fromDate) {
+            query.set("from_date", fromDate);
+        }
+        if (toDate) {
+            query.set("to_date", toDate);
+        }
+        if (search) {
+            query.set("search", search);
+        }
+
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(`/api/transactions/journal-queue?${query.toString()}`);
+            const payload = await res.json().catch(() => null);
+            if (currentSequence !== queueFetchSequence) {
+                return;
+            }
+            if (!res.ok) {
+                throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
+            }
+            renderQueueRows(payload?.journal_entries || []);
+            markQueueUpdated();
+        } catch (error) {
+            if (currentSequence !== queueFetchSequence) {
+                return;
+            }
+            renderQueueRows([]);
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            hideLoadingOverlayFn();
+        }
+    };
+
+    const submitQueueDecision = async (decision) => {
+        if (!canApproveQueueEntries || queueModalBusy) {
+            return;
+        }
+        const journalEntryId = activeQueueJournalEntryId;
+        if (!Number.isSafeInteger(Number(journalEntryId)) || Number(journalEntryId) <= 0) {
+            showErrorModalFn("ERR_INVALID_SELECTION", false);
+            return;
+        }
+
+        const managerComment = String(queueModalManagerCommentInput?.value || "").trim();
+        if (decision === "reject" && !managerComment) {
+            queueModalManagerCommentInput?.focus();
+            showErrorModalFn("ERR_JOURNAL_REJECTION_REASON_REQUIRED", false);
+            return;
+        }
+
+        const endpoint = decision === "approve"
+            ? `/api/transactions/journal-entry/${journalEntryId}/approve`
+            : `/api/transactions/journal-entry/${journalEntryId}/reject`;
+
+        queueModalBusy = true;
+        setQueueDecisionButtonsState({ pending: true, busy: true });
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(endpoint, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    manager_comment: managerComment || null,
+                }),
+            });
+            const payload = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
+            }
+            await showMessageModalFn(payload?.messageCode || "MSG_JOURNAL_QUEUE_REFRESHED", true);
+            closeQueueModal();
+            await loadJournalQueue();
+        } catch (error) {
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+            setQueueDecisionButtonsState({ pending: true, busy: false });
+        } finally {
+            queueModalBusy = false;
+            hideLoadingOverlayFn();
+        }
+    };
+
+    if (journalQueueTableBody) {
+        journalQueueTableBody.addEventListener("click", (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+            const viewButton = target.closest("[data-journal-queue-view-button]");
+            if (!viewButton) {
+                return;
+            }
+            const journalEntryId = viewButton.getAttribute("data-journal-entry-id");
+            void openQueueModalForJournalEntry(journalEntryId);
+        });
+    }
+
+    queueApplyFiltersButton?.addEventListener("click", () => {
+        void loadJournalQueue();
+    });
+
+    queueClearFiltersButton?.addEventListener("click", () => {
+        if (queueStatusFilter) {
+            queueStatusFilter.value = "pending";
+        }
+        if (queueFromDateInput) {
+            queueFromDateInput.value = "";
+        }
+        if (queueToDateInput) {
+            queueToDateInput.value = "";
+        }
+        if (queueSearchInput) {
+            queueSearchInput.value = "";
+        }
+        void loadJournalQueue();
+    });
+
+    queueRefreshButton?.addEventListener("click", () => {
+        void loadJournalQueue();
+    });
+
+    queueSearchInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            void loadJournalQueue();
+        }
+    });
+
+    closeQueueModalButtonTop?.addEventListener("click", closeQueueModal);
+    closeQueueModalButtonBottom?.addEventListener("click", closeQueueModal);
+    queueModalApproveButton?.addEventListener("click", () => {
+        void submitQueueDecision("approve");
+    });
+    queueModalRejectButton?.addEventListener("click", () => {
+        void submitQueueDecision("reject");
+    });
+
+    if (journalQueueTableBody) {
+        await loadJournalQueue();
+        const urlParamsHelper = await loadUrlParamHelper();
+        const journalIdFromUrl = urlParamsHelper.getUrlParam("journal_id");
+        if (journalIdFromUrl) {
+            const parsedJournalIdFromUrl = Number(journalIdFromUrl);
+            if (Number.isSafeInteger(parsedJournalIdFromUrl) && parsedJournalIdFromUrl > 0) {
+                void openQueueModalForJournalEntry(parsedJournalIdFromUrl);
+            }
+        }
+    }
 
     const draftJournalLines = document.querySelector("[data-journal-lines]");
     if (draftJournalLines) {
@@ -969,4 +1455,10 @@ async function loadFetchWithAuth() {
     const module = await import(moduleUrl);
     const { fetchWithAuth } = module;
     return { fetchWithAuth };
+}
+
+async function loadUrlParamHelper() {
+    const moduleUrl = new URL("/js/utils/url_params.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    return { getUrlParam: module.default };
 }

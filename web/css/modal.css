@@ -49,6 +49,10 @@
     max-width: 560px;
 }
 
+#journal_queue_view_modal .modal-content {
+    max-width: 980px;
+}
+
 #journal_line_documents_checklist {
     max-height: 16rem;
     overflow-y: auto;
@@ -84,7 +88,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+<<<<<<< HEAD
 
 .big-modal .modal-content{
     max-width: 95%;
 }
+=======
+>>>>>>> 0350d1b (Add integration tests for transactions controller and routes)
