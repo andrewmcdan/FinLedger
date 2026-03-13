@@ -88,10 +88,3 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-<<<<<<< HEAD
-
-.big-modal .modal-content{
-    max-width: 95%;
-}
-=======
->>>>>>> 0350d1b (Add integration tests for transactions controller and routes)
