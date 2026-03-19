@@ -4,13 +4,18 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const db = require("../../src/db/db");
 const {
     approveJournalEntry,
     rejectJournalEntry,
     listJournalQueue,
+    listLedgerEntries,
     getJournalEntryDetail,
+    getJournalDocumentDownloadInfo,
 } = require("../../src/controllers/transactions");
+const userDocsRoot = path.resolve(__dirname, "../../user-docs");
 
 async function resetDb() {
     await db.query(`
@@ -468,4 +473,96 @@ test("listJournalQueue and getJournalEntryDetail support queue and review retrie
 
     const approvedQueue = await listJournalQueue({ status: "approved", search: "Cash Queue" });
     assert.equal(approvedQueue.total, 1);
+});
+
+test("listLedgerEntries and getJournalDocumentDownloadInfo provide live ledger/document access data", async () => {
+    const manager = await insertUser({ username: "manager6", email: "manager6@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct6", email: "acct6@example.com", role: "accountant" });
+    const categories = await seedCategories();
+
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Cash Ledger",
+        accountNumber: 1000000006,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Liability Ledger",
+        accountNumber: 2000000006,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const seeded = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 64,
+    });
+
+    const documentInsert = await db.query(
+        `INSERT INTO documents (user_id, title, original_file_name, file_extension, meta_data)
+         VALUES ($1, 'Ledger Receipt', 'ledger_receipt.pdf', '.pdf', '{}'::jsonb)
+         RETURNING id, file_name::text AS file_name, file_extension`,
+        [accountant.id],
+    );
+    const document = documentInsert.rows[0];
+    const storedFilePath = path.join(userDocsRoot, `${document.file_name}${document.file_extension}`);
+    fs.mkdirSync(userDocsRoot, { recursive: true });
+    fs.writeFileSync(storedFilePath, Buffer.from("ledger-doc-content", "utf8"));
+
+    try {
+        await db.query(
+            `INSERT INTO journal_entry_documents (journal_entry_id, document_id, created_by, updated_by)
+             VALUES ($1, $2, $3, $3)`,
+            [seeded.journalEntryId, document.id, accountant.id],
+        );
+        await db.query(
+            `INSERT INTO journal_entry_line_documents (journal_entry_line_id, document_id, created_by, updated_by)
+             VALUES ($1, $2, $3, $3)`,
+            [seeded.debitLineId, document.id, accountant.id],
+        );
+
+        const detail = await getJournalEntryDetail(seeded.journalEntryId);
+        assert.equal(detail.documents.length, 1);
+        assert.match(detail.documents[0].download_url, new RegExp(`/api/transactions/journal-entry/${seeded.journalEntryId}/documents/${document.id}/download$`));
+        assert.equal(detail.lines[0].documents.length, 1);
+        assert.match(detail.lines[0].documents[0].download_url, new RegExp(`/api/transactions/journal-entry/${seeded.journalEntryId}/documents/${document.id}/download$`));
+
+        const downloadInfo = await getJournalDocumentDownloadInfo({
+            journalEntryId: seeded.journalEntryId,
+            documentId: document.id,
+        });
+        assert.equal(downloadInfo.id, document.id);
+        assert.equal(downloadInfo.file_path, storedFilePath);
+
+        await approveJournalEntry({
+            journalEntryId: seeded.journalEntryId,
+            managerUserId: manager.id,
+            managerComment: "Approve for ledger controller test",
+        });
+
+        const ledger = await listLedgerEntries({
+            accountId: debitAccount.id,
+            search: "Cash Ledger",
+            limit: 25,
+            offset: 0,
+        });
+        assert.equal(ledger.total, 1);
+        assert.equal(ledger.rows.length, 1);
+        assert.equal(Number(ledger.rows[0].account_id), debitAccount.id);
+        assert.ok(ledger.rows[0].running_balance !== undefined);
+        assert.ok(Array.isArray(ledger.t_account.debit_entries));
+        assert.ok(Array.isArray(ledger.t_account.credit_entries));
+    } finally {
+        if (fs.existsSync(storedFilePath)) {
+            fs.unlinkSync(storedFilePath);
+        }
+    }
 });

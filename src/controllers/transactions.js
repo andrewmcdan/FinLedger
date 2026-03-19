@@ -7,6 +7,7 @@ const utilities = require("./../utils/utilities");
 const userDocsRoot = path.resolve(__dirname, "./../../user-docs/");
 const JOURNAL_STATUSES = new Set(["pending", "approved", "rejected", "all"]);
 const MAX_QUEUE_LIMIT = 200;
+const MAX_LEDGER_LIMIT = 500;
 
 const createCodeError = (code) => {
     const error = new Error(code);
@@ -90,12 +91,32 @@ const parseQueueLimit = (value) => {
     return Math.min(Math.max(parsed, 1), MAX_QUEUE_LIMIT);
 };
 
+const parseLedgerLimit = (value) => {
+    const parsed = parsePositiveInteger(value, 100);
+    return Math.min(Math.max(parsed, 1), MAX_LEDGER_LIMIT);
+};
+
 const normalizeSearch = (search) => {
     const normalizedSearch = String(search || "").trim();
     if (!normalizedSearch) {
         return "";
     }
     return normalizedSearch.slice(0, 120);
+};
+
+const normalizeAccountFilter = (accountId) => {
+    if (accountId === undefined || accountId === null) {
+        return null;
+    }
+    const normalizedAccountId = String(accountId).trim().toLowerCase();
+    if (!normalizedAccountId || normalizedAccountId === "all") {
+        return null;
+    }
+    const parsed = Number.parseInt(normalizedAccountId, 10);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+        throw createCodeError("ERR_INVALID_SELECTION");
+    }
+    return parsed;
 };
 
 const normalizeJournalEntryId = (journalEntryId) => {
@@ -119,6 +140,12 @@ const normalizeManagerComment = (comment, { required = false } = {}) => {
 
 const buildAutoReferenceCode = (journalEntryId) => {
     return `JE-${String(journalEntryId).padStart(8, "0")}`;
+};
+
+const buildJournalDocumentDownloadUrl = (journalEntryId, documentId) => {
+    const normalizedJournalEntryId = normalizeJournalEntryId(journalEntryId);
+    const normalizedDocumentId = normalizeJournalEntryId(documentId);
+    return `/api/transactions/journal-entry/${normalizedJournalEntryId}/documents/${normalizedDocumentId}/download`;
 };
 
 const isReferenceCodeAvailable = async (referenceCode, excludeJournalEntryId = null) => {
@@ -531,6 +558,141 @@ const listJournalQueue = async ({ status, fromDate, toDate, search, limit, offse
     };
 };
 
+const listLedgerEntries = async ({ accountId, fromDate, toDate, search, limit, offset } = {}) => {
+    const normalizedAccountId = normalizeAccountFilter(accountId);
+    const normalizedFromDate = normalizeDateFilter(fromDate);
+    const normalizedToDate = normalizeDateFilter(toDate);
+    const normalizedSearch = normalizeSearch(search);
+    const normalizedLimit = parseLedgerLimit(limit);
+    const normalizedOffset = parsePositiveInteger(offset, 0);
+
+    const whereClauses = [];
+    const params = [];
+
+    if (normalizedAccountId !== null) {
+        params.push(normalizedAccountId);
+        whereClauses.push(`le.account_id = $${params.length}`);
+    }
+
+    if (normalizedFromDate) {
+        params.push(normalizedFromDate);
+        whereClauses.push(`le.entry_date::date >= $${params.length}::date`);
+    }
+
+    if (normalizedToDate) {
+        params.push(normalizedToDate);
+        whereClauses.push(`le.entry_date::date <= $${params.length}::date`);
+    }
+
+    if (normalizedSearch) {
+        params.push(`%${normalizedSearch}%`);
+        const searchParamRef = `$${params.length}`;
+        whereClauses.push(`(
+            a.account_name ILIKE ${searchParamRef}
+            OR COALESCE(le.description, '') ILIKE ${searchParamRef}
+            OR COALESCE(le.pr_journal_ref, '') ILIKE ${searchParamRef}
+            OR COALESCE(je.reference_code, '') ILIKE ${searchParamRef}
+            OR TO_CHAR(le.entry_date::date, 'YYYY-MM-DD') ILIKE ${searchParamRef}
+            OR le.amount::text ILIKE ${searchParamRef}
+        )`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+    const totalResult = await db.query(
+        `SELECT COUNT(*)::int AS total
+         FROM ledger_entries le
+         JOIN accounts a ON a.id = le.account_id
+         LEFT JOIN journal_entries je ON je.id = le.journal_entry_id
+         ${whereSql}`,
+        params,
+    );
+
+    const rowsParams = [...params, normalizedLimit, normalizedOffset];
+    const rowsResult = await db.query(
+        `WITH filtered_ledger AS (
+            SELECT
+                le.id,
+                le.account_id,
+                a.account_name,
+                a.normal_side,
+                COALESCE(a.initial_balance, 0)::numeric(18,2) AS initial_balance,
+                le.entry_date,
+                le.description,
+                le.dc,
+                le.amount,
+                le.journal_entry_id,
+                le.pr_journal_ref,
+                je.reference_code
+            FROM ledger_entries le
+            JOIN accounts a ON a.id = le.account_id
+            LEFT JOIN journal_entries je ON je.id = le.journal_entry_id
+            ${whereSql}
+        ),
+        running_totals AS (
+            SELECT
+                fl.*,
+                SUM(CASE WHEN fl.dc = 'debit' THEN fl.amount ELSE 0 END)
+                    OVER (PARTITION BY fl.account_id ORDER BY fl.entry_date ASC, fl.id ASC) AS running_debits,
+                SUM(CASE WHEN fl.dc = 'credit' THEN fl.amount ELSE 0 END)
+                    OVER (PARTITION BY fl.account_id ORDER BY fl.entry_date ASC, fl.id ASC) AS running_credits
+            FROM filtered_ledger fl
+        )
+        SELECT
+            rt.id,
+            rt.account_id,
+            rt.account_name,
+            rt.entry_date,
+            rt.description,
+            rt.dc,
+            rt.amount,
+            rt.journal_entry_id,
+            rt.pr_journal_ref,
+            rt.reference_code,
+            CASE
+                WHEN rt.normal_side = 'debit'
+                    THEN rt.initial_balance + rt.running_debits - rt.running_credits
+                ELSE rt.initial_balance - rt.running_debits + rt.running_credits
+            END AS running_balance
+        FROM running_totals rt
+        ORDER BY rt.entry_date DESC, rt.id DESC
+        LIMIT $${rowsParams.length - 1}
+        OFFSET $${rowsParams.length}`,
+        rowsParams,
+    );
+
+    const debitEntries = [];
+    const creditEntries = [];
+    for (const row of rowsResult.rows) {
+        const tAccountRow = {
+            id: row.id,
+            account_id: row.account_id,
+            account_name: row.account_name,
+            entry_date: row.entry_date,
+            journal_entry_id: row.journal_entry_id,
+            pr_journal_ref: row.pr_journal_ref,
+            reference_code: row.reference_code,
+            amount: row.amount,
+        };
+        if (row.dc === "debit") {
+            debitEntries.push(tAccountRow);
+            continue;
+        }
+        creditEntries.push(tAccountRow);
+    }
+
+    return {
+        rows: rowsResult.rows,
+        total: totalResult.rows[0]?.total || 0,
+        limit: normalizedLimit,
+        offset: normalizedOffset,
+        t_account: {
+            debit_entries: debitEntries,
+            credit_entries: creditEntries,
+        },
+    };
+};
+
 const getJournalEntryDetail = async (journalEntryId) => {
     const normalizedJournalEntryId = normalizeJournalEntryId(journalEntryId);
 
@@ -578,6 +740,11 @@ const getJournalEntryDetail = async (journalEntryId) => {
         [normalizedJournalEntryId],
     );
 
+    const documents = documentsResult.rows.map((row) => ({
+        ...row,
+        download_url: buildJournalDocumentDownloadUrl(normalizedJournalEntryId, row.id),
+    }));
+
     const linesResult = await db.query(
         `SELECT
             jel.id,
@@ -621,6 +788,7 @@ const getJournalEntryDetail = async (journalEntryId) => {
             original_file_name: row.original_file_name,
             file_extension: row.file_extension,
             upload_at: row.upload_at,
+            download_url: buildJournalDocumentDownloadUrl(normalizedJournalEntryId, row.id),
         });
     }
 
@@ -631,8 +799,69 @@ const getJournalEntryDetail = async (journalEntryId) => {
 
     return {
         journal_entry: entryResult.rows[0],
-        documents: documentsResult.rows,
+        documents,
         lines,
+    };
+};
+
+const getJournalDocumentDownloadInfo = async ({ journalEntryId, documentId }) => {
+    const normalizedJournalEntryId = normalizeJournalEntryId(journalEntryId);
+    const normalizedDocumentId = normalizeJournalEntryId(documentId);
+
+    const entryExistsResult = await db.query("SELECT id FROM journal_entries WHERE id = $1", [normalizedJournalEntryId]);
+    if (entryExistsResult.rowCount === 0) {
+        throw createCodeError("ERR_JOURNAL_ENTRY_NOT_FOUND");
+    }
+
+    const documentResult = await db.query(
+        `SELECT
+            d.id,
+            d.title,
+            d.original_file_name,
+            d.file_extension,
+            d.file_name::text AS file_name
+         FROM documents d
+         WHERE d.id = $2
+           AND (
+               EXISTS (
+                   SELECT 1
+                   FROM journal_entry_documents jed
+                   WHERE jed.journal_entry_id = $1
+                     AND jed.document_id = d.id
+               )
+               OR EXISTS (
+                   SELECT 1
+                   FROM journal_entry_line_documents jeld
+                   JOIN journal_entry_lines jel
+                     ON jel.id = jeld.journal_entry_line_id
+                   WHERE jel.journal_entry_id = $1
+                     AND jeld.document_id = d.id
+               )
+           )
+         LIMIT 1`,
+        [normalizedJournalEntryId, normalizedDocumentId],
+    );
+
+    if (documentResult.rowCount === 0) {
+        throw createCodeError("ERR_JOURNAL_ENTRY_NOT_FOUND");
+    }
+
+    const document = documentResult.rows[0];
+    const fileName = `${document.file_name}${document.file_extension || ""}`;
+    const resolvedFilePath = path.resolve(userDocsRoot, fileName);
+    const normalizedRoot = path.resolve(userDocsRoot);
+    const normalizedRootWithSep = normalizedRoot.endsWith(path.sep) ? normalizedRoot : `${normalizedRoot}${path.sep}`;
+    if (!resolvedFilePath.startsWith(normalizedRootWithSep)) {
+        throw createCodeError("ERR_INVALID_SELECTION");
+    }
+    if (!fs.existsSync(resolvedFilePath)) {
+        throw createCodeError("ERR_JOURNAL_ENTRY_NOT_FOUND");
+    }
+
+    return {
+        ...document,
+        journal_entry_id: normalizedJournalEntryId,
+        file_path: resolvedFilePath,
     };
 };
 
@@ -775,7 +1004,9 @@ module.exports = {
     createJournalEntry,
     isReferenceCodeAvailable,
     listJournalQueue,
+    listLedgerEntries,
     getJournalEntryDetail,
+    getJournalDocumentDownloadInfo,
     approveJournalEntry,
     rejectJournalEntry,
 };

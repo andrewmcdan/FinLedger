@@ -1,6 +1,6 @@
 # Ledger
 
-This section documents the current ledger user interface in `Transactions`.
+This section documents the ledger user interface and behavior in `Transactions`.
 
 ## Access and Permissions
 
@@ -42,7 +42,7 @@ Current behavior:
 - Link routes to `#/reports` with trial-balance query parameters.
 - Parameters include `report=trial_balance`, `as_of`, `from_date`, and `to_date`.
 
-## Current Task Flow (UI Scaffold)
+## Current Task Flow
 
 1. Open `Transactions`.
 2. Go to the `Ledger` section.
@@ -51,12 +51,14 @@ Current behavior:
 5. Use posting-reference links in the table to navigate to related journal context.
 6. Use `View Trial Balance as of this date` to jump to Reports with prefilled query parameters.
 
-## Expected Results (Current Build)
+## Expected Results
 
 - Ledger and T-account sections render based on role access.
+- Ledger rows load from posted `ledger_entries` data.
+- Account/date/search filters are applied server-side through `/api/transactions/ledger`.
+- Running balance is calculated per account and displayed in the ledger table.
 - Posting-reference links are visible in ledger/T-account rows.
 - Trial-balance quick link is visible in Ledger controls.
-- Current row data is still scaffold data while end-to-end ledger APIs are being completed.
 
 ## What Exists in the Database
 
@@ -65,9 +67,8 @@ Current behavior:
 
 ## Current Limitations
 
-- Account-specific ledger retrieval from `account_id` route query is not fully integrated.
-- Running-balance calculations are not yet fully wired to live ledger posting data in this page.
-- Full drill-down and filter/search behavior is in progress.
+- Ledger drill-down currently routes back to Transactions queue context (`#/transactions?journal_id=...`).
+- Full financial-statement generation and formatting are still in progress.
 
 ## Related Sections
 

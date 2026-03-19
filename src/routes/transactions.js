@@ -26,7 +26,9 @@ const {
     createJournalEntry,
     isReferenceCodeAvailable,
     listJournalQueue,
+    listLedgerEntries,
     getJournalEntryDetail,
+    getJournalDocumentDownloadInfo,
     approveJournalEntry,
     rejectJournalEntry,
 } = require("../controllers/transactions");
@@ -87,6 +89,25 @@ const removeUploadedFiles = (files = []) => {
             log("warn", "Failed to remove uploaded journal document after request failure", { path: file.path, error: error.message }, utilities.getCallerInfo());
         }
     }
+};
+
+const buildSafeDownloadFileName = (document = {}) => {
+    const fallbackBase = "journal-document";
+    const rawBase = String(document.title || path.basename(document.original_file_name || "", document.file_extension || "") || fallbackBase).trim();
+    const normalizedBase = rawBase
+        .replace(/[^a-zA-Z0-9._ -]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120) || fallbackBase;
+    const normalizedExtension = String(document.file_extension || "")
+        .replace(/[^a-zA-Z0-9.]/g, "")
+        .trim();
+    if (!normalizedExtension) {
+        return normalizedBase;
+    }
+    return normalizedExtension.startsWith(".")
+        ? `${normalizedBase}${normalizedExtension}`
+        : `${normalizedBase}.${normalizedExtension}`;
 };
 
 const ensureNotAdminUser = async (req, res, next) => {
@@ -194,6 +215,34 @@ router.get("/reference-code-available", ensureNotAdminUser, async (req, res) => 
     }
 });
 
+router.get("/ledger", async (req, res) => {
+    try {
+        const ledgerResult = await listLedgerEntries({
+            accountId: req.query?.account_id,
+            fromDate: req.query?.from_date,
+            toDate: req.query?.to_date,
+            search: req.query?.search,
+            limit: req.query?.limit,
+            offset: req.query?.offset,
+        });
+        return res.json({
+            ledger_entries: ledgerResult.rows,
+            pagination: {
+                total: ledgerResult.total,
+                limit: ledgerResult.limit,
+                offset: ledgerResult.offset,
+            },
+            t_account: ledgerResult.t_account,
+        });
+    } catch (error) {
+        if (error?.code === "ERR_INVALID_SELECTION") {
+            return sendApiError(res, 400, "ERR_INVALID_SELECTION");
+        }
+        log("error", "Failed to list ledger entries", { userId: req.user?.id, error: error.message }, utilities.getCallerInfo(), req.user?.id);
+        return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
+    }
+});
+
 router.get("/journal-queue", ensureNotAdminUser, async (req, res) => {
     try {
         const queueResult = await listJournalQueue({
@@ -235,6 +284,33 @@ router.get("/journal-entry/:journalEntryId", ensureNotAdminUser, async (req, res
         log("error", "Failed to fetch journal entry detail", {
             userId: req.user?.id,
             journalEntryId: req.params?.journalEntryId,
+            error: error.message,
+        }, utilities.getCallerInfo(), req.user?.id);
+        return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
+    }
+});
+
+router.get("/journal-entry/:journalEntryId/documents/:documentId/download", ensureNotAdminUser, async (req, res) => {
+    try {
+        const document = await getJournalDocumentDownloadInfo({
+            journalEntryId: req.params.journalEntryId,
+            documentId: req.params.documentId,
+        });
+        const suggestedFileName = buildSafeDownloadFileName(document);
+        const encodedFileName = encodeURIComponent(suggestedFileName);
+        res.setHeader("Content-Disposition", `attachment; filename="${suggestedFileName.replace(/"/g, "")}"; filename*=UTF-8''${encodedFileName}`);
+        return res.sendFile(document.file_path);
+    } catch (error) {
+        if (error?.code === "ERR_INVALID_SELECTION") {
+            return sendApiError(res, 400, "ERR_INVALID_SELECTION");
+        }
+        if (error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND") {
+            return sendApiError(res, 404, "ERR_JOURNAL_ENTRY_NOT_FOUND");
+        }
+        log("error", "Failed to download journal document", {
+            userId: req.user?.id,
+            journalEntryId: req.params?.journalEntryId,
+            documentId: req.params?.documentId,
             error: error.message,
         }, utilities.getCallerInfo(), req.user?.id);
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");

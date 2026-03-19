@@ -6,8 +6,9 @@ FinLedger is a web-based accounting and financial management system with role-ba
 Current implementation status:
 
 - Accounts management workflow is implemented.
-- Transactions page includes role-gated Journal/Queue/Ledger UI scaffolding.
-- Full journal approval/posting and full financial-report generation workflows are in progress.
+- Transactions page includes role-gated journal submission, manager approval queue, document review/download, and live ledger/T-account views.
+- Journal approval and posting workflows are implemented end to end for the current `general` and `adjusting` journal types.
+- Full financial-report generation workflows are still in progress.
 
 ## Requirements
 - Node.js with npm

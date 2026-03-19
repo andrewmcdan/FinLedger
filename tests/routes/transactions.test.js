@@ -5,6 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const db = require("../../src/db/db");
@@ -27,6 +28,7 @@ require.cache[emailModulePath] = {
 
 delete require.cache[serverModulePath];
 const app = require(serverModulePath);
+const userDocsRoot = path.resolve(__dirname, "../../user-docs");
 
 async function resetDb() {
     await db.query(`
@@ -167,23 +169,70 @@ async function seedPendingJournalEntry({ createdByUserId, debitAccountId, credit
 
     const journalEntryId = entryResult.rows[0].id;
 
-    await db.query(
+    const debitLineResult = await db.query(
         `INSERT INTO journal_entry_lines
             (journal_entry_id, line_no, account_id, dc, amount, line_description, created_by, updated_by)
          VALUES
-            ($1, 1, $2, 'debit', $3, 'Debit line', $4, $4)`,
+            ($1, 1, $2, 'debit', $3, 'Debit line', $4, $4)
+         RETURNING id`,
         [journalEntryId, debitAccountId, amount, createdByUserId],
     );
 
-    await db.query(
+    const creditLineResult = await db.query(
         `INSERT INTO journal_entry_lines
             (journal_entry_id, line_no, account_id, dc, amount, line_description, created_by, updated_by)
          VALUES
-            ($1, 2, $2, 'credit', $3, 'Credit line', $4, $4)`,
+            ($1, 2, $2, 'credit', $3, 'Credit line', $4, $4)
+         RETURNING id`,
         [journalEntryId, creditAccountId, amount, createdByUserId],
     );
 
-    return { journalEntryId };
+    return {
+        journalEntryId,
+        debitLineId: debitLineResult.rows[0].id,
+        creditLineId: creditLineResult.rows[0].id,
+    };
+}
+
+async function insertLinkedJournalDocument({
+    ownerUserId,
+    journalEntryId,
+    lineId = null,
+    title = "Receipt",
+    originalFileName = "receipt.pdf",
+    fileExtension = ".pdf",
+    fileContent = "test-document",
+} = {}) {
+    const insertResult = await db.query(
+        `INSERT INTO documents (user_id, title, original_file_name, file_extension, meta_data)
+         VALUES ($1, $2, $3, $4, '{}'::jsonb)
+         RETURNING id, file_name::text AS file_name, file_extension`,
+        [ownerUserId, title, originalFileName, fileExtension],
+    );
+    const documentRow = insertResult.rows[0];
+    const storedFileName = `${documentRow.file_name}${documentRow.file_extension}`;
+    const storedFilePath = path.join(userDocsRoot, storedFileName);
+    fs.mkdirSync(userDocsRoot, { recursive: true });
+    fs.writeFileSync(storedFilePath, Buffer.from(fileContent, "utf8"));
+
+    await db.query(
+        `INSERT INTO journal_entry_documents (journal_entry_id, document_id, created_by, updated_by)
+         VALUES ($1, $2, $3, $3)`,
+        [journalEntryId, documentRow.id, ownerUserId],
+    );
+
+    if (lineId) {
+        await db.query(
+            `INSERT INTO journal_entry_line_documents (journal_entry_line_id, document_id, created_by, updated_by)
+             VALUES ($1, $2, $3, $3)`,
+            [lineId, documentRow.id, ownerUserId],
+        );
+    }
+
+    return {
+        documentId: documentRow.id,
+        storedFilePath,
+    };
 }
 
 function authHeaders({ userId, token }) {
@@ -228,6 +277,38 @@ function requestJson({ port, method, path: reqPath, headers = {}, body = null })
         );
         req.on("error", reject);
         if (payload) req.write(payload);
+        req.end();
+    });
+}
+
+function requestRaw({ port, method, path: reqPath, headers = {}, body = null }) {
+    return new Promise((resolve, reject) => {
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path: reqPath,
+                method,
+                headers,
+            },
+            (res) => {
+                const chunks = [];
+                res.on("data", (chunk) => {
+                    chunks.push(Buffer.from(chunk));
+                });
+                res.on("end", () => {
+                    resolve({
+                        statusCode: res.statusCode,
+                        headers: res.headers,
+                        bodyBuffer: Buffer.concat(chunks),
+                    });
+                });
+            },
+        );
+        req.on("error", reject);
+        if (body) {
+            req.write(body);
+        }
         req.end();
     });
 }
@@ -689,5 +770,183 @@ test("journal submission triggers manager notification email", async () => {
         assert.match(emailCalls[0].subject, /Journal Entry Submitted for Approval/i);
     } finally {
         server.close();
+    }
+});
+
+test("ledger endpoint returns posted rows with filtering and supports administrator read access", async () => {
+    const manager = await insertUser({ username: "manager_route_6", email: "manager_route_6@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_route_6", email: "acct_route_6@example.com", role: "accountant" });
+    const admin = await insertUser({ username: "admin_route_6", email: "admin_route_6@example.com", role: "administrator" });
+    const managerToken = "manager-route-token-6";
+    const adminToken = "admin-route-token-6";
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+    await insertLoggedInUser({ userId: admin.id, token: adminToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Cash 6",
+        accountNumber: 1000000106,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Liability 6",
+        accountNumber: 2000000106,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const seeded = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 220,
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+        const approve = await requestJson({
+            port,
+            method: "PATCH",
+            path: `/api/transactions/journal-entry/${seeded.journalEntryId}/approve`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+            body: { manager_comment: "Approved for ledger route test" },
+        });
+        assert.equal(approve.statusCode, 200);
+
+        const filteredLedger = await requestJson({
+            port,
+            method: "GET",
+            path: `/api/transactions/ledger?account_id=${debitAccount.id}&search=Route%20Cash%206`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+        assert.equal(filteredLedger.statusCode, 200);
+        assert.ok(Array.isArray(filteredLedger.body.ledger_entries));
+        assert.equal(filteredLedger.body.ledger_entries.length, 1);
+        assert.equal(Number(filteredLedger.body.ledger_entries[0].account_id), debitAccount.id);
+        assert.equal(filteredLedger.body.ledger_entries[0].account_name, "Route Cash 6");
+        assert.equal(filteredLedger.body.pagination.total, 1);
+        assert.ok(filteredLedger.body.ledger_entries[0].running_balance !== undefined);
+        assert.ok(Array.isArray(filteredLedger.body.t_account.debit_entries));
+        assert.ok(Array.isArray(filteredLedger.body.t_account.credit_entries));
+
+        const adminLedger = await requestJson({
+            port,
+            method: "GET",
+            path: "/api/transactions/ledger",
+            headers: authHeaders({ userId: admin.id, token: adminToken }),
+        });
+        assert.equal(adminLedger.statusCode, 200);
+        assert.ok(Array.isArray(adminLedger.body.ledger_entries));
+        assert.equal(adminLedger.body.ledger_entries.length, 2);
+    } finally {
+        server.close();
+    }
+});
+
+test("journal document download supports manager/accountant and blocks administrator", async () => {
+    const manager = await insertUser({ username: "manager_route_7", email: "manager_route_7@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_route_7", email: "acct_route_7@example.com", role: "accountant" });
+    const admin = await insertUser({ username: "admin_route_7", email: "admin_route_7@example.com", role: "administrator" });
+    const managerToken = "manager-route-token-7";
+    const accountantToken = "acct-route-token-7";
+    const adminToken = "admin-route-token-7";
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+    await insertLoggedInUser({ userId: admin.id, token: adminToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Cash 7",
+        accountNumber: 1000000107,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Liability 7",
+        accountNumber: 2000000107,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const seeded = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 90,
+    });
+
+    const linkedDocument = await insertLinkedJournalDocument({
+        ownerUserId: accountant.id,
+        journalEntryId: seeded.journalEntryId,
+        lineId: seeded.debitLineId,
+        title: "Downloadable Receipt",
+        originalFileName: "downloadable_receipt.pdf",
+        fileExtension: ".pdf",
+        fileContent: "download-test-content",
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+        const downloadPath = `/api/transactions/journal-entry/${seeded.journalEntryId}/documents/${linkedDocument.documentId}/download`;
+
+        const managerDownload = await requestRaw({
+            port,
+            method: "GET",
+            path: downloadPath,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+        assert.equal(managerDownload.statusCode, 200);
+        assert.equal(managerDownload.bodyBuffer.toString("utf8"), "download-test-content");
+
+        const accountantDownload = await requestRaw({
+            port,
+            method: "GET",
+            path: downloadPath,
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+        });
+        assert.equal(accountantDownload.statusCode, 200);
+        assert.equal(accountantDownload.bodyBuffer.toString("utf8"), "download-test-content");
+
+        const adminDownload = await requestJson({
+            port,
+            method: "GET",
+            path: downloadPath,
+            headers: authHeaders({ userId: admin.id, token: adminToken }),
+        });
+        assert.equal(adminDownload.statusCode, 403);
+        assert.equal(adminDownload.body.errorCode, "ERR_FORBIDDEN");
+
+        const missingDocument = await requestJson({
+            port,
+            method: "GET",
+            path: `/api/transactions/journal-entry/${seeded.journalEntryId}/documents/${linkedDocument.documentId + 999}/download`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+        assert.equal(missingDocument.statusCode, 404);
+        assert.equal(missingDocument.body.errorCode, "ERR_JOURNAL_ENTRY_NOT_FOUND");
+    } finally {
+        server.close();
+        if (fs.existsSync(linkedDocument.storedFilePath)) {
+            fs.unlinkSync(linkedDocument.storedFilePath);
+        }
     }
 });

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { test, expect } = require("@playwright/test");
+const db = require("../../src/db/db");
 
 function readEnvFile(filePath) {
     const values = {};
@@ -120,6 +121,226 @@ async function createAccountViaApi(request, { token, userId }) {
     return response.json();
 }
 
+async function insertUiUser({
+    username,
+    email,
+    role = "accountant",
+    password = "ValidPass1!",
+} = {}) {
+    const result = await db.query(
+        `INSERT INTO users (
+            username,
+            email,
+            first_name,
+            last_name,
+            role,
+            status,
+            password_hash,
+            password_changed_at,
+            password_expires_at,
+            temp_password
+        ) VALUES (
+            $1, $2, 'UI', 'User', $3, 'active',
+            crypt($4, gen_salt('bf')),
+            now(),
+            now() + interval '90 days',
+            false
+        ) RETURNING id, username`,
+        [username, email, role, password],
+    );
+    return result.rows[0];
+}
+
+async function insertUiSession({ userId, token }) {
+    await db.query(
+        "INSERT INTO logged_in_users (user_id, token, login_at, logout_at) VALUES ($1, $2, now(), now() + interval '2 hours')",
+        [userId, token],
+    );
+}
+
+async function ensureCategory(name, prefix, orderIndex) {
+    const existing = await db.query("SELECT id FROM account_categories WHERE name = $1", [name]);
+    if (existing.rowCount > 0) {
+        return existing.rows[0].id;
+    }
+    const inserted = await db.query(
+        `INSERT INTO account_categories (name, description, account_number_prefix, order_index)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [name, name, prefix, orderIndex],
+    );
+    return inserted.rows[0].id;
+}
+
+async function ensureSubcategory(categoryId, name, orderIndex) {
+    const existing = await db.query("SELECT id FROM account_subcategories WHERE account_category_id = $1 AND name = $2", [categoryId, name]);
+    if (existing.rowCount > 0) {
+        return existing.rows[0].id;
+    }
+    const inserted = await db.query(
+        `INSERT INTO account_subcategories (account_category_id, name, description, order_index)
+         VALUES ($1, $2, $2, $3)
+         RETURNING id`,
+        [categoryId, name, orderIndex],
+    );
+    return inserted.rows[0].id;
+}
+
+async function seedTransactionsManagerFixture() {
+    const suffix = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    const manager = await insertUiUser({
+        username: `ui_manager_${suffix}`,
+        email: `ui_manager_${suffix}@example.com`,
+        role: "manager",
+    });
+    const accountant = await insertUiUser({
+        username: `ui_accountant_${suffix}`,
+        email: `ui_accountant_${suffix}@example.com`,
+        role: "accountant",
+    });
+    const managerToken = `ui-manager-token-${suffix}`;
+    await insertUiSession({ userId: manager.id, token: managerToken });
+
+    const assetsCategoryId = await ensureCategory("Assets", "10", 10);
+    const liabilitiesCategoryId = await ensureCategory("Liabilities", "20", 20);
+    const assetsSubcategoryId = await ensureSubcategory(assetsCategoryId, "Current Assets", 10);
+    const liabilitiesSubcategoryId = await ensureSubcategory(liabilitiesCategoryId, "Current Liabilities", 10);
+
+    const debitAccountInsert = await db.query(
+        `INSERT INTO accounts (
+            user_id,
+            account_name,
+            account_number,
+            account_description,
+            normal_side,
+            initial_balance,
+            total_debits,
+            total_credits,
+            balance,
+            account_order,
+            statement_type,
+            status,
+            account_category_id,
+            account_subcategory_id
+        ) VALUES (
+            $1, $2, $3, $4, 'debit',
+            0, 0, 0, 0,
+            10,
+            'BS',
+            'active',
+            $5,
+            $6
+        ) RETURNING id`,
+        [
+            accountant.id,
+            `UI Ledger Cash ${suffix}`,
+            Number(`1${Date.now().toString().slice(-9)}`),
+            "UI ledger debit account",
+            assetsCategoryId,
+            assetsSubcategoryId,
+        ],
+    );
+    const creditAccountInsert = await db.query(
+        `INSERT INTO accounts (
+            user_id,
+            account_name,
+            account_number,
+            account_description,
+            normal_side,
+            initial_balance,
+            total_debits,
+            total_credits,
+            balance,
+            account_order,
+            statement_type,
+            status,
+            account_category_id,
+            account_subcategory_id
+        ) VALUES (
+            $1, $2, $3, $4, 'credit',
+            0, 0, 0, 0,
+            20,
+            'BS',
+            'active',
+            $5,
+            $6
+        ) RETURNING id`,
+        [
+            accountant.id,
+            `UI Ledger Liability ${suffix}`,
+            Number(`2${Date.now().toString().slice(-9)}`),
+            "UI ledger credit account",
+            liabilitiesCategoryId,
+            liabilitiesSubcategoryId,
+        ],
+    );
+    const debitAccountId = debitAccountInsert.rows[0].id;
+    const creditAccountId = creditAccountInsert.rows[0].id;
+
+    const pendingEntryResult = await db.query(
+        `INSERT INTO journal_entries
+            (journal_type, entry_date, description, status, total_debits, total_credits, created_by, updated_by, reference_code)
+         VALUES
+            ('general', now(), $1, 'pending', 120.00, 120.00, $2, $2, $3)
+         RETURNING id`,
+        [`UI Pending Queue Entry ${suffix}`, accountant.id, `JE-UI-PENDING-${suffix}`],
+    );
+    const pendingEntryId = pendingEntryResult.rows[0].id;
+    await db.query(
+        `INSERT INTO journal_entry_lines
+            (journal_entry_id, line_no, account_id, dc, amount, line_description, created_by, updated_by)
+         VALUES
+            ($1, 1, $2, 'debit', 120.00, 'UI pending debit line', $3, $3),
+            ($1, 2, $4, 'credit', 120.00, 'UI pending credit line', $3, $3)`,
+        [pendingEntryId, debitAccountId, accountant.id, creditAccountId],
+    );
+
+    const approvedEntryResult = await db.query(
+        `INSERT INTO journal_entries
+            (journal_type, entry_date, description, status, total_debits, total_credits, created_by, updated_by, approved_by, approved_at, posted_at, reference_code)
+         VALUES
+            ('general', now(), $1, 'approved', 75.00, 75.00, $2, $2, $3, now(), now(), $4)
+         RETURNING id`,
+        [`UI Approved Ledger Entry ${suffix}`, accountant.id, manager.id, `JE-UI-APPROVED-${suffix}`],
+    );
+    const approvedEntryId = approvedEntryResult.rows[0].id;
+    const approvedLinesResult = await db.query(
+        `INSERT INTO journal_entry_lines
+            (journal_entry_id, line_no, account_id, dc, amount, line_description, created_by, updated_by)
+         VALUES
+            ($1, 1, $2, 'debit', 75.00, 'UI approved debit line', $3, $3),
+            ($1, 2, $4, 'credit', 75.00, 'UI approved credit line', $3, $3)
+         RETURNING id, account_id, dc, amount, line_description`,
+        [approvedEntryId, debitAccountId, accountant.id, creditAccountId],
+    );
+
+    for (const line of approvedLinesResult.rows) {
+        await db.query(
+            `INSERT INTO ledger_entries
+                (account_id, entry_date, dc, amount, description, journal_entry_line_id, journal_entry_id, pr_journal_ref, created_by, updated_by, posted_at, posted_by)
+             VALUES
+                ($1, now(), $2, $3, $4, $5, $6, $7, $8, $8, now(), $8)`,
+            [line.account_id, line.dc, line.amount, line.line_description, line.id, approvedEntryId, `JE-UI-APPROVED-${suffix}`, manager.id],
+        );
+    }
+
+    return {
+        manager,
+        managerToken,
+    };
+}
+
+async function authenticatePageWithSession(page, session) {
+    await page.goto("/");
+    await page.evaluate((payload) => {
+        localStorage.setItem("auth_token", payload.token);
+        localStorage.setItem("user_id", payload.userId);
+        localStorage.setItem("username", payload.username || "");
+        localStorage.setItem("full_name", payload.fullName || "");
+        localStorage.removeItem("must_change_password");
+    }, session);
+}
+
 test("admin can sign in from the login UI", async ({ page }, testInfo) => {
     await captureStepScreenshot(page, testInfo, "login_page_initial");
     await loginAsAdmin(page);
@@ -176,4 +397,31 @@ test("profile change-password UI shows requirements and mismatch feedback", asyn
     await page.locator("#confirm_new_password").fill("ValidPass1!");
     await expect(matchPopup).toBeHidden();
     await captureStepScreenshot(page, testInfo, "profile_passwords_match");
+});
+
+test("transactions page smoke: manager can open queue modal and see live ledger rows", async ({ page }, testInfo) => {
+    const fixture = await seedTransactionsManagerFixture();
+    await authenticatePageWithSession(page, {
+        token: fixture.managerToken,
+        userId: String(fixture.manager.id),
+        username: fixture.manager.username,
+        fullName: "",
+    });
+
+    await page.goto("/#/transactions");
+    await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+    await captureStepScreenshot(page, testInfo, "transactions_page_loaded");
+
+    const queueViewButton = page.locator("[data-journal-queue-view-button]").first();
+    await expect(queueViewButton).toBeVisible({ timeout: 15000 });
+    await queueViewButton.click();
+    await expect(page.locator("#journal_queue_view_modal")).toHaveClass(/is-visible/);
+    await expect(page.locator("[data-journal-queue-modal-reference]")).toContainText("Reference:");
+    await captureStepScreenshot(page, testInfo, "transactions_queue_modal_open");
+    await page.locator("#journal_queue_modal_close_button").click();
+    await expect(page.locator("#journal_queue_view_modal")).not.toHaveClass(/is-visible/);
+
+    await expect(page.locator("[data-ledger-rows] tr").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("[data-ledger-rows]")).toContainText("UI Ledger");
+    await captureStepScreenshot(page, testInfo, "transactions_ledger_live_rows");
 });

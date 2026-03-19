@@ -15,6 +15,7 @@ const JOURNAL_REFERENCE_CHECK_DEBOUNCE_MS = 350;
 const JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE = "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE";
 const JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE = "ERR_JOURNAL_REFERENCE_CODE_CHECK_PENDING";
 const JOURNAL_ENTRY_NOT_BALANCED_ERROR_CODE = "ERR_JOURNAL_ENTRY_NOT_BALANCED";
+const LEDGER_DEFAULT_LIMIT = 200;
 let refreshJournalSubmitButtonStateFn = () => {};
 
 const loadAccounts = async () => {
@@ -386,6 +387,76 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     const queueModalApproveButton = document.getElementById("journal_queue_modal_approve_button");
     const queueModalRejectButton = document.getElementById("journal_queue_modal_reject_button");
 
+    const ledgerRowsBody = document.querySelector("[data-ledger-rows]");
+    const ledgerDebitRowsBody = document.querySelector("[data-t-account-debit]");
+    const ledgerCreditRowsBody = document.querySelector("[data-t-account-credit]");
+    const ledgerAccountFilterSelect = document.querySelector("[data-ledger-account-filter]");
+    const ledgerFromDateInput = document.querySelector("[data-ledger-from-date]");
+    const ledgerToDateInput = document.querySelector("[data-ledger-to-date]");
+    const ledgerSearchInput = document.querySelector("[data-ledger-search]");
+    const ledgerApplyFiltersButton = document.getElementById("ledger_apply_filters_button");
+    const ledgerClearFiltersButton = document.getElementById("ledger_clear_filters_button");
+    let ledgerFetchSequence = 0;
+
+    const resolveFileNameFromResponse = (response, fallbackName = "journal-document") => {
+        const contentDisposition = String(response.headers.get("content-disposition") || "");
+        const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (utf8Match && utf8Match[1]) {
+            try {
+                return decodeURIComponent(utf8Match[1]);
+            } catch {
+                return utf8Match[1];
+            }
+        }
+        const fallbackMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+        if (fallbackMatch && fallbackMatch[1]) {
+            return fallbackMatch[1];
+        }
+        return fallbackName;
+    };
+
+    const parseErrorCodeFromResponse = async (response) => {
+        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+        if (!contentType.includes("application/json")) {
+            return "ERR_INTERNAL_SERVER";
+        }
+        const payload = await response.json().catch(() => null);
+        return payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER";
+    };
+
+    const triggerBrowserDownload = ({ blob, fileName }) => {
+        const downloadUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = downloadUrl;
+        anchor.download = fileName || "journal-document";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(downloadUrl);
+    };
+
+    const downloadDocumentFromUrl = async (downloadUrl, fallbackName = "journal-document") => {
+        if (!downloadUrl) {
+            showErrorModalFn("ERR_INVALID_SELECTION", false);
+            return;
+        }
+        showLoadingOverlayFn();
+        try {
+            const response = await fetchWithAuth(downloadUrl, { method: "GET" });
+            if (!response.ok) {
+                const errorCode = await parseErrorCodeFromResponse(response);
+                throw new Error(errorCode);
+            }
+            const responseBlob = await response.blob();
+            const resolvedFileName = resolveFileNameFromResponse(response, fallbackName);
+            triggerBrowserDownload({ blob: responseBlob, fileName: resolvedFileName });
+        } catch (error) {
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            hideLoadingOverlayFn();
+        }
+    };
+
     const markQueueUpdated = (label = null) => {
         if (!queueStatusLabel) {
             return;
@@ -499,7 +570,15 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             const title = doc.title || doc.original_file_name || `Document ${index + 1}`;
             const extension = doc.file_extension || "";
             const uploadedAt = formatDateForDisplay(doc.upload_at);
-            item.textContent = `${index + 1}. ${title}${extension ? ` (${extension})` : ""} - ${uploadedAt}`;
+            const labelPrefix = document.createTextNode(`${index + 1}. `);
+            item.appendChild(labelPrefix);
+            const link = document.createElement("a");
+            link.href = doc.download_url || "#";
+            link.textContent = `${title}${extension ? ` (${extension})` : ""}`;
+            link.setAttribute("data-document-download-url", doc.download_url || "");
+            link.setAttribute("data-document-download-name", title);
+            item.appendChild(link);
+            item.appendChild(document.createTextNode(` - ${uploadedAt}`));
             queueModalDocumentsList.appendChild(item);
         });
     };
@@ -533,8 +612,11 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                 const docsContainer = document.createElement("div");
                 docsContainer.className = "journal-line-doc-pills";
                 line.documents.forEach((doc) => {
-                    const docPill = document.createElement("span");
+                    const docPill = document.createElement("a");
                     docPill.className = "journal-line-doc-pill";
+                    docPill.href = doc.download_url || "#";
+                    docPill.setAttribute("data-document-download-url", doc.download_url || "");
+                    docPill.setAttribute("data-document-download-name", doc.title || doc.original_file_name || "Document");
                     docPill.title = doc.title || doc.original_file_name || "Document";
                     docPill.textContent = doc.title || doc.original_file_name || "Document";
                     docsContainer.appendChild(docPill);
@@ -734,6 +816,21 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         });
     }
 
+    queueModal?.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        const downloadLink = target.closest("[data-document-download-url]");
+        if (!(downloadLink instanceof HTMLElement)) {
+            return;
+        }
+        event.preventDefault();
+        const downloadUrl = downloadLink.getAttribute("data-document-download-url") || "";
+        const downloadName = downloadLink.getAttribute("data-document-download-name") || "journal-document";
+        void downloadDocumentFromUrl(downloadUrl, downloadName);
+    });
+
     queueApplyFiltersButton?.addEventListener("click", () => {
         void loadJournalQueue();
     });
@@ -785,6 +882,208 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             }
         }
     }
+
+    const setLedgerAccountOptions = () => {
+        if (!ledgerAccountFilterSelect) {
+            return;
+        }
+        const previousValue = ledgerAccountFilterSelect.value || "all";
+        ledgerAccountFilterSelect.replaceChildren();
+
+        const allAccountsOption = document.createElement("option");
+        allAccountsOption.value = "all";
+        allAccountsOption.textContent = "All Accounts";
+        ledgerAccountFilterSelect.appendChild(allAccountsOption);
+
+        accountsList
+            .slice()
+            .sort((a, b) => String(a.account_name || "").localeCompare(String(b.account_name || "")))
+            .forEach((account) => {
+                const option = document.createElement("option");
+                option.value = String(account.id);
+                option.textContent = account.account_name || `Account ${account.id}`;
+                ledgerAccountFilterSelect.appendChild(option);
+            });
+
+        const selectedCandidate = String(previousValue);
+        const hasPreviousOption = Array.from(ledgerAccountFilterSelect.options).some((option) => option.value === selectedCandidate);
+        ledgerAccountFilterSelect.value = hasPreviousOption ? selectedCandidate : "all";
+    };
+
+    const buildPostingReferenceLabel = (row) => {
+        if (row?.pr_journal_ref) {
+            return String(row.pr_journal_ref);
+        }
+        if (row?.reference_code) {
+            return String(row.reference_code);
+        }
+        if (row?.journal_entry_id) {
+            return `JE-${String(row.journal_entry_id).padStart(8, "0")}`;
+        }
+        return "--";
+    };
+
+    const appendPostingReferenceElement = (cell, row) => {
+        const postingReferenceLabel = buildPostingReferenceLabel(row);
+        const journalEntryId = Number(row?.journal_entry_id);
+        const canNavigateToQueueEntry = !!journalQueueTableBody && Number.isSafeInteger(journalEntryId) && journalEntryId > 0;
+        if (!canNavigateToQueueEntry) {
+            cell.textContent = postingReferenceLabel;
+            return;
+        }
+        const link = document.createElement("a");
+        link.href = `#/transactions?journal_id=${journalEntryId}`;
+        link.textContent = postingReferenceLabel;
+        cell.appendChild(link);
+    };
+
+    const renderLedgerRows = (entries = []) => {
+        if (!ledgerRowsBody) {
+            return;
+        }
+        ledgerRowsBody.replaceChildren();
+        if (!Array.isArray(entries) || entries.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: "No posted ledger entries found." });
+            cell.colSpan = 7;
+            cell.className = "meta";
+            row.appendChild(cell);
+            ledgerRowsBody.appendChild(row);
+            return;
+        }
+
+        entries.forEach((entry) => {
+            const row = document.createElement("tr");
+            const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
+            const accountCell = createCell({ text: entry.account_name || "-" });
+            const descriptionCell = createCell({ text: entry.description || "-", isLongText: true });
+            const postingReferenceCell = createCell({});
+            appendPostingReferenceElement(postingReferenceCell, entry);
+            const debitCell = createCell({ text: entry.dc === "debit" ? formatCurrencyDisplay(entry.amount) : "$0.00" });
+            const creditCell = createCell({ text: entry.dc === "credit" ? formatCurrencyDisplay(entry.amount) : "$0.00" });
+            const balanceCell = createCell({ text: formatCurrencyDisplay(entry.running_balance) });
+
+            row.appendChild(dateCell);
+            row.appendChild(accountCell);
+            row.appendChild(descriptionCell);
+            row.appendChild(postingReferenceCell);
+            row.appendChild(debitCell);
+            row.appendChild(creditCell);
+            row.appendChild(balanceCell);
+            ledgerRowsBody.appendChild(row);
+        });
+    };
+
+    const renderTAccountRows = (targetBody, entries = [], emptyMessage = "No activity for current filters.") => {
+        if (!targetBody) {
+            return;
+        }
+        targetBody.replaceChildren();
+        if (!Array.isArray(entries) || entries.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: emptyMessage });
+            cell.colSpan = 3;
+            cell.className = "meta";
+            row.appendChild(cell);
+            targetBody.appendChild(row);
+            return;
+        }
+
+        entries.forEach((entry) => {
+            const row = document.createElement("tr");
+            const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
+            const postingReferenceCell = createCell({});
+            appendPostingReferenceElement(postingReferenceCell, entry);
+            const amountCell = createCell({ text: formatCurrencyDisplay(entry.amount) });
+
+            row.appendChild(dateCell);
+            row.appendChild(postingReferenceCell);
+            row.appendChild(amountCell);
+            targetBody.appendChild(row);
+        });
+    };
+
+    const loadLedgerEntries = async () => {
+        if (!ledgerRowsBody) {
+            return;
+        }
+        const currentSequence = ++ledgerFetchSequence;
+        const accountId = String(ledgerAccountFilterSelect?.value || "all").trim();
+        const fromDate = String(ledgerFromDateInput?.value || "").trim();
+        const toDate = String(ledgerToDateInput?.value || "").trim();
+        const search = String(ledgerSearchInput?.value || "").trim();
+        const query = new URLSearchParams({
+            limit: String(LEDGER_DEFAULT_LIMIT),
+            offset: "0",
+        });
+        if (accountId && accountId !== "all") {
+            query.set("account_id", accountId);
+        }
+        if (fromDate) {
+            query.set("from_date", fromDate);
+        }
+        if (toDate) {
+            query.set("to_date", toDate);
+        }
+        if (search) {
+            query.set("search", search);
+        }
+
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(`/api/transactions/ledger?${query.toString()}`);
+            const payload = await res.json().catch(() => null);
+            if (currentSequence !== ledgerFetchSequence) {
+                return;
+            }
+            if (!res.ok) {
+                throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
+            }
+            renderLedgerRows(payload?.ledger_entries || []);
+            renderTAccountRows(ledgerDebitRowsBody, payload?.t_account?.debit_entries || [], "No debit activity for current filters.");
+            renderTAccountRows(ledgerCreditRowsBody, payload?.t_account?.credit_entries || [], "No credit activity for current filters.");
+        } catch (error) {
+            if (currentSequence !== ledgerFetchSequence) {
+                return;
+            }
+            renderLedgerRows([]);
+            renderTAccountRows(ledgerDebitRowsBody, [], "No debit activity for current filters.");
+            renderTAccountRows(ledgerCreditRowsBody, [], "No credit activity for current filters.");
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            hideLoadingOverlayFn();
+        }
+    };
+
+    if (ledgerRowsBody) {
+        setLedgerAccountOptions();
+        await loadLedgerEntries();
+    }
+
+    ledgerApplyFiltersButton?.addEventListener("click", () => {
+        void loadLedgerEntries();
+    });
+    ledgerClearFiltersButton?.addEventListener("click", () => {
+        if (ledgerAccountFilterSelect) {
+            ledgerAccountFilterSelect.value = "all";
+        }
+        if (ledgerFromDateInput) {
+            ledgerFromDateInput.value = "";
+        }
+        if (ledgerToDateInput) {
+            ledgerToDateInput.value = "";
+        }
+        if (ledgerSearchInput) {
+            ledgerSearchInput.value = "";
+        }
+        void loadLedgerEntries();
+    });
+    ledgerSearchInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            void loadLedgerEntries();
+        }
+    });
 
     const draftJournalLines = document.querySelector("[data-journal-lines]");
     if (draftJournalLines) {
