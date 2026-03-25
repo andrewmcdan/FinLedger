@@ -400,6 +400,34 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     const ledgerClearFiltersButton = document.getElementById("ledger_clear_filters_button");
     let ledgerFetchSequence = 0;
 
+    const queuePageDownBtn = document.querySelector("[data-queue-page-down]");
+    const queuePageUpBtn = document.querySelector("[data-queue-page-up]");
+    const queueCurrentPageEl = document.querySelector("[data-queue-current-page]");
+    const queueTotalPagesEl = document.querySelector("[data-queue-total-pages]");
+    const queuePerPageSelect = document.querySelector("[data-queue-per-page-select]");
+    let queueCurrentPage = 1;
+    let queuePerPage = queuePerPageSelect ? parseInt(queuePerPageSelect.value, 10) : 10;
+    let queueTotal = 0;
+
+    const ledgerPageDownBtn = document.querySelector("[data-ledger-page-down]");
+    const ledgerPageUpBtn = document.querySelector("[data-ledger-page-up]");
+    const ledgerCurrentPageEl = document.querySelector("[data-ledger-current-page]");
+    const ledgerTotalPagesEl = document.querySelector("[data-ledger-total-pages]");
+    const ledgerPerPageSelect = document.querySelector("[data-ledger-per-page-select]");
+    let ledgerCurrentPage = 1;
+    let ledgerPerPage = ledgerPerPageSelect ? parseInt(ledgerPerPageSelect.value, 10) : 10;
+    let ledgerTotal = 0;
+
+    const updateQueuePaginationDisplay = () => {
+        if (queueCurrentPageEl) queueCurrentPageEl.textContent = String(queueCurrentPage);
+        if (queueTotalPagesEl) queueTotalPagesEl.textContent = String(Math.max(1, Math.ceil(queueTotal / queuePerPage)));
+    };
+
+    const updateLedgerPaginationDisplay = () => {
+        if (ledgerCurrentPageEl) ledgerCurrentPageEl.textContent = String(ledgerCurrentPage);
+        if (ledgerTotalPagesEl) ledgerTotalPagesEl.textContent = String(Math.max(1, Math.ceil(ledgerTotal / ledgerPerPage)));
+    };
+
     const resolveFileNameFromResponse = (response, fallbackName = "journal-document") => {
         const contentDisposition = String(response.headers.get("content-disposition") || "");
         const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
@@ -706,18 +734,20 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         }
     };
 
-    const loadJournalQueue = async () => {
+    const loadJournalQueue = async (page = queueCurrentPage) => {
         if (!journalQueueTableBody) {
             return;
         }
 
+        queueCurrentPage = page;
         const currentSequence = ++queueFetchSequence;
         const status = normalizeQueueStatus(queueStatusFilter?.value || "pending");
         const fromDate = String(queueFromDateInput?.value || "").trim();
         const toDate = String(queueToDateInput?.value || "").trim();
         const search = String(queueSearchInput?.value || "").trim();
 
-        const query = new URLSearchParams({ status, limit: "100", offset: "0" });
+        const offset = (page - 1) * queuePerPage;
+        const query = new URLSearchParams({ status, limit: String(queuePerPage), offset: String(offset) });
         if (fromDate) {
             query.set("from_date", fromDate);
         }
@@ -738,6 +768,8 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             if (!res.ok) {
                 throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
             }
+            queueTotal = payload?.pagination?.total ?? 0;
+            updateQueuePaginationDisplay();
             renderQueueRows(payload?.journal_entries || []);
             markQueueUpdated();
         } catch (error) {
@@ -789,7 +821,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             }
             await showMessageModalFn(payload?.messageCode || "MSG_JOURNAL_QUEUE_REFRESHED", true);
             closeQueueModal();
-            await loadJournalQueue();
+            await loadJournalQueue(1);
         } catch (error) {
             showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
             setQueueDecisionButtonsState({ pending: true, busy: false });
@@ -830,7 +862,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     });
 
     queueApplyFiltersButton?.addEventListener("click", () => {
-        void loadJournalQueue();
+        void loadJournalQueue(1);
     });
 
     queueClearFiltersButton?.addEventListener("click", () => {
@@ -846,17 +878,34 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         if (queueSearchInput) {
             queueSearchInput.value = "";
         }
-        void loadJournalQueue();
+        void loadJournalQueue(1);
     });
 
     queueRefreshButton?.addEventListener("click", () => {
-        void loadJournalQueue();
+        void loadJournalQueue(1);
     });
 
     queueSearchInput?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
-            void loadJournalQueue();
+            void loadJournalQueue(1);
+        }
+    });
+
+    queuePerPageSelect?.addEventListener("change", () => {
+        queuePerPage = parseInt(queuePerPageSelect.value, 10);
+        void loadJournalQueue(1);
+    });
+
+    queuePageDownBtn?.addEventListener("click", () => {
+        if (queueCurrentPage > 1) {
+            void loadJournalQueue(queueCurrentPage - 1);
+        }
+    });
+
+    queuePageUpBtn?.addEventListener("click", () => {
+        if (queueCurrentPage * queuePerPage < queueTotal) {
+            void loadJournalQueue(queueCurrentPage + 1);
         }
     });
 
@@ -1001,18 +1050,20 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         });
     };
 
-    const loadLedgerEntries = async () => {
+    const loadLedgerEntries = async (page = ledgerCurrentPage) => {
         if (!ledgerRowsBody) {
             return;
         }
+        ledgerCurrentPage = page;
         const currentSequence = ++ledgerFetchSequence;
         const accountId = String(ledgerAccountFilterSelect?.value || "all").trim();
         const fromDate = String(ledgerFromDateInput?.value || "").trim();
         const toDate = String(ledgerToDateInput?.value || "").trim();
         const search = String(ledgerSearchInput?.value || "").trim();
+        const offset = (page - 1) * ledgerPerPage;
         const query = new URLSearchParams({
-            limit: String(LEDGER_DEFAULT_LIMIT),
-            offset: "0",
+            limit: String(ledgerPerPage),
+            offset: String(offset),
         });
         if (accountId && accountId !== "all") {
             query.set("account_id", accountId);
@@ -1037,6 +1088,8 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             if (!res.ok) {
                 throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
             }
+            ledgerTotal = payload?.pagination?.total ?? 0;
+            updateLedgerPaginationDisplay();
             renderLedgerRows(payload?.ledger_entries || []);
             renderTAccountRows(ledgerDebitRowsBody, payload?.t_account?.debit_entries || [], "No debit activity for current filters.");
             renderTAccountRows(ledgerCreditRowsBody, payload?.t_account?.credit_entries || [], "No credit activity for current filters.");
@@ -1075,7 +1128,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     }
 
     ledgerApplyFiltersButton?.addEventListener("click", () => {
-        void loadLedgerEntries();
+        void loadLedgerEntries(1);
     });
     ledgerClearFiltersButton?.addEventListener("click", () => {
         if (ledgerAccountFilterSelect) {
@@ -1090,12 +1143,29 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         if (ledgerSearchInput) {
             ledgerSearchInput.value = "";
         }
-        void loadLedgerEntries();
+        void loadLedgerEntries(1);
     });
     ledgerSearchInput?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
-            void loadLedgerEntries();
+            void loadLedgerEntries(1);
+        }
+    });
+
+    ledgerPerPageSelect?.addEventListener("change", () => {
+        ledgerPerPage = parseInt(ledgerPerPageSelect.value, 10);
+        void loadLedgerEntries(1);
+    });
+
+    ledgerPageDownBtn?.addEventListener("click", () => {
+        if (ledgerCurrentPage > 1) {
+            void loadLedgerEntries(ledgerCurrentPage - 1);
+        }
+    });
+
+    ledgerPageUpBtn?.addEventListener("click", () => {
+        if (ledgerCurrentPage * ledgerPerPage < ledgerTotal) {
+            void loadLedgerEntries(ledgerCurrentPage + 1);
         }
     });
 

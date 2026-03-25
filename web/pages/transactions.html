@@ -76,9 +76,7 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody data-journal-lines>
-                        
-                    </tbody>
+                    <tbody data-journal-lines></tbody>
                 </table>
             </div>
 
@@ -95,7 +93,6 @@
                         <button type="button" id="journal_submit_button">Submit for Approval</button>
                         <button type="button" class="button-small" id="journal_reset_button">Reset</button>
                     </span>
-                    
                 </p>
             </div>
         </form>
@@ -139,6 +136,24 @@
                     <button type="button" class="button-small" id="queue_apply_filters_button">Apply Filters</button>
                     <button type="button" class="button-small" id="queue_clear_filters_button">Clear</button>
                     <button type="button" class="button-small" data-refresh>Refresh Queue</button>
+                </span>
+                <span class="actions page-navigation">
+                    <select data-queue-per-page-select title="Select the number of journal queue entries to display per page.">
+                        <option value="5">5 per page</option>
+                        <option value="10" selected>10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </span>
+                <span class="span-actions page-navigation">
+                    <span data-queue-page-down title="Go to the previous page of journal entries.">&lt;</span>
+                    <span>Page: </span>
+                    <span data-queue-current-page>1</span>
+                    <span> of </span>
+                    <span data-queue-total-pages>1</span>
+                    <span data-queue-page-up title="Go to the next page of journal entries.">&gt;</span>
+                    <span>&nbsp;&nbsp;&nbsp;</span>
                 </span>
             </p>
         </div>
@@ -205,6 +220,24 @@
                     <button type="button" class="button-small" id="ledger_apply_filters_button">Apply Filters</button>
                     <button type="button" class="button-small" id="ledger_clear_filters_button">Clear</button>
                 </span>
+                <span class="actions page-navigation">
+                    <select data-ledger-per-page-select title="Select the number of ledger entries to display per page.">
+                        <option value="5">5 per page</option>
+                        <option value="10" selected>10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </span>
+                <span class="span-actions page-navigation">
+                    <span data-ledger-page-down title="Go to the previous page of ledger entries.">&lt;</span>
+                    <span>Page: </span>
+                    <span data-ledger-current-page>1</span>
+                    <span> of </span>
+                    <span data-ledger-total-pages>1</span>
+                    <span data-ledger-page-up title="Go to the next page of ledger entries.">&gt;</span>
+                    <span>&nbsp;&nbsp;&nbsp;</span>
+                </span>
             </p>
         </div>
 
@@ -270,9 +303,7 @@
             </article>
         </div>
     </section>
-    <% } %>
-
-    <% if (canViewJournalQueue) { %>
+    <% } %> <% if (canViewJournalQueue) { %>
     <div id="journal_queue_view_modal" class="modal" aria-hidden="true">
         <div class="modal-content stack">
             <span class="close-button" id="close_journal_queue_view_modal" aria-label="Close">&times;</span>
@@ -341,9 +372,7 @@
             </div>
         </div>
     </div>
-    <% } %>
-
-    <% if (canJournalize) { %>
+    <% } %> <% if (canJournalize) { %>
     <div id="journal_line_documents_modal" class="modal" aria-hidden="true">
         <div class="modal-content">
             <span class="close-button" id="close_journal_line_documents_modal" aria-label="Close">&times;</span>
