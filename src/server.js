@@ -10,6 +10,7 @@ const { getCallerInfo, cleanupUserData, cleanupLogs } = require("./utils/utiliti
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
+const adjustmentsRoutes = require("./routes/adjustments");
 const auditLogsRoutes = require("./routes/audit_logs");
 const messagesRoutes = require("./routes/messages");
 const transactionsRoutes = require("./routes/transactions");
@@ -36,6 +37,7 @@ app.use(express.static("web"));
 app.use("/api/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/accounts", accountsRoutes);
+app.use("/api/adjustments", adjustmentsRoutes);
 app.use("/api/transactions", transactionsRoutes);
 app.use("/api/audit-logs", auditLogsRoutes);
 app.use("/images", imageRoutes);
