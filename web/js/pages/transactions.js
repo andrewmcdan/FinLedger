@@ -116,7 +116,9 @@ const formatReferenceCode = (entry) => {
 };
 
 const normalizeQueueStatus = (status) => {
-    const normalized = String(status || "").trim().toLowerCase();
+    const normalized = String(status || "")
+        .trim()
+        .toLowerCase();
     if (!normalized) {
         return "pending";
     }
@@ -665,9 +667,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         }
         if (queueModalManagerCommentInput) {
             queueModalManagerCommentInput.value = journalEntry.manager_comment || "";
-            queueModalManagerCommentInput.placeholder = canApproveQueueEntries && journalEntry.status === "pending"
-                ? "Required when rejecting."
-                : "Manager comment (if provided).";
+            queueModalManagerCommentInput.placeholder = canApproveQueueEntries && journalEntry.status === "pending" ? "Required when rejecting." : "Manager comment (if provided).";
         }
         renderQueueModalDocuments(detail?.documents || []);
         renderQueueModalLines(detail?.lines || []);
@@ -768,9 +768,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             return;
         }
 
-        const endpoint = decision === "approve"
-            ? `/api/transactions/journal-entry/${journalEntryId}/approve`
-            : `/api/transactions/journal-entry/${journalEntryId}/reject`;
+        const endpoint = decision === "approve" ? `/api/transactions/journal-entry/${journalEntryId}/approve` : `/api/transactions/journal-entry/${journalEntryId}/reject`;
 
         queueModalBusy = true;
         setQueueDecisionButtonsState({ pending: true, busy: true });
@@ -1056,8 +1054,24 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     };
 
     if (ledgerRowsBody) {
+        const ledgerSection = document.querySelector('[aria-labelledby="ledger_title"]');
+        let shouldScrollToLedger = false;
         setLedgerAccountOptions();
+        const urlParamsHelper = await loadUrlParamHelper();
+        const accountIdFromUrl = String(urlParamsHelper.getUrlParam("account_id") || "").trim();
+        if (accountIdFromUrl && ledgerAccountFilterSelect) {
+            const hasMatchingAccountOption = Array.from(ledgerAccountFilterSelect.options).some((option) => option.value === accountIdFromUrl);
+            if (hasMatchingAccountOption) {
+                ledgerAccountFilterSelect.value = accountIdFromUrl;
+                shouldScrollToLedger = true;
+            }
+        }
         await loadLedgerEntries();
+        if (shouldScrollToLedger && ledgerSection) {
+            requestAnimationFrame(() => {
+                ledgerSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+        }
     }
 
     ledgerApplyFiltersButton?.addEventListener("click", () => {
@@ -1263,11 +1277,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     const hydrateJournalReferenceUnavailableTipMessage = async () => {
         try {
             const messagesHelper = await loadMessagesHelper();
-            const resolvedMessage = await messagesHelper.getMessage(
-                JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE,
-                {},
-                journalReferenceUnavailableTipMessage,
-            );
+            const resolvedMessage = await messagesHelper.getMessage(JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE, {}, journalReferenceUnavailableTipMessage);
             if (typeof resolvedMessage === "string" && resolvedMessage.trim()) {
                 journalReferenceUnavailableTipMessage = resolvedMessage.trim();
             }
@@ -1540,7 +1550,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                 throw new Error("ERR_INVALID_SELECTION");
             }
             const lineNoText = row.querySelector("td")?.textContent?.trim() || String(index + 1);
-            const lineNo = Number.isSafeInteger(Number(lineNoText)) ? Number(lineNoText) : (index + 1);
+            const lineNo = Number.isSafeInteger(Number(lineNoText)) ? Number(lineNoText) : index + 1;
             const lineDocIds = Array.from(lineDocumentAssociations.get(String(lineNo)) || []);
 
             const dc = hasDebit ? "debit" : "credit";

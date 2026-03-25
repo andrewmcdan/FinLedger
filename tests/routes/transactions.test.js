@@ -54,15 +54,7 @@ async function resetDb() {
     `);
 }
 
-async function insertUser({
-    username,
-    email,
-    firstName = "Test",
-    lastName = "User",
-    role = "accountant",
-    status = "active",
-    password = "ValidPass1!",
-} = {}) {
+async function insertUser({ username, email, firstName = "Test", lastName = "User", role = "accountant", status = "active", password = "ValidPass1!" } = {}) {
     const result = await db.query(
         `INSERT INTO users (
             username,
@@ -98,34 +90,18 @@ async function seedCategories() {
     const assetsCategory = await db.query("SELECT id FROM account_categories WHERE name = 'Assets'");
     const liabilitiesCategory = await db.query("SELECT id FROM account_categories WHERE name = 'Liabilities'");
 
-    await db.query(
-        "INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Assets', 'Current Assets', 10)",
-        [assetsCategory.rows[0].id],
-    );
-    await db.query(
-        "INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Liabilities', 'Current Liabilities', 10)",
-        [liabilitiesCategory.rows[0].id],
-    );
+    await db.query("INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Assets', 'Current Assets', 10)", [assetsCategory.rows[0].id]);
+    await db.query("INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Liabilities', 'Current Liabilities', 10)", [liabilitiesCategory.rows[0].id]);
 
     return {
         assetsCategoryId: assetsCategory.rows[0].id,
         liabilitiesCategoryId: liabilitiesCategory.rows[0].id,
-        assetsSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Assets'"))
-            .rows[0].id,
-        liabilitiesSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Liabilities'"))
-            .rows[0].id,
+        assetsSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Assets'")).rows[0].id,
+        liabilitiesSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Liabilities'")).rows[0].id,
     };
 }
 
-async function insertAccount({
-    userId,
-    accountName,
-    accountNumber,
-    normalSide,
-    accountCategoryId,
-    accountSubcategoryId,
-    accountOrder,
-}) {
+async function insertAccount({ userId, accountName, accountNumber, normalSide, accountCategoryId, accountSubcategoryId, accountOrder }) {
     const result = await db.query(
         `INSERT INTO accounts (
             user_id,
@@ -194,15 +170,7 @@ async function seedPendingJournalEntry({ createdByUserId, debitAccountId, credit
     };
 }
 
-async function insertLinkedJournalDocument({
-    ownerUserId,
-    journalEntryId,
-    lineId = null,
-    title = "Receipt",
-    originalFileName = "receipt.pdf",
-    fileExtension = ".pdf",
-    fileContent = "test-document",
-} = {}) {
+async function insertLinkedJournalDocument({ ownerUserId, journalEntryId, lineId = null, title = "Receipt", originalFileName = "receipt.pdf", fileExtension = ".pdf", fileContent = "test-document" } = {}) {
     const insertResult = await db.query(
         `INSERT INTO documents (user_id, title, original_file_name, file_extension, meta_data)
          VALUES ($1, $2, $3, $4, '{}'::jsonb)
@@ -318,21 +286,11 @@ function requestMultipartWithFile({ port, path: reqPath, headers = {}, fields = 
     const parts = [];
 
     Object.entries(fields).forEach(([key, value]) => {
-        parts.push(Buffer.from(
-            `--${boundary}\r\n`
-            + `Content-Disposition: form-data; name="${key}"\r\n\r\n`
-            + `${value}\r\n`,
-            "utf8",
-        ));
+        parts.push(Buffer.from(`--${boundary}\r\n` + `Content-Disposition: form-data; name="${key}"\r\n\r\n` + `${value}\r\n`, "utf8"));
     });
 
     if (file) {
-        parts.push(Buffer.from(
-            `--${boundary}\r\n`
-            + `Content-Disposition: form-data; name="${file.fieldName}"; filename="${file.fileName}"\r\n`
-            + `Content-Type: ${file.contentType || "application/octet-stream"}\r\n\r\n`,
-            "utf8",
-        ));
+        parts.push(Buffer.from(`--${boundary}\r\n` + `Content-Disposition: form-data; name="${file.fieldName}"; filename="${file.fileName}"\r\n` + `Content-Type: ${file.contentType || "application/octet-stream"}\r\n\r\n`, "utf8"));
         parts.push(Buffer.isBuffer(file.content) ? file.content : Buffer.from(String(file.content || ""), "utf8"));
         parts.push(Buffer.from("\r\n", "utf8"));
     }
@@ -451,6 +409,10 @@ test("manager can list queue, fetch details, and approve entries", async () => {
         });
         assert.equal(approve.statusCode, 200);
         assert.equal(approve.body.messageCode, "MSG_JOURNAL_ENTRY_APPROVED_SUCCESS");
+
+        assert.equal(emailCalls.length, 1);
+        assert.equal(emailCalls[0].to, accountant.email);
+        assert.match(emailCalls[0].subject, /Journal Entry APPROVED/i);
 
         const entryState = await db.query("SELECT status, posted_at FROM journal_entries WHERE id = $1", [seeded.journalEntryId]);
         assert.equal(entryState.rows[0].status, "approved");
@@ -670,6 +632,11 @@ test("manager rejection requires reason and succeeds when reason is provided", a
         assert.equal(rejectWithReason.statusCode, 200);
         assert.equal(rejectWithReason.body.messageCode, "MSG_JOURNAL_ENTRY_REJECTED_SUCCESS");
 
+        assert.equal(emailCalls.length, 1);
+        assert.equal(emailCalls[0].to, accountant.email);
+        assert.match(emailCalls[0].subject, /Journal Entry REJECTED/i);
+        assert.match(emailCalls[0].body, /Rejected because support docs were unclear/i);
+
         const entryState = await db.query("SELECT status, manager_comment FROM journal_entries WHERE id = $1", [seeded.journalEntryId]);
         assert.equal(entryState.rows[0].status, "rejected");
         assert.equal(entryState.rows[0].manager_comment, "Rejected because support docs were unclear");
@@ -773,6 +740,101 @@ test("journal submission triggers manager notification email", async () => {
     }
 });
 
+test("journal submission notifies administrators in addition to managers", async () => {
+    const manager = await insertUser({ username: "manager_route_5b", email: "manager_route_5b@example.com", role: "manager" });
+    const admin = await insertUser({ username: "admin_route_5b", email: "admin_route_5b@example.com", role: "administrator" });
+    const accountant = await insertUser({ username: "acct_route_5b", email: "acct_route_5b@example.com", role: "accountant" });
+    const accountantToken = "acct-route-token-5b";
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Cash 5B",
+        accountNumber: 1000001105,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Liability 5B",
+        accountNumber: 2000001105,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const payload = {
+        journal_type: "general",
+        entry_date: "2026-03-02",
+        description: "Journal submission manager/admin notification test",
+        reference_code: null,
+        documents: [
+            {
+                client_document_id: "doc-1",
+                title: "Evidence",
+                upload_index: 0,
+                meta_data: {
+                    original_name: "evidence.txt",
+                    file_size: 11,
+                    last_modified: Date.now(),
+                },
+            },
+        ],
+        journal_entry_document_ids: ["doc-1"],
+        lines: [
+            {
+                line_no: 1,
+                account_id: debitAccount.id,
+                dc: "debit",
+                amount: "75.00",
+                line_description: "Debit test",
+                document_ids: ["doc-1"],
+            },
+            {
+                line_no: 2,
+                account_id: creditAccount.id,
+                dc: "credit",
+                amount: "75.00",
+                line_description: "Credit test",
+                document_ids: ["doc-1"],
+            },
+        ],
+    };
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+        const response = await requestMultipartWithFile({
+            port,
+            path: "/api/transactions/new-journal-entry",
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+            fields: {
+                payload: JSON.stringify(payload),
+            },
+            file: {
+                fieldName: "documents",
+                fileName: "evidence.txt",
+                contentType: "text/plain",
+                content: "hello-world",
+            },
+        });
+
+        assert.equal(response.statusCode, 200);
+        assert.equal(response.body.messageCode, "MSG_JOURNAL_ENTRY_CREATED_SUCCESS");
+
+        const recipients = emailCalls.map((call) => call.to).sort();
+        assert.deepEqual(recipients, [admin.email, manager.email].sort());
+    } finally {
+        server.close();
+    }
+});
+
 test("ledger endpoint returns posted rows with filtering and supports administrator read access", async () => {
     const manager = await insertUser({ username: "manager_route_6", email: "manager_route_6@example.com", role: "manager" });
     const accountant = await insertUser({ username: "acct_route_6", email: "acct_route_6@example.com", role: "accountant" });
@@ -832,7 +894,7 @@ test("ledger endpoint returns posted rows with filtering and supports administra
         assert.equal(filteredLedger.statusCode, 200);
         assert.ok(Array.isArray(filteredLedger.body.ledger_entries));
         assert.equal(filteredLedger.body.ledger_entries.length, 1);
-        assert.equal(Number(filteredLedger.body.ledger_entries[0].account_id), debitAccount.id);
+        assert.equal(Number(filteredLedger.body.ledger_entries[0].account_id), Number(debitAccount.id));
         assert.equal(filteredLedger.body.ledger_entries[0].account_name, "Route Cash 6");
         assert.equal(filteredLedger.body.pagination.total, 1);
         assert.ok(filteredLedger.body.ledger_entries[0].running_balance !== undefined);

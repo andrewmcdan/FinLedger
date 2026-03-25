@@ -22,20 +22,11 @@ const documentMimeToExt = new Map([
 fs.mkdirSync(userDocsRoot, { recursive: true });
 
 const router = express.Router();
-const {
-    createJournalEntry,
-    isReferenceCodeAvailable,
-    listJournalQueue,
-    listLedgerEntries,
-    getJournalEntryDetail,
-    getJournalDocumentDownloadInfo,
-    approveJournalEntry,
-    rejectJournalEntry,
-} = require("../controllers/transactions");
+const { createJournalEntry, isReferenceCodeAvailable, listJournalQueue, listLedgerEntries, getJournalEntryDetail, getJournalDocumentDownloadInfo, approveJournalEntry, rejectJournalEntry } = require("../controllers/transactions");
 const { log } = require("../utils/logger.js");
 const utilities = require("../utils/utilities.js");
 const { sendApiError, sendApiSuccess } = require("../utils/api_messages");
-const { isAdmin, isManager, listManagerContacts, getUserById } = require("../controllers/users.js");
+const { isAdmin, isManager, listAdministratorContacts, listManagerContacts, getUserById } = require("../controllers/users.js");
 const { sendEmail } = require("../services/email.js");
 
 const getDocumentExtension = (file) => {
@@ -94,20 +85,19 @@ const removeUploadedFiles = (files = []) => {
 const buildSafeDownloadFileName = (document = {}) => {
     const fallbackBase = "journal-document";
     const rawBase = String(document.title || path.basename(document.original_file_name || "", document.file_extension || "") || fallbackBase).trim();
-    const normalizedBase = rawBase
-        .replace(/[^a-zA-Z0-9._ -]/g, "_")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 120) || fallbackBase;
+    const normalizedBase =
+        rawBase
+            .replace(/[^a-zA-Z0-9._ -]/g, "_")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 120) || fallbackBase;
     const normalizedExtension = String(document.file_extension || "")
         .replace(/[^a-zA-Z0-9.]/g, "")
         .trim();
     if (!normalizedExtension) {
         return normalizedBase;
     }
-    return normalizedExtension.startsWith(".")
-        ? `${normalizedBase}${normalizedExtension}`
-        : `${normalizedBase}.${normalizedExtension}`;
+    return normalizedExtension.startsWith(".") ? `${normalizedBase}${normalizedExtension}` : `${normalizedBase}.${normalizedExtension}`;
 };
 
 const ensureNotAdminUser = async (req, res, next) => {
@@ -134,7 +124,14 @@ const ensureManagerUser = async (req, res, next) => {
 const notifyManagersOfJournalSubmission = async ({ submitterUserId, journalEntry }) => {
     try {
         const managerContacts = await listManagerContacts();
-        if (!Array.isArray(managerContacts) || managerContacts.length === 0) {
+        const administratorContacts = await listAdministratorContacts();
+        const recipients = [...managerContacts, ...administratorContacts].filter((contact) => {
+            const email = String(contact?.email || "").trim();
+            return email.length > 0;
+        });
+        const uniqueRecipients = Array.from(new Map(recipients.map((contact) => [String(contact.email).toLowerCase(), contact])).values());
+
+        if (!Array.isArray(uniqueRecipients) || uniqueRecipients.length === 0) {
             return;
         }
 
@@ -157,28 +154,86 @@ const notifyManagersOfJournalSubmission = async ({ submitterUserId, journalEntry
             "Please review this entry in FinLedger > Transactions > Journal Queue.",
         ].join("\n");
 
-        const sendResults = await Promise.allSettled(
-            managerContacts.map((manager) => sendEmail(manager.email, subject, body)),
-        );
+        const sendResults = await Promise.allSettled(uniqueRecipients.map((recipient) => sendEmail(recipient.email, subject, body)));
 
         sendResults.forEach((result, index) => {
             if (result.status === "fulfilled") {
                 return;
             }
-            const manager = managerContacts[index];
-            log("warn", "Failed to notify manager of journal submission", {
-                managerId: manager?.id,
-                managerEmail: manager?.email,
-                journalEntryId: journalEntry?.id,
-                error: result.reason?.message || "unknown error",
-            }, utilities.getCallerInfo(), submitterUserId);
+            const recipient = uniqueRecipients[index];
+            log(
+                "warn",
+                "Failed to notify submission stakeholder",
+                {
+                    recipientId: recipient?.id,
+                    recipientEmail: recipient?.email,
+                    journalEntryId: journalEntry?.id,
+                    error: result.reason?.message || "unknown error",
+                },
+                utilities.getCallerInfo(),
+                submitterUserId,
+            );
         });
     } catch (error) {
-        log("warn", "Manager journal submission notification failed", {
+        log(
+            "warn",
+            "Manager journal submission notification failed",
+            {
+                submitterUserId,
+                journalEntryId: journalEntry?.id,
+                error: error.message,
+            },
+            utilities.getCallerInfo(),
             submitterUserId,
-            journalEntryId: journalEntry?.id,
-            error: error.message,
-        }, utilities.getCallerInfo(), submitterUserId);
+        );
+    }
+};
+
+const notifyJournalCreatorOfDecision = async ({ journalEntry, decision, managerComment }) => {
+    try {
+        const creatorUserId = Number(journalEntry?.created_by);
+        if (!Number.isSafeInteger(creatorUserId) || creatorUserId <= 0) {
+            return;
+        }
+
+        const creator = await getUserById(creatorUserId);
+        const creatorEmail = String(creator?.email || "").trim();
+        if (!creatorEmail) {
+            return;
+        }
+
+        const normalizedDecision = String(decision || "")
+            .trim()
+            .toLowerCase();
+        if (!normalizedDecision) {
+            return;
+        }
+
+        const referenceCode = journalEntry?.reference_code || `JE-${journalEntry?.id || "N/A"}`;
+        const entryDate = journalEntry?.entry_date ? new Date(journalEntry.entry_date).toISOString().slice(0, 10) : "N/A";
+        const statusLabel = normalizedDecision === "approved" ? "approved" : "rejected";
+        const subject = `Journal Entry ${statusLabel.toUpperCase()}: ${referenceCode}`;
+        const bodyLines = [`Your journal entry has been ${statusLabel}.`, "", `Reference: ${referenceCode}`, `Journal Entry ID: ${journalEntry?.id || "N/A"}`, `Entry Date: ${entryDate}`, `Status: ${statusLabel}`, `Total Debits: ${journalEntry?.total_debits || "0.00"}`, `Total Credits: ${journalEntry?.total_credits || "0.00"}`];
+
+        if (normalizedDecision === "rejected") {
+            bodyLines.push(`Manager Comment: ${managerComment || "(none provided)"}`);
+        }
+
+        bodyLines.push("", "Please review this entry in FinLedger > Transactions > Journal Queue.");
+
+        await sendEmail(creatorEmail, subject, bodyLines.join("\n"));
+    } catch (error) {
+        log(
+            "warn",
+            "Failed to notify journal creator about decision",
+            {
+                journalEntryId: journalEntry?.id,
+                decision,
+                error: error.message,
+            },
+            utilities.getCallerInfo(),
+            journalEntry?.created_by,
+        );
     }
 };
 
@@ -189,9 +244,7 @@ router.get("/reference-code-available", ensureNotAdminUser, async (req, res) => 
     }
 
     const excludeJournalEntryId = req.query?.exclude_journal_entry_id;
-    const parsedExcludeJournalEntryId = excludeJournalEntryId === undefined || excludeJournalEntryId === null || String(excludeJournalEntryId).trim() === ""
-        ? null
-        : Number(excludeJournalEntryId);
+    const parsedExcludeJournalEntryId = excludeJournalEntryId === undefined || excludeJournalEntryId === null || String(excludeJournalEntryId).trim() === "" ? null : Number(excludeJournalEntryId);
     if (parsedExcludeJournalEntryId !== null && (!Number.isSafeInteger(parsedExcludeJournalEntryId) || parsedExcludeJournalEntryId <= 0)) {
         return sendApiError(res, 400, "ERR_INVALID_SELECTION");
     }
@@ -206,11 +259,17 @@ router.get("/reference-code-available", ensureNotAdminUser, async (req, res) => 
         if (error?.code === "ERR_PLEASE_FILL_ALL_FIELDS" || error?.code === "ERR_INVALID_SELECTION") {
             return sendApiError(res, 400, error.code);
         }
-        log("error", "Failed to validate journal reference code availability", {
-            userId: req.user?.id,
-            referenceCode,
-            error: error.message,
-        }, utilities.getCallerInfo(), req.user?.id);
+        log(
+            "error",
+            "Failed to validate journal reference code availability",
+            {
+                userId: req.user?.id,
+                referenceCode,
+                error: error.message,
+            },
+            utilities.getCallerInfo(),
+            req.user?.id,
+        );
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
     }
 });
@@ -281,11 +340,17 @@ router.get("/journal-entry/:journalEntryId", ensureNotAdminUser, async (req, res
         if (error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND") {
             return sendApiError(res, 404, "ERR_JOURNAL_ENTRY_NOT_FOUND");
         }
-        log("error", "Failed to fetch journal entry detail", {
-            userId: req.user?.id,
-            journalEntryId: req.params?.journalEntryId,
-            error: error.message,
-        }, utilities.getCallerInfo(), req.user?.id);
+        log(
+            "error",
+            "Failed to fetch journal entry detail",
+            {
+                userId: req.user?.id,
+                journalEntryId: req.params?.journalEntryId,
+                error: error.message,
+            },
+            utilities.getCallerInfo(),
+            req.user?.id,
+        );
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
     }
 });
@@ -307,12 +372,18 @@ router.get("/journal-entry/:journalEntryId/documents/:documentId/download", ensu
         if (error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND") {
             return sendApiError(res, 404, "ERR_JOURNAL_ENTRY_NOT_FOUND");
         }
-        log("error", "Failed to download journal document", {
-            userId: req.user?.id,
-            journalEntryId: req.params?.journalEntryId,
-            documentId: req.params?.documentId,
-            error: error.message,
-        }, utilities.getCallerInfo(), req.user?.id);
+        log(
+            "error",
+            "Failed to download journal document",
+            {
+                userId: req.user?.id,
+                journalEntryId: req.params?.journalEntryId,
+                documentId: req.params?.documentId,
+                error: error.message,
+            },
+            utilities.getCallerInfo(),
+            req.user?.id,
+        );
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
     }
 });
@@ -324,6 +395,14 @@ router.patch("/journal-entry/:journalEntryId/approve", ensureManagerUser, async 
             managerUserId: req.user.id,
             managerComment: req.body?.manager_comment,
         });
+
+        // Non-blocking notification path. Approval remains successful if email dispatch fails.
+        await notifyJournalCreatorOfDecision({
+            journalEntry: approvalResult,
+            decision: "approved",
+            managerComment: req.body?.manager_comment,
+        });
+
         return sendApiSuccess(res, "MSG_JOURNAL_ENTRY_APPROVED_SUCCESS", { journal_entry: approvalResult });
     } catch (error) {
         if (error?.code === "ERR_INVALID_SELECTION") {
@@ -335,11 +414,17 @@ router.patch("/journal-entry/:journalEntryId/approve", ensureManagerUser, async 
         if (error?.code === "ERR_JOURNAL_ENTRY_NOT_PENDING") {
             return sendApiError(res, 400, "ERR_JOURNAL_ENTRY_NOT_PENDING");
         }
-        log("error", "Failed to approve journal entry", {
-            userId: req.user?.id,
-            journalEntryId: req.params?.journalEntryId,
-            error: error.message,
-        }, utilities.getCallerInfo(), req.user?.id);
+        log(
+            "error",
+            "Failed to approve journal entry",
+            {
+                userId: req.user?.id,
+                journalEntryId: req.params?.journalEntryId,
+                error: error.message,
+            },
+            utilities.getCallerInfo(),
+            req.user?.id,
+        );
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
     }
 });
@@ -351,6 +436,14 @@ router.patch("/journal-entry/:journalEntryId/reject", ensureManagerUser, async (
             managerUserId: req.user.id,
             managerComment: req.body?.manager_comment,
         });
+
+        // Non-blocking notification path. Rejection remains successful if email dispatch fails.
+        await notifyJournalCreatorOfDecision({
+            journalEntry: rejectionResult,
+            decision: "rejected",
+            managerComment: req.body?.manager_comment,
+        });
+
         return sendApiSuccess(res, "MSG_JOURNAL_ENTRY_REJECTED_SUCCESS", { journal_entry: rejectionResult });
     } catch (error) {
         if (error?.code === "ERR_INVALID_SELECTION") {
@@ -365,11 +458,17 @@ router.patch("/journal-entry/:journalEntryId/reject", ensureManagerUser, async (
         if (error?.code === "ERR_JOURNAL_REJECTION_REASON_REQUIRED") {
             return sendApiError(res, 400, "ERR_JOURNAL_REJECTION_REASON_REQUIRED");
         }
-        log("error", "Failed to reject journal entry", {
-            userId: req.user?.id,
-            journalEntryId: req.params?.journalEntryId,
-            error: error.message,
-        }, utilities.getCallerInfo(), req.user?.id);
+        log(
+            "error",
+            "Failed to reject journal entry",
+            {
+                userId: req.user?.id,
+                journalEntryId: req.params?.journalEntryId,
+                error: error.message,
+            },
+            utilities.getCallerInfo(),
+            req.user?.id,
+        );
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");
     }
 });
@@ -424,13 +523,7 @@ router.post("/new-journal-entry", ensureNotAdminUser, uploadDoc.array("documents
         if (error?.code === "ERR_UNAUTHORIZED") {
             return sendApiError(res, 401, "ERR_UNAUTHORIZED");
         }
-        if (
-            error?.code === "ERR_PLEASE_FILL_ALL_FIELDS"
-            || error?.code === "ERR_INVALID_SELECTION"
-            || error?.code === "ERR_NO_FILE_UPLOADED"
-            || error?.code === "ERR_INVALID_FILE_TYPE"
-            || error?.code === "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE"
-        ) {
+        if (error?.code === "ERR_PLEASE_FILL_ALL_FIELDS" || error?.code === "ERR_INVALID_SELECTION" || error?.code === "ERR_NO_FILE_UPLOADED" || error?.code === "ERR_INVALID_FILE_TYPE" || error?.code === "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE") {
             return sendApiError(res, 400, error.code);
         }
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");

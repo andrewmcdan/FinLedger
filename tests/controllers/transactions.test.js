@@ -7,14 +7,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const db = require("../../src/db/db");
-const {
-    approveJournalEntry,
-    rejectJournalEntry,
-    listJournalQueue,
-    listLedgerEntries,
-    getJournalEntryDetail,
-    getJournalDocumentDownloadInfo,
-} = require("../../src/controllers/transactions");
+const { approveJournalEntry, rejectJournalEntry, listJournalQueue, listLedgerEntries, getJournalEntryDetail, getJournalDocumentDownloadInfo } = require("../../src/controllers/transactions");
 const userDocsRoot = path.resolve(__dirname, "../../user-docs");
 
 async function resetDb() {
@@ -41,15 +34,7 @@ async function resetDb() {
     `);
 }
 
-async function insertUser({
-    username,
-    email,
-    firstName = "Test",
-    lastName = "User",
-    role = "accountant",
-    status = "active",
-    password = "ValidPass1!",
-} = {}) {
+async function insertUser({ username, email, firstName = "Test", lastName = "User", role = "accountant", status = "active", password = "ValidPass1!" } = {}) {
     const result = await db.query(
         `INSERT INTO users (
             username,
@@ -81,34 +66,18 @@ async function seedCategories() {
     const assetsCategory = await db.query("SELECT id FROM account_categories WHERE name = 'Assets'");
     const liabilitiesCategory = await db.query("SELECT id FROM account_categories WHERE name = 'Liabilities'");
 
-    await db.query(
-        "INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Assets', 'Current Assets', 10)",
-        [assetsCategory.rows[0].id],
-    );
-    await db.query(
-        "INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Liabilities', 'Current Liabilities', 10)",
-        [liabilitiesCategory.rows[0].id],
-    );
+    await db.query("INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Assets', 'Current Assets', 10)", [assetsCategory.rows[0].id]);
+    await db.query("INSERT INTO account_subcategories (account_category_id, name, description, order_index) VALUES ($1, 'Current Liabilities', 'Current Liabilities', 10)", [liabilitiesCategory.rows[0].id]);
 
     return {
         assetsCategoryId: assetsCategory.rows[0].id,
         liabilitiesCategoryId: liabilitiesCategory.rows[0].id,
-        assetsSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Assets'"))
-            .rows[0].id,
-        liabilitiesSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Liabilities'"))
-            .rows[0].id,
+        assetsSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Assets'")).rows[0].id,
+        liabilitiesSubcategoryId: (await db.query("SELECT id FROM account_subcategories WHERE name = 'Current Liabilities'")).rows[0].id,
     };
 }
 
-async function insertAccount({
-    userId,
-    accountName,
-    accountNumber,
-    normalSide,
-    accountCategoryId,
-    accountSubcategoryId,
-    accountOrder,
-}) {
+async function insertAccount({ userId, accountName, accountNumber, normalSide, accountCategoryId, accountSubcategoryId, accountOrder }) {
     const result = await db.query(
         `INSERT INTO accounts (
             user_id,
@@ -275,11 +244,12 @@ test("rejectJournalEntry requires reason and leaves entry pending when omitted",
     });
 
     await assert.rejects(
-        () => rejectJournalEntry({
-            journalEntryId: seeded.journalEntryId,
-            managerUserId: manager.id,
-            managerComment: "",
-        }),
+        () =>
+            rejectJournalEntry({
+                journalEntryId: seeded.journalEntryId,
+                managerUserId: manager.id,
+                managerComment: "",
+            }),
         (error) => error?.code === "ERR_JOURNAL_REJECTION_REASON_REQUIRED",
     );
 
@@ -371,24 +341,19 @@ test("approveJournalEntry rejects already-processed journals and remains idempot
         managerComment: "Approved",
     });
 
-    const balancesAfterFirstApproval = await db.query(
-        "SELECT id, total_debits, total_credits, balance FROM accounts WHERE id IN ($1, $2) ORDER BY id",
-        [debitAccount.id, creditAccount.id],
-    );
+    const balancesAfterFirstApproval = await db.query("SELECT id, total_debits, total_credits, balance FROM accounts WHERE id IN ($1, $2) ORDER BY id", [debitAccount.id, creditAccount.id]);
 
     await assert.rejects(
-        () => approveJournalEntry({
-            journalEntryId: seeded.journalEntryId,
-            managerUserId: manager.id,
-            managerComment: "Second approval attempt",
-        }),
+        () =>
+            approveJournalEntry({
+                journalEntryId: seeded.journalEntryId,
+                managerUserId: manager.id,
+                managerComment: "Second approval attempt",
+            }),
         (error) => error?.code === "ERR_JOURNAL_ENTRY_NOT_PENDING",
     );
 
-    const balancesAfterSecondApproval = await db.query(
-        "SELECT id, total_debits, total_credits, balance FROM accounts WHERE id IN ($1, $2) ORDER BY id",
-        [debitAccount.id, creditAccount.id],
-    );
+    const balancesAfterSecondApproval = await db.query("SELECT id, total_debits, total_credits, balance FROM accounts WHERE id IN ($1, $2) ORDER BY id", [debitAccount.id, creditAccount.id]);
 
     assert.deepEqual(balancesAfterSecondApproval.rows, balancesAfterFirstApproval.rows);
 
@@ -556,7 +521,7 @@ test("listLedgerEntries and getJournalDocumentDownloadInfo provide live ledger/d
         });
         assert.equal(ledger.total, 1);
         assert.equal(ledger.rows.length, 1);
-        assert.equal(Number(ledger.rows[0].account_id), debitAccount.id);
+        assert.equal(Number(ledger.rows[0].account_id), Number(debitAccount.id));
         assert.ok(ledger.rows[0].running_balance !== undefined);
         assert.ok(Array.isArray(ledger.t_account.debit_entries));
         assert.ok(Array.isArray(ledger.t_account.credit_entries));
