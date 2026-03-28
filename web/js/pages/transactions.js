@@ -313,6 +313,7 @@ const buildJournalLine = async (rowNum) => {
     lineDocumentsButton.type = "button";
     lineDocumentsButton.className = "button-small";
     lineDocumentsButton.textContent = "Docs";
+    lineDocumentsButton.title = "Manage documents attached to this journal line.";
     lineDocumentsButton.setAttribute("data-journal-line-documents-button", "");
     lineDocumentsButton.setAttribute("data-journal-line-number", String(rowNum));
     lineDocumentsButton.addEventListener("click", () => {
@@ -327,6 +328,7 @@ const buildJournalLine = async (rowNum) => {
     removeButton.type = "button";
     removeButton.className = "button-small";
     removeButton.textContent = "Remove";
+    removeButton.title = "Remove this journal line.";
     actionsCell.appendChild(removeButton);
 
     row.appendChild(rowNumCell);
@@ -545,6 +547,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         viewButton.type = "button";
         viewButton.className = "button-small";
         viewButton.textContent = "View";
+        viewButton.title = "View the full journal entry details.";
         viewButton.setAttribute("data-journal-queue-view-button", "");
         viewButton.setAttribute("data-journal-entry-id", String(entry.id));
         actionsCell.appendChild(viewButton);

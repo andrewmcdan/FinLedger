@@ -1,13 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const { isAdmin, isManager } = require("../controllers/users");
+const { isAdmin, isManager, isAccountant } = require("../controllers/users");
 const { listAuditLogs, listAuditLogsForEntity } = require("../controllers/audit_logs");
 const { log } = require("../utils/logger");
 const utilities = require("../utils/utilities");
 const { sendApiError } = require("../utils/api_messages");
 
 async function canViewAuditLogs(userId, token) {
-    return (await isAdmin(userId, token)) || (await isManager(userId, token));
+    return (await isAdmin(userId, token)) || (await isManager(userId, token)) || (await isAccountant(userId, token));
 }
 
 router.get("/", async (req, res) => {

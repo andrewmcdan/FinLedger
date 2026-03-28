@@ -33,9 +33,9 @@
                                     <div class="cal-title" id="monthTitle">Month YYYY</div>
 
                                     <div class="cal-controls">
-                                        <button id="prevBtn" type="button" aria-label="Previous month">◀</button>
-                                        <button id="todayBtn" type="button">Today</button>
-                                        <button id="nextBtn" type="button" aria-label="Next month">▶</button>
+                                        <button id="prevBtn" type="button" aria-label="Previous month" title="Show the previous month in the calendar.">◀</button>
+                                        <button id="todayBtn" type="button" title="Jump the calendar to today.">Today</button>
+                                        <button id="nextBtn" type="button" aria-label="Next month" title="Show the next month in the calendar.">▶</button>
 
                                         <select id="monthSelect" aria-label="Select month"></select>
                                         <select id="yearSelect" aria-label="Select year"></select>
@@ -69,12 +69,12 @@
                                 <img alt="User profile" data-user-icon-menu />
                             </div>
                             <div class="profile-menu-actions">
-                                <button type="button" class="button-small" data-profile-action="profile">Go to profile</button>
-                                <button type="button" class="button-small" data-profile-action="logout">Logout</button>
+                                <button type="button" class="button-small" data-profile-action="profile" title="Open your profile page.">Go to profile</button>
+                                <button type="button" class="button-small" data-profile-action="logout" title="Log out of the application.">Logout</button>
                             </div>
                         </div>
                     </div>
-                    <button id="user_profile_button" aria-label="User Profile" aria-expanded="false" data-user-profile-button>
+                    <button id="user_profile_button" aria-label="User Profile" aria-expanded="false" data-user-profile-button title="Open profile and sign-out options.">
                         <span data-profile-name></span>
                         <img alt="User Profile" data-user-icon />
                     </button>
@@ -82,7 +82,7 @@
             </header>
             <div id="global_message_line" class="message-line" aria-live="assertive" role="status">
                 <span id="global_message_text" class="message-line__text"></span>
-                <button id="global_message_close" class="message-line__close" type="button" aria-label="Dismiss message">&times;</button>
+                <button id="global_message_close" class="message-line__close" type="button" aria-label="Dismiss message" title="Dismiss the current message.">&times;</button>
             </div>
             <main id="app" class="app-main" aria-live="polite"></main>
         </div>

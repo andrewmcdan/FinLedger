@@ -54,14 +54,14 @@ Current access roles:
 
 - Administrator
 - Manager
+- Accountant
 
 ## UI Availability
 
-No dedicated audit-log viewer page is currently implemented.
+Audit history is available from the Accounts page:
 
-Current UI note:
-
-- The Accounts table renders an `Audit` button, but it is not wired to an audit-log action yet.
+- The Accounts table `Audit` button opens a modal showing account change history.
+- Each entry includes the action, user, timestamp, and before/after record images.
 
 ## Retention and Cleanup
 

@@ -45,7 +45,7 @@
                     <p class="value">
                         <span class="span-label">Attached Documents</span>
                         <span class="span-actions">
-                            <button type="button" class="button-small" id="journal_add_document_button" data-journal-add-document-button>Add Document</button>
+                            <button type="button" class="button-small" id="journal_add_document_button" data-journal-add-document-button title="Attach a document to this journal entry.">Add Document</button>
                             <input type="file" id="journal_entry_document_input" name="journal_entry_documents" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.txt" multiple hidden />
                         </span>
                     </p>
@@ -59,7 +59,7 @@
                 <p class="value">
                     <span class="span-label page-navigation">Journal Lines (debits first, then credits)</span>
                     <span class="span-actions">
-                        <button type="button" class="button-small" id="journal_add_line_button" data-add-line-button>Add Account Line</button>
+                        <button type="button" class="button-small" id="journal_add_line_button" data-add-line-button title="Add another account line to the journal entry.">Add Account Line</button>
                     </span>
                 </p>
             </div>
@@ -90,8 +90,8 @@
                 <p class="value">
                     <span class="span-label"> </span>
                     <span class="span-actions">
-                        <button type="button" id="journal_submit_button">Submit for Approval</button>
-                        <button type="button" class="button-small" id="journal_reset_button">Reset</button>
+                        <button type="button" id="journal_submit_button" title="Submit this journal entry for manager approval.">Submit for Approval</button>
+                        <button type="button" class="button-small" id="journal_reset_button" title="Clear the journal entry form and start over.">Reset</button>
                     </span>
                 </p>
             </div>
@@ -133,9 +133,9 @@
                     <span class="inline-status" data-status>Updated --</span>
                 </span>
                 <span class="span-actions">
-                    <button type="button" class="button-small" id="queue_apply_filters_button">Apply Filters</button>
-                    <button type="button" class="button-small" id="queue_clear_filters_button">Clear</button>
-                    <button type="button" class="button-small" data-refresh>Refresh Queue</button>
+                    <button type="button" class="button-small" id="queue_apply_filters_button" title="Apply the current journal queue filters.">Apply Filters</button>
+                    <button type="button" class="button-small" id="queue_clear_filters_button" title="Clear the journal queue filters.">Clear</button>
+                    <button type="button" class="button-small" data-refresh title="Refresh the journal approval queue.">Refresh Queue</button>
                 </span>
                 <span class="actions page-navigation">
                     <select data-queue-per-page-select title="Select the number of journal queue entries to display per page.">
@@ -217,8 +217,8 @@
                     <a id="ledger_trial_balance_link" class="account-transactions-link" href="#/reports?report=trial_balance&as_of=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>&from_date=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>&to_date=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>"> View Trial Balance as of today </a>
                 </span>
                 <span class="span-actions">
-                    <button type="button" class="button-small" id="ledger_apply_filters_button">Apply Filters</button>
-                    <button type="button" class="button-small" id="ledger_clear_filters_button">Clear</button>
+                    <button type="button" class="button-small" id="ledger_apply_filters_button" title="Apply the current ledger filters.">Apply Filters</button>
+                    <button type="button" class="button-small" id="ledger_clear_filters_button" title="Clear the current ledger filters.">Clear</button>
                 </span>
                 <span class="actions page-navigation">
                     <select data-ledger-per-page-select title="Select the number of ledger entries to display per page.">
@@ -360,10 +360,10 @@
                 <p class="value">
                     <span class="span-label"> </span>
                     <span class="span-actions">
-                        <button type="button" class="button-small" id="journal_queue_modal_close_button">Close</button>
+                        <button type="button" class="button-small" id="journal_queue_modal_close_button" title="Close the journal review window.">Close</button>
                         <% if (canApprove) { %>
-                        <button type="button" class="button-small" id="journal_queue_modal_approve_button">Approve</button>
-                        <button type="button" class="button-small" id="journal_queue_modal_reject_button">Reject</button>
+                        <button type="button" class="button-small" id="journal_queue_modal_approve_button" title="Approve the selected journal entry.">Approve</button>
+                        <button type="button" class="button-small" id="journal_queue_modal_reject_button" title="Reject the selected journal entry.">Reject</button>
                         <% } else { %>
                         <span class="meta">Manager approval required</span>
                         <% } %>
@@ -386,8 +386,8 @@
                     <p class="value">
                         <span class="span-label"> </span>
                         <span class="span-actions">
-                            <button type="button" class="button-small" id="journal_line_documents_cancel_button">Cancel</button>
-                            <button type="submit" class="button-small" id="journal_line_documents_apply_button">Apply</button>
+                            <button type="button" class="button-small" id="journal_line_documents_cancel_button" title="Close this window without changing line documents.">Cancel</button>
+                            <button type="submit" class="button-small" id="journal_line_documents_apply_button" title="Save the selected documents for this journal line.">Apply</button>
                         </span>
                     </p>
                 </div>
