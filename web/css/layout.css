@@ -671,6 +671,26 @@ button.button-small,
     font-size: 0.9rem;
 }
 
+.pagination-nav-button {
+    min-width: 2.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+button:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+button:disabled:hover,
+button:disabled:active:not(.message-line__close) {
+    transform: none;
+    box-shadow: none;
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
@@ -1046,13 +1066,6 @@ textarea {
     gap: 0.4rem;
     font-size: 1.2rem;
     /* padding-top: 1.5rem; */
-}
-
-[data-accounts-page-btn],
-[data-users-page-btn] {
-    cursor: pointer;
-    user-select: none;
-    padding: 0.2rem 0.5rem;
 }
 
 @keyframes spinnerSpin {

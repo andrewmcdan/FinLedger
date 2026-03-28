@@ -329,11 +329,23 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
     let usersPerPage = usersPerPageSelect ? parseInt(usersPerPageSelect.value, 10) : 10;
 
     const updateUsersTotalPages = () => {
+        const totalPages = Math.max(1, Math.ceil(userCount / usersPerPage));
         if (!usersTotalPagesEl) {
+            if (usersPageDownBtn) {
+                usersPageDownBtn.disabled = currentUsersPage <= 1;
+            }
+            if (usersPageUpBtn) {
+                usersPageUpBtn.disabled = currentUsersPage >= totalPages;
+            }
             return;
         }
-        const totalPages = Math.ceil(userCount / usersPerPage);
         usersTotalPagesEl.textContent = totalPages;
+        if (usersPageDownBtn) {
+            usersPageDownBtn.disabled = currentUsersPage <= 1;
+        }
+        if (usersPageUpBtn) {
+            usersPageUpBtn.disabled = currentUsersPage >= totalPages;
+        }
     };
 
     const renderUsersPage = (page) => {
@@ -364,6 +376,7 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
         if (usersCurrentPageEl) {
             usersCurrentPageEl.textContent = page;
         }
+        updateUsersTotalPages();
         for (const user of pageUsers) {
             for (const column of tableColumns) {
                 modifyTableCell(user, column, dateColumns.includes(column));

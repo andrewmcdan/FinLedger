@@ -522,12 +522,23 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     let currentPage = 1;
     let accountCount = 0;
     let accountsPerPage = accountsPerPageSelect ? parseInt(accountsPerPageSelect.value, 10) : 10;
+    const updatePaginationButtons = () => {
+        const totalPages = Math.max(1, Math.ceil(accountCount / accountsPerPage));
+        if (pageDownBtn) {
+            pageDownBtn.disabled = currentPage <= 1;
+        }
+        if (pageUpBtn) {
+            pageUpBtn.disabled = currentPage >= totalPages;
+        }
+    };
     const updateTotalPages = () => {
         if (!totalPagesEl) {
+            updatePaginationButtons();
             return;
         }
-        const totalPages = Math.ceil(accountCount / accountsPerPage);
+        const totalPages = Math.max(1, Math.ceil(accountCount / accountsPerPage));
         totalPagesEl.textContent = totalPages;
+        updatePaginationButtons();
     };
 
     if (accountsPerPageSelect) {
@@ -775,6 +786,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             if (currentPageEl) {
                 currentPageEl.textContent = page;
             }
+            updatePaginationButtons();
         } catch (error) {
             showErrorModal(error.message || "ERR_FAILED_TO_LOAD_ACCOUNTS");
         } finally {

@@ -443,13 +443,19 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     let ledgerTotal = 0;
 
     const updateQueuePaginationDisplay = () => {
+        const totalPages = Math.max(1, Math.ceil(queueTotal / queuePerPage));
         if (queueCurrentPageEl) queueCurrentPageEl.textContent = String(queueCurrentPage);
-        if (queueTotalPagesEl) queueTotalPagesEl.textContent = String(Math.max(1, Math.ceil(queueTotal / queuePerPage)));
+        if (queueTotalPagesEl) queueTotalPagesEl.textContent = String(totalPages);
+        if (queuePageDownBtn) queuePageDownBtn.disabled = queueCurrentPage <= 1;
+        if (queuePageUpBtn) queuePageUpBtn.disabled = queueCurrentPage >= totalPages;
     };
 
     const updateLedgerPaginationDisplay = () => {
+        const totalPages = Math.max(1, Math.ceil(ledgerTotal / ledgerPerPage));
         if (ledgerCurrentPageEl) ledgerCurrentPageEl.textContent = String(ledgerCurrentPage);
-        if (ledgerTotalPagesEl) ledgerTotalPagesEl.textContent = String(Math.max(1, Math.ceil(ledgerTotal / ledgerPerPage)));
+        if (ledgerTotalPagesEl) ledgerTotalPagesEl.textContent = String(totalPages);
+        if (ledgerPageDownBtn) ledgerPageDownBtn.disabled = ledgerCurrentPage <= 1;
+        if (ledgerPageUpBtn) ledgerPageUpBtn.disabled = ledgerCurrentPage >= totalPages;
     };
 
     const resolveFileNameFromResponse = (response, fallbackName = "journal-document") => {
