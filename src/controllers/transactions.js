@@ -64,6 +64,19 @@ const normalizeJournalStatus = (status, { allowAll = true } = {}) => {
     return normalizedStatus;
 };
 
+const normalizeJournalTypeFilter = (journalType, { allowAll = true } = {}) => {
+    const normalizedJournalType = String(journalType || (allowAll ? "all" : "general"))
+        .trim()
+        .toLowerCase();
+    if (allowAll && normalizedJournalType === "all") {
+        return "all";
+    }
+    if (!["general", "adjusting"].includes(normalizedJournalType)) {
+        throw createCodeError("ERR_INVALID_SELECTION");
+    }
+    return normalizedJournalType;
+};
+
 const normalizeDateFilter = (dateValue) => {
     if (dateValue === undefined || dateValue === null || String(dateValue).trim() === "") {
         return null;
@@ -352,10 +365,10 @@ const createJournalEntry = async (userId, entryData = {}) => {
 
             totalDebits = Number(totalDebits.toFixed(2));
             totalCredits = Number(totalCredits.toFixed(2));
-            if (totalDebits !== totalCredits) {
-                throw createCodeError("ERR_INVALID_SELECTION");
-            }
             const orderedLines = sortJournalLinesDebitsFirst(normalizedLines);
+            if (orderedLines.length < 2 || totalDebits <= 0 || totalCredits <= 0 || totalDebits !== totalCredits) {
+                throw createCodeError("ERR_JOURNAL_ENTRY_NOT_BALANCED");
+            }
 
             const providedReferenceCode = normalizeReferenceCode(entryData.reference_code);
 
@@ -482,8 +495,9 @@ const createJournalEntry = async (userId, entryData = {}) => {
     }
 };
 
-const listJournalQueue = async ({ status, fromDate, toDate, search, limit, offset } = {}) => {
+const listJournalQueue = async ({ status, journalType, fromDate, toDate, search, limit, offset } = {}) => {
     const normalizedStatus = normalizeJournalStatus(status, { allowAll: true });
+    const normalizedJournalType = normalizeJournalTypeFilter(journalType, { allowAll: true });
     const normalizedFromDate = normalizeDateFilter(fromDate);
     const normalizedToDate = normalizeDateFilter(toDate);
     const normalizedSearch = normalizeSearch(search);
@@ -496,6 +510,11 @@ const listJournalQueue = async ({ status, fromDate, toDate, search, limit, offse
     if (normalizedStatus !== "all") {
         params.push(normalizedStatus);
         whereClauses.push(`je.status = $${params.length}`);
+    }
+
+    if (normalizedJournalType !== "all") {
+        params.push(normalizedJournalType);
+        whereClauses.push(`je.journal_type = $${params.length}`);
     }
 
     if (normalizedFromDate) {

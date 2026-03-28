@@ -100,7 +100,7 @@
     <% } %> <% if (canViewJournalQueue) { %>
     <section class="card stack" aria-labelledby="journal_queue_title" data-journal-queue-section data-can-approve="<%= canApprove ? 'true' : 'false' %>">
         <h2 id="journal_queue_title">Journal Queue</h2>
-        <p class="meta">Review pending, approved, and rejected journal entries.</p>
+        <p class="meta">Review pending, approved, and rejected journal entries, including adjustment submissions.</p>
 
         <div class="grid">
             <div class="field">
@@ -110,6 +110,14 @@
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
                     <option value="all">All</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="queue_journal_type_filter">Journal Type</label>
+                <select id="queue_journal_type_filter" data-queue-journal-type-filter>
+                    <option value="all" selected>All Types</option>
+                    <option value="general">General</option>
+                    <option value="adjusting">Adjusting</option>
                 </select>
             </div>
             <div class="field">
@@ -165,6 +173,7 @@
                         <th>Journal ID</th>
                         <th>Entry Date</th>
                         <th>Description</th>
+                        <th>Type</th>
                         <th>Prepared By</th>
                         <th>Total Debits</th>
                         <th>Total Credits</th>
@@ -175,7 +184,7 @@
                 </thead>
                 <tbody data-journal-queue>
                     <tr>
-                        <td colspan="9" class="meta">Loading journal queue...</td>
+                        <td colspan="10" class="meta">Loading journal queue...</td>
                     </tr>
                 </tbody>
             </table>

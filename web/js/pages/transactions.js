@@ -153,6 +153,27 @@ const toQueueBadgeClass = (status) => {
     return "badge badge--pending";
 };
 
+const normalizeQueueJournalType = (journalType) => {
+    const normalizedJournalType = String(journalType || "")
+        .trim()
+        .toLowerCase();
+    if (["general", "adjusting", "all"].includes(normalizedJournalType)) {
+        return normalizedJournalType || "all";
+    }
+    return "all";
+};
+
+const toQueueJournalTypeLabel = (journalType) => {
+    const normalizedJournalType = normalizeQueueJournalType(journalType);
+    if (normalizedJournalType === "general") {
+        return "General";
+    }
+    if (normalizedJournalType === "adjusting") {
+        return "Adjusting";
+    }
+    return "All";
+};
+
 const getLineDocumentAssociationSet = (lineNumber) => {
     const normalizedLineNumber = String(lineNumber || "");
     if (!normalizedLineNumber) {
@@ -362,6 +383,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     const journalQueueSection = document.querySelector("[data-journal-queue-section]");
     const journalQueueTableBody = document.querySelector("[data-journal-queue]");
     const queueStatusFilter = document.querySelector("[data-queue-status-filter]");
+    const queueJournalTypeFilter = document.querySelector("[data-queue-journal-type-filter]");
     const queueFromDateInput = document.querySelector("[data-queue-from-date]");
     const queueToDateInput = document.querySelector("[data-queue-to-date]");
     const queueSearchInput = document.querySelector("[data-queue-search]");
@@ -533,6 +555,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         const idCell = createCell({ text: formatReferenceCode(entry) });
         const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
         const descriptionCell = createCell({ text: entry.description || "-", isLongText: true });
+        const typeCell = createCell({ text: toQueueJournalTypeLabel(entry.journal_type) });
         const createdByCell = createCell({ text: entry.created_by_username || "-" });
         const debitCell = createCell({ text: formatCurrencyDisplay(entry.total_debits) });
         const creditCell = createCell({ text: formatCurrencyDisplay(entry.total_credits) });
@@ -555,6 +578,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         row.appendChild(idCell);
         row.appendChild(dateCell);
         row.appendChild(descriptionCell);
+        row.appendChild(typeCell);
         row.appendChild(createdByCell);
         row.appendChild(debitCell);
         row.appendChild(creditCell);
@@ -572,7 +596,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         if (!Array.isArray(entries) || entries.length === 0) {
             const row = document.createElement("tr");
             const cell = createCell({ text: "No journal entries found for the selected filters." });
-            cell.colSpan = 9;
+            cell.colSpan = 10;
             cell.className = "meta";
             row.appendChild(cell);
             journalQueueTableBody.appendChild(row);
@@ -745,12 +769,16 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         queueCurrentPage = page;
         const currentSequence = ++queueFetchSequence;
         const status = normalizeQueueStatus(queueStatusFilter?.value || "pending");
+        const journalType = normalizeQueueJournalType(queueJournalTypeFilter?.value || "all");
         const fromDate = String(queueFromDateInput?.value || "").trim();
         const toDate = String(queueToDateInput?.value || "").trim();
         const search = String(queueSearchInput?.value || "").trim();
 
         const offset = (page - 1) * queuePerPage;
         const query = new URLSearchParams({ status, limit: String(queuePerPage), offset: String(offset) });
+        if (journalType && journalType !== "all") {
+            query.set("journal_type", journalType);
+        }
         if (fromDate) {
             query.set("from_date", fromDate);
         }
@@ -871,6 +899,9 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     queueClearFiltersButton?.addEventListener("click", () => {
         if (queueStatusFilter) {
             queueStatusFilter.value = "pending";
+        }
+        if (queueJournalTypeFilter) {
+            queueJournalTypeFilter.value = "all";
         }
         if (queueFromDateInput) {
             queueFromDateInput.value = "";

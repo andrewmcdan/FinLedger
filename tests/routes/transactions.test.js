@@ -132,15 +132,15 @@ async function insertAccount({ userId, accountName, accountNumber, normalSide, a
     return result.rows[0];
 }
 
-async function seedPendingJournalEntry({ createdByUserId, debitAccountId, creditAccountId, amount = 125.5, status = "pending", entryDate = "2026-03-01T00:00:00.000Z" }) {
+async function seedPendingJournalEntry({ createdByUserId, debitAccountId, creditAccountId, amount = 125.5, status = "pending", journalType = "general", entryDate = "2026-03-01T00:00:00.000Z" }) {
     const referenceCode = `JE-ROUTE-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
     const entryResult = await db.query(
         `INSERT INTO journal_entries
             (journal_type, entry_date, description, status, total_debits, total_credits, created_by, updated_by, reference_code)
          VALUES
-            ('general', $1, 'Route test journal entry', $2, $3, $3, $4, $4, $5)
+            ($1, $2, 'Route test journal entry', $3, $4, $4, $5, $5, $6)
          RETURNING id`,
-        [entryDate, status, amount, createdByUserId, referenceCode],
+        [journalType, entryDate, status, amount, createdByUserId, referenceCode],
     );
 
     const journalEntryId = entryResult.rows[0].id;
@@ -497,6 +497,69 @@ test("accountant can view queue/details but cannot approve or reject", async () 
         });
         assert.equal(reject.statusCode, 403);
         assert.equal(reject.body.errorCode, "ERR_FORBIDDEN_MANAGER_APPROVAL_REQUIRED");
+    } finally {
+        server.close();
+    }
+});
+
+test("journal queue can be filtered to adjusting entries by journal type", async () => {
+    const manager = await insertUser({ username: "manager_route_2b", email: "manager_route_2b@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_route_2b", email: "acct_route_2b@example.com", role: "accountant" });
+    const managerToken = "manager-route-token-2b";
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Adjustment Filter Cash",
+        accountNumber: 1000002102,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Adjustment Filter Liability",
+        accountNumber: 2000002102,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const adjustingEntry = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 210,
+        journalType: "adjusting",
+    });
+    await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 220,
+        journalType: "general",
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+
+        const queue = await requestJson({
+            port,
+            method: "GET",
+            path: "/api/transactions/journal-queue?status=pending&journal_type=adjusting",
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+
+        assert.equal(queue.statusCode, 200);
+        assert.equal(queue.body.journal_entries.length, 1);
+        assert.equal(queue.body.journal_entries[0].id, adjustingEntry.journalEntryId);
+        assert.equal(queue.body.journal_entries[0].journal_type, "adjusting");
     } finally {
         server.close();
     }
@@ -931,6 +994,96 @@ test("journal submission stores debit lines before credit lines even when submit
         assert.equal(Number(lineRows.rows[0].account_id), Number(debitAccount.id));
         assert.equal(lineRows.rows[1].dc, "credit");
         assert.equal(Number(lineRows.rows[1].account_id), Number(creditAccount.id));
+    } finally {
+        server.close();
+    }
+});
+
+test("unbalanced journal submission returns the specific balance error code", async () => {
+    const accountant = await insertUser({ username: "acct_route_5d", email: "acct_route_5d@example.com", role: "accountant" });
+    const accountantToken = "acct-route-token-5d";
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Cash 5D",
+        accountNumber: 1000003105,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Liability 5D",
+        accountNumber: 2000003105,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const payload = {
+        journal_type: "adjusting",
+        entry_date: "2026-03-04",
+        description: "Unbalanced journal line test",
+        reference_code: null,
+        documents: [
+            {
+                client_document_id: "doc-1",
+                title: "Evidence",
+                upload_index: 0,
+                meta_data: {
+                    original_name: "evidence.txt",
+                    file_size: 11,
+                    last_modified: Date.now(),
+                },
+            },
+        ],
+        journal_entry_document_ids: ["doc-1"],
+        lines: [
+            {
+                line_no: 1,
+                account_id: debitAccount.id,
+                dc: "debit",
+                amount: "100.00",
+                line_description: "Debit test",
+                document_ids: ["doc-1"],
+            },
+            {
+                line_no: 2,
+                account_id: creditAccount.id,
+                dc: "credit",
+                amount: "90.00",
+                line_description: "Credit test",
+                document_ids: ["doc-1"],
+            },
+        ],
+    };
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+        const response = await requestMultipartWithFile({
+            port,
+            path: "/api/transactions/new-journal-entry",
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+            fields: {
+                payload: JSON.stringify(payload),
+            },
+            file: {
+                fieldName: "documents",
+                fileName: "evidence.txt",
+                contentType: "text/plain",
+                content: "hello-world",
+            },
+        });
+
+        assert.equal(response.statusCode, 400);
+        assert.equal(response.body.errorCode, "ERR_JOURNAL_ENTRY_NOT_BALANCED");
     } finally {
         server.close();
     }

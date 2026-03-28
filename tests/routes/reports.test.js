@@ -223,7 +223,7 @@ test.beforeEach(async () => {
     await resetDb();
 });
 
-test("manager can generate trial balance and income statement", async () => {
+test("manager can generate all sprint 4 financial reports", async () => {
     const manager = await insertUser({ username: "manager_reports_1", email: "manager_reports_1@example.com", role: "manager" });
     const accountant = await insertUser({ username: "acct_reports_1", email: "acct_reports_1@example.com", role: "accountant" });
     const managerToken = "manager-reports-token-1";
@@ -338,6 +338,33 @@ test("manager can generate trial balance and income statement", async () => {
         assert.equal(Number(isResponse.body.totals.total_revenue), 1000);
         assert.equal(Number(isResponse.body.totals.total_expense), 300);
         assert.equal(Number(isResponse.body.totals.net_income), 700);
+
+        const bsResponse = await requestJson({
+            port,
+            method: "GET",
+            path: "/api/reports/balance-sheet?as_of=2026-03-31",
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+
+        assert.equal(bsResponse.statusCode, 200);
+        assert.equal(bsResponse.body.report_type, "balance_sheet");
+        assert.equal(Number(bsResponse.body.totals.total_assets), 700);
+        assert.equal(Number(bsResponse.body.totals.total_liabilities_and_equity), 700);
+        assert.equal(bsResponse.body.totals.is_balanced, true);
+
+        const reResponse = await requestJson({
+            port,
+            method: "GET",
+            path: "/api/reports/retained-earnings?from_date=2026-03-16&to_date=2026-03-31",
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+
+        assert.equal(reResponse.statusCode, 200);
+        assert.equal(reResponse.body.report_type, "retained_earnings");
+        assert.equal(Number(reResponse.body.values.beginning_retained_earnings), 700);
+        assert.equal(Number(reResponse.body.values.net_income), 0);
+        assert.equal(Number(reResponse.body.values.distributions), 0);
+        assert.equal(Number(reResponse.body.values.ending_retained_earnings), 700);
     } finally {
         server.close();
         await new Promise((resolve) => server.once("close", resolve));
