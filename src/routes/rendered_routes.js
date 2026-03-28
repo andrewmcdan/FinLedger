@@ -3,6 +3,7 @@ const { getCallerInfo } = require("../utils/utilities");
 const db = require("../db/db");
 const usersController = require("../controllers/users");
 const accountsController = require("../controllers/accounts");
+const dashboardController = require("../controllers/dashboard");
 const { SECURITY_QUESTIONS } = require("../data/security_questions");
 
 async function dashboard(req, res, next) {
@@ -13,7 +14,12 @@ async function dashboard(req, res, next) {
         const loggedInUsers = await usersController.listLoggedInUsers();
         const users = await usersController.listUsers();
         const currentUserId = Number(req.user.id);
-        res.render("dashboard", { role, loggedInUsers, users, currentUserId });
+        const dashboardSummary = await dashboardController.buildDashboardSummary({
+            userId: currentUserId,
+            role,
+            users,
+        });
+        res.render("dashboard", { role, loggedInUsers, users, currentUserId, dashboardSummary });
     } catch (error) {
         logger.log("error", `Dashboard render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
         next(error);

@@ -8,6 +8,17 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
         stamp.textContent = new Date().toLocaleString();
     }
 
+    const dashboardScrollButtons = document.querySelectorAll("[data-dashboard-scroll-target]");
+    dashboardScrollButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            const target = document.getElementById(button.dataset.dashboardScrollTarget || "");
+            if (!target) {
+                return;
+            }
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    });
+
     const emailForm = document.getElementById("email-user-form");
     if (emailForm) {
         emailForm.addEventListener("submit", async (event) => {
