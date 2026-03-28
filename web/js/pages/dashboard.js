@@ -116,6 +116,52 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
             });
         });
     }
+    const updateUserStatus = async (userId, nextStatus, successCode = "MSG_USER_FIELD_UPDATED_SUCCESS") => {
+        const response = await fetchWithAuth("/api/users/update-user-field", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                field: "status",
+                value: nextStatus,
+            }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.error || "ERR_FIELD_CANNOT_BE_UPDATED");
+        }
+        await showMessageModal(successCode);
+        location.reload();
+    };
+
+    const statusActionButtons = document.querySelectorAll("[data-user-status-target]");
+    if (statusActionButtons.length) {
+        statusActionButtons.forEach((button) => {
+            button.addEventListener("click", async () => {
+                const userId = button.dataset.userId;
+                const nextStatus = button.dataset.userStatusTarget;
+                if (!userId || !nextStatus) {
+                    return;
+                }
+                const confirmMessage = nextStatus === "active"
+                    ? "Are you sure you want to activate this user?"
+                    : "Are you sure you want to update this user?";
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+                showLoadingOverlay();
+                try {
+                    await updateUserStatus(userId, nextStatus);
+                } catch (error) {
+                    await showErrorModal(error.message || "ERR_FIELD_CANNOT_BE_UPDATED");
+                } finally {
+                    hideLoadingOverlay();
+                }
+            });
+        });
+    }
     const tableColumns = ["fullname", "email", "role", "status", "last_login_at", "suspension_start_at", "suspension_end_at", "date_of_birth", "address", "password_expires_at"];
     const dateColumns = ["last_login_at", "suspension_start_at", "suspension_end_at", "password_expires_at"];
     const dateOnlyColumns = new Set(["date_of_birth"]);
@@ -439,6 +485,35 @@ export default async function initDashboard({ showLoadingOverlay, hideLoadingOve
                     showErrorModal("ERR_INTERNAL_SERVER");
                     hideLoadingOverlay();
                 });
+        });
+    }
+
+    const deactivateUserForm = document.getElementById("deactivate-user-form");
+    if (deactivateUserForm) {
+        deactivateUserForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            showLoadingOverlay();
+            const formData = new FormData(deactivateUserForm);
+            const usernameToDeactivate = formData.get("deactivate_username");
+            const matchedUser = usersData.find((user) => user.username === usernameToDeactivate && user.status === "active" && user.id !== currentUserId);
+            if (!matchedUser) {
+                await showErrorModal("ERR_INVALID_USERNAME_SELECTED");
+                hideLoadingOverlay();
+                return;
+            }
+            const confirmDeactivate = confirm(`Are you sure you want to deactivate "${matchedUser.username}"?`);
+            if (!confirmDeactivate) {
+                hideLoadingOverlay();
+                return;
+            }
+            try {
+                await updateUserStatus(matchedUser.id, "deactivated");
+                deactivateUserForm.reset();
+            } catch (error) {
+                await showErrorModal(error.message || "ERR_FIELD_CANNOT_BE_UPDATED");
+            } finally {
+                hideLoadingOverlay();
+            }
         });
     }
 

@@ -23,7 +23,10 @@
     <% 
     let usersWithPendingApprovalsLength = users.filter(user => user.status === 'pending').length;
     let usersWithSuspendedAccountsLength = users.filter(user => user.status === 'suspended').length;
+    let usersWithExpiredPasswords = users.filter(user => user.password_expires_at && new Date(user.password_expires_at) < new Date());
+    let deactivatedUsers = users.filter(user => user.status === 'deactivated');
     let usersAvailableToSuspend = users.filter(user => user.status === 'active' && user.id !== currentUserId);
+    let usersAvailableToDeactivate = users.filter(user => user.status === 'active' && user.id !== currentUserId);
     %>
     <% if (role === "administrator") { %>
     <section class="stack">
@@ -54,13 +57,16 @@
             </article>
             <article class="card">
                 <h2>Users with Expired Passwords</h2>
-                <% if (users.filter(user => user.password_expired).length == 0) { %>
+                <% if (usersWithExpiredPasswords.length == 0) { %>
                 <p class="meta">No users with expired passwords</p>
                 <% } %>
-                <% for (let user of users.filter(user => user.password_expires_at < new Date())) { %>
+                <% for (let user of usersWithExpiredPasswords) { %>
                 <article class="data-row">
-                    <p class="value"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span><button class="button-small" title="Suspend this user due to an expired password.">Suspend User</button></p>
-                    <p class="meta">Password Expired on <%= user.password_expires_at %></p>
+                    <p class="value">
+                        <span><%= user.username %></span>
+                        <span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span>
+                    </p>
+                    <p class="meta">Password expired on <%= user.password_expires_at %>. Current status: <%= user.status %></p>
                 </article>
                 <% } %>
             </article>
@@ -80,6 +86,23 @@
                         </span>
                     </p>
                     <p class="meta">Ends <%= user.suspension_end_at %></p>
+                </article>
+                <% }); %>
+            </article>
+            <article class="card">
+                <h2>Deactivated Users</h2>
+                <% if (deactivatedUsers.length == 0) { %>
+                <p class="meta">No deactivated user accounts</p>
+                <% } %>
+                <% deactivatedUsers.forEach(user => { %>
+                <article class="data-row" data-deactivated_user_id-<%= user.id %>>
+                    <p class="value">
+                        <span class="span-label"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
+                        <span class="span-actions">
+                            <button class="button-small" data-user-status-target="active" data-user-id="<%= user.id %>" title="Activate this user account.">Activate</button>
+                        </span>
+                    </p>
+                    <p class="meta">Deactivated account. Activate to restore sign-in access.</p>
                 </article>
                 <% }); %>
             </article>
@@ -248,6 +271,25 @@
                             <input type="datetime-local" id="suspension_end_date" name="suspension_end_date" required title="Select the suspension end date and time.">
                         </div>
                         <button type="submit" title="Suspend the selected user.">Suspend User</button>
+                    </form>
+                </article>
+                <article class="card">
+                    <h2>Deactivate User Account</h2>
+                    <form id="deactivate-user-form" class="stack">
+                        <div class="field">
+                            <label for="deactivate_username" title="Select a user to deactivate.">Username</label>
+                            <select id="deactivate_username" name="deactivate_username" required title="Select a user to deactivate.">
+                                <% if (usersAvailableToDeactivate.length === 0) { %>
+                                <option value="" disabled selected>No eligible users</option>
+                                <% } else { %>
+                                <option value="" disabled selected>Select a user</option>
+                                <% usersAvailableToDeactivate.forEach(user => { %>
+                                <option value="<%= user.username %>"><%= user.username %></option>
+                                <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+                        <button type="submit" title="Deactivate the selected user.">Deactivate User</button>
                     </form>
                 </article>
             </div>

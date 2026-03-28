@@ -283,6 +283,15 @@ test("createUser creates user and sends temp password email when needed", async 
     assert.equal(emailCalls.length, 1);
 });
 
+test("createUser creates active users when invoked by an administrator", async () => {
+    const admin = await insertUser({ username: "creator-admin", email: "creator-admin@example.com", role: "administrator" });
+    const created = await usersController.createUser("Active", "Person", "active-person@example.com", "", "manager", "789 Main", new Date("1992-03-03"), null, admin.id);
+    const result = await db.query("SELECT status, temp_password FROM users WHERE id = $1", [created.id]);
+    assert.equal(result.rows[0].status, "active");
+    assert.equal(result.rows[0].temp_password, true);
+    assert.equal(emailCalls.length, 1);
+});
+
 test("createUser appends letter suffix for duplicate generated usernames", async () => {
     const first = await usersController.createUser("John", "Doe", "john@example.com", "ValidPass1!", "accountant", "123 Main", new Date("1990-01-01"), null);
     const second = await usersController.createUser("Jane", "Doe", "jane@example.com", "ValidPass1!", "accountant", "124 Main", new Date("1991-01-01"), null);
