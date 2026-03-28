@@ -1,6 +1,6 @@
 # Journal Entries
 
-This section documents current journal-entry behavior visible in the Transactions UI.
+This section documents journal-entry behavior in the Transactions UI.
 
 ## Access and Permissions
 
@@ -28,31 +28,39 @@ Current Journal controls:
 - Totals row (`Debits`, `Credits`, `Difference`)
 - `Submit for Approval` button
 
-## Current Task Flow (UI Scaffold)
+## Current Task Flow
 
 1. Open `Transactions`.
 2. Enter journal header values (date, type, reference, description).
-3. Add or edit journal lines in the lines table.
-4. Review totals shown in the Journal summary row.
-5. Select `Submit for Approval`.
+3. Attach one or more source documents.
+4. Add or edit journal lines in the lines table.
+5. Review totals shown in the Journal summary row.
+6. Select `Submit for Approval`.
 
-## Expected Results (Current Build)
+## Expected Results
 
-- Journal form and table controls render for manager/accountant users.
+- Journal entries are persisted as `pending`.
+- Manager notification email is dispatched after successful submission.
 - Role restrictions hide the Journal section from administrator users.
-- The current implementation is a UI scaffold and does not yet persist full journal workflows end to end.
+- Reference codes are checked for availability before submission when provided.
+- Submission is blocked when:
+  - no documents are attached
+  - debits and credits are not balanced
+  - reference-code validation is still pending
+  - reference code is not available
 
 ## What Exists in the Database
 
 - `journal_entries` table exists.
 - `journal_entry_lines` table exists.
+- `journal_entry_documents` table exists.
+- `journal_entry_line_documents` table exists.
 - Audit logging infrastructure includes journal-related entities.
 
-## Current Limitations
+## Current Limitations and Scope
 
-- Full submit/approve/reject backend workflow is not yet wired end to end.
-- Rejection-reason capture and manager-notification behavior are not yet exposed as complete user workflows.
-- Validation and balance enforcement behavior shown in Sprint requirements is not fully implemented in UI/API integration.
+- Journal types are currently limited to `General` and `Adjusting`.
+- Broader reporting/financial statement workflows are documented elsewhere and are still in progress.
 
 ## Related Sections
 

@@ -45,7 +45,7 @@
                     <p class="value">
                         <span class="span-label">Attached Documents</span>
                         <span class="span-actions">
-                            <button type="button" class="button-small" id="journal_add_document_button" data-journal-add-document-button>Add Document</button>
+                            <button type="button" class="button-small" id="journal_add_document_button" data-journal-add-document-button title="Attach a document to this journal entry.">Add Document</button>
                             <input type="file" id="journal_entry_document_input" name="journal_entry_documents" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.txt" multiple hidden />
                         </span>
                     </p>
@@ -59,7 +59,7 @@
                 <p class="value">
                     <span class="span-label page-navigation">Journal Lines (debits first, then credits)</span>
                     <span class="span-actions">
-                        <button type="button" class="button-small" id="journal_add_line_button" data-add-line-button>Add Account Line</button>
+                        <button type="button" class="button-small" id="journal_add_line_button" data-add-line-button title="Add another account line to the journal entry.">Add Account Line</button>
                     </span>
                 </p>
             </div>
@@ -76,9 +76,7 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody data-journal-lines>
-                        
-                    </tbody>
+                    <tbody data-journal-lines></tbody>
                 </table>
             </div>
 
@@ -92,18 +90,17 @@
                 <p class="value">
                     <span class="span-label"> </span>
                     <span class="span-actions">
-                        <button type="button" id="journal_submit_button">Submit for Approval</button>
-                        <button type="button" class="button-small" id="journal_reset_button">Reset</button>
+                        <button type="button" id="journal_submit_button" title="Submit this journal entry for manager approval.">Submit for Approval</button>
+                        <button type="button" class="button-small" id="journal_reset_button" title="Clear the journal entry form and start over.">Reset</button>
                     </span>
-                    
                 </p>
             </div>
         </form>
     </section>
     <% } %> <% if (canViewJournalQueue) { %>
-    <section class="card stack" aria-labelledby="journal_queue_title">
+    <section class="card stack" aria-labelledby="journal_queue_title" data-journal-queue-section data-can-approve="<%= canApprove ? 'true' : 'false' %>">
         <h2 id="journal_queue_title">Journal Queue</h2>
-        <p class="meta">Review pending, approved, and rejected journal entries.</p>
+        <p class="meta">Review pending, approved, and rejected journal entries, including adjustment submissions.</p>
 
         <div class="grid">
             <div class="field">
@@ -113,6 +110,14 @@
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
                     <option value="all">All</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="queue_journal_type_filter">Journal Type</label>
+                <select id="queue_journal_type_filter" data-queue-journal-type-filter>
+                    <option value="all" selected>All Types</option>
+                    <option value="general">General</option>
+                    <option value="adjusting">Adjusting</option>
                 </select>
             </div>
             <div class="field">
@@ -136,9 +141,27 @@
                     <span class="inline-status" data-status>Updated --</span>
                 </span>
                 <span class="span-actions">
-                    <button type="button" class="button-small" id="queue_apply_filters_button">Apply Filters</button>
-                    <button type="button" class="button-small" id="queue_clear_filters_button">Clear</button>
-                    <button type="button" class="button-small" data-refresh>Refresh Queue</button>
+                    <button type="button" class="button-small" id="queue_apply_filters_button" title="Apply the current journal queue filters.">Apply Filters</button>
+                    <button type="button" class="button-small" id="queue_clear_filters_button" title="Clear the journal queue filters.">Clear</button>
+                    <button type="button" class="button-small" data-refresh title="Refresh the journal approval queue.">Refresh Queue</button>
+                </span>
+                <span class="actions page-navigation">
+                    <select data-queue-per-page-select title="Select the number of journal queue entries to display per page.">
+                        <option value="5">5 per page</option>
+                        <option value="10" selected>10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </span>
+                <span class="span-actions page-navigation">
+                    <button type="button" class="button-small pagination-nav-button" data-queue-page-down title="Go to the previous page of journal entries.">&lt;</button>
+                    <span>Page </span>
+                    <span data-queue-current-page>1</span>
+                    <span> of </span>
+                    <span data-queue-total-pages>1</span>
+                    <button type="button" class="button-small pagination-nav-button" data-queue-page-up title="Go to the next page of journal entries.">&gt;</button>
+                    <span>&nbsp;&nbsp;&nbsp;</span>
                 </span>
             </p>
         </div>
@@ -150,6 +173,7 @@
                         <th>Journal ID</th>
                         <th>Entry Date</th>
                         <th>Description</th>
+                        <th>Type</th>
                         <th>Prepared By</th>
                         <th>Total Debits</th>
                         <th>Total Credits</th>
@@ -160,23 +184,7 @@
                 </thead>
                 <tbody data-journal-queue>
                     <tr>
-                        <td>JE-000124</td>
-                        <td>2026-02-23</td>
-                        <td>Customer payment received</td>
-                        <td>acct_user</td>
-                        <td>$2,500.00</td>
-                        <td>$2,500.00</td>
-                        <td><span class="badge">Pending</span></td>
-                        <td class="meta">-</td>
-                        <td>
-                            <button type="button" class="button-small">View</button>
-                            <% if (canApprove) { %>
-                            <button type="button" class="button-small">Approve</button>
-                            <button type="button" class="button-small">Reject</button>
-                            <% } else { %>
-                            <span class="meta">Manager approval required</span>
-                            <% } %>
-                        </td>
+                        <td colspan="10" class="meta">Loading journal queue...</td>
                     </tr>
                 </tbody>
             </table>
@@ -195,9 +203,6 @@
                 <label for="ledger_account_filter">Account</label>
                 <select id="ledger_account_filter" data-ledger-account-filter>
                     <option value="all" selected>All Accounts</option>
-                    <option value="cash">Cash</option>
-                    <option value="accounts_receivable">Accounts Receivable</option>
-                    <option value="sales_revenue">Sales Revenue</option>
                 </select>
             </div>
             <div class="field">
@@ -221,8 +226,26 @@
                     <a id="ledger_trial_balance_link" class="account-transactions-link" href="#/reports?report=trial_balance&as_of=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>&from_date=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>&to_date=<%= encodeURIComponent(new Date().toISOString().slice(0, 10)) %>"> View Trial Balance as of today </a>
                 </span>
                 <span class="span-actions">
-                    <button type="button" class="button-small" id="ledger_apply_filters_button">Apply Filters</button>
-                    <button type="button" class="button-small" id="ledger_clear_filters_button">Clear</button>
+                    <button type="button" class="button-small" id="ledger_apply_filters_button" title="Apply the current ledger filters.">Apply Filters</button>
+                    <button type="button" class="button-small" id="ledger_clear_filters_button" title="Clear the current ledger filters.">Clear</button>
+                </span>
+                <span class="actions page-navigation">
+                    <select data-ledger-per-page-select title="Select the number of ledger entries to display per page.">
+                        <option value="5">5 per page</option>
+                        <option value="10" selected>10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </span>
+                <span class="span-actions page-navigation">
+                    <button type="button" class="button-small pagination-nav-button" data-ledger-page-down title="Go to the previous page of ledger entries.">&lt;</button>
+                    <span>Page </span>
+                    <span data-ledger-current-page>1</span>
+                    <span> of </span>
+                    <span data-ledger-total-pages>1</span>
+                    <button type="button" class="button-small pagination-nav-button" data-ledger-page-up title="Go to the next page of ledger entries.">&gt;</button>
+                    <span>&nbsp;&nbsp;&nbsp;</span>
                 </span>
             </p>
         </div>
@@ -242,13 +265,7 @@
                 </thead>
                 <tbody data-ledger-rows>
                     <tr>
-                        <td>2026-02-23</td>
-                        <td>Cash</td>
-                        <td>Customer payment received</td>
-                        <td><a href="#/transactions?journal_id=124">JE-000124</a></td>
-                        <td>$2,500.00</td>
-                        <td>$0.00</td>
-                        <td>$12,980.00</td>
+                        <td colspan="7" class="meta">No posted ledger entries found.</td>
                     </tr>
                 </tbody>
             </table>
@@ -268,9 +285,7 @@
                         </thead>
                         <tbody data-t-account-debit>
                             <tr>
-                                <td>2026-02-23</td>
-                                <td>JE-000124</td>
-                                <td>$2,500.00</td>
+                                <td colspan="3" class="meta">No debit activity for current filters.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -289,9 +304,7 @@
                         </thead>
                         <tbody data-t-account-credit>
                             <tr>
-                                <td>2026-02-23</td>
-                                <td>JE-000124</td>
-                                <td>$0.00</td>
+                                <td colspan="3" class="meta">No credit activity for current filters.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -299,9 +312,76 @@
             </article>
         </div>
     </section>
-    <% } %>
+    <% } %> <% if (canViewJournalQueue) { %>
+    <div id="journal_queue_view_modal" class="modal" aria-hidden="true">
+        <div class="modal-content stack">
+            <span class="close-button" id="close_journal_queue_view_modal" aria-label="Close">&times;</span>
+            <h2>Journal Entry Review</h2>
+            <p class="meta" data-journal-queue-modal-reference>Reference: --</p>
 
-    <% if (canJournalize) { %>
+            <div class="grid" data-journal-queue-modal-summary>
+                <article class="notice">Status: <strong data-journal-queue-modal-status>--</strong></article>
+                <article class="notice">Prepared By: <strong data-journal-queue-modal-created-by>--</strong></article>
+                <article class="notice">Entry Date: <strong data-journal-queue-modal-entry-date>--</strong></article>
+                <article class="notice">Debits: <strong data-journal-queue-modal-total-debits>--</strong></article>
+                <article class="notice">Credits: <strong data-journal-queue-modal-total-credits>--</strong></article>
+                <article class="notice">Type: <strong data-journal-queue-modal-journal-type>--</strong></article>
+            </div>
+
+            <div class="field">
+                <label for="journal_queue_modal_description">Description</label>
+                <textarea id="journal_queue_modal_description" rows="2" readonly data-journal-queue-modal-description></textarea>
+            </div>
+
+            <div class="field">
+                <label>Attached Documents</label>
+                <ul class="journal-entry-documents-list" data-journal-queue-modal-documents>
+                    <li class="meta">No documents attached.</li>
+                </ul>
+            </div>
+
+            <div class="table-scroll">
+                <table class="table table--wide">
+                    <thead>
+                        <tr>
+                            <th>Line</th>
+                            <th>Account</th>
+                            <th>Line Description</th>
+                            <th>Debit</th>
+                            <th>Credit</th>
+                            <th>Line Docs</th>
+                        </tr>
+                    </thead>
+                    <tbody data-journal-queue-modal-lines>
+                        <tr>
+                            <td colspan="6" class="meta">No journal lines available.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="field">
+                <label for="journal_queue_manager_comment">Manager Comment</label>
+                <textarea id="journal_queue_manager_comment" rows="3" data-journal-queue-manager-comment placeholder="Required when rejecting."></textarea>
+            </div>
+
+            <div class="data-row">
+                <p class="value">
+                    <span class="span-label"> </span>
+                    <span class="span-actions">
+                        <button type="button" class="button-small" id="journal_queue_modal_close_button" title="Close the journal review window.">Close</button>
+                        <% if (canApprove) { %>
+                        <button type="button" class="button-small" id="journal_queue_modal_approve_button" title="Approve the selected journal entry.">Approve</button>
+                        <button type="button" class="button-small" id="journal_queue_modal_reject_button" title="Reject the selected journal entry.">Reject</button>
+                        <% } else { %>
+                        <span class="meta">Manager approval required</span>
+                        <% } %>
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
+    <% } %> <% if (canJournalize) { %>
     <div id="journal_line_documents_modal" class="modal" aria-hidden="true">
         <div class="modal-content">
             <span class="close-button" id="close_journal_line_documents_modal" aria-label="Close">&times;</span>
@@ -315,8 +395,8 @@
                     <p class="value">
                         <span class="span-label"> </span>
                         <span class="span-actions">
-                            <button type="button" class="button-small" id="journal_line_documents_cancel_button">Cancel</button>
-                            <button type="submit" class="button-small" id="journal_line_documents_apply_button">Apply</button>
+                            <button type="button" class="button-small" id="journal_line_documents_cancel_button" title="Close this window without changing line documents.">Cancel</button>
+                            <button type="submit" class="button-small" id="journal_line_documents_apply_button" title="Save the selected documents for this journal line.">Apply</button>
                         </span>
                     </p>
                 </div>

@@ -1,32 +1,133 @@
 <section class="page">
+    <% const dashboardData = dashboardSummary || { summaryCards: [], ratioCards: [], messages: [], quickLinks: [], generatedAtLabel: "--" }; %>
     <header class="page-header">
         <h1>Dashboard</h1>
-        <p>Snapshot of balances and activity.</p>
+        <p>Snapshot of balances, ratios, and alerts. Updated <span data-last-updated><%= dashboardData.generatedAtLabel %></span>.</p>
     </header>
-    <div class="grid">
-        <article class="card">
-            <h2>Cash on Hand</h2>
-            <p class="value">$128,430</p>
-            <p class="meta">Updated <span data-last-updated>--</span></p>
-        </article>
-        <article class="card">
-            <h2>Payables</h2>
-            <p class="value">$32,910</p>
-            <p class="meta">Due this month</p>
-        </article>
-        <article class="card">
-            <h2>Receivables</h2>
-            <p class="value">$48,250</p>
-            <p class="meta">Aging 30-60 days</p>
-        </article>
-    </div>
+    <section class="stack dashboard-stack">
+        <div class="grid card">
+            <% dashboardData.summaryCards.forEach((card) => { %>
+            <article class="card dashboard-card <%= card.toneClass %>">
+                <div class="dashboard-card__top">
+                    <h2><%= card.title %></h2>
+                    <span class="dashboard-status-pill <%= card.toneClass %>"><%= card.statusLabel %></span>
+                </div>
+                <p class="dashboard-card__value"><%= card.value %></p>
+                <p class="meta"><%= card.detail %></p>
+            </article>
+            <% }); %>
+        </div>
+
+        <div class="grid dashboard-grid">
+            <article class="card stack">
+                <div class="dashboard-section-header">
+                    <h2>Quick Access</h2>
+                    <p class="meta">Open the main workflows from the landing page based on your role.</p>
+                </div>
+                <div class="dashboard-link-grid">
+                    <% dashboardData.quickLinks.forEach((link) => { %>
+                    <% if (link.scrollTarget) { %>
+                    <button type="button" class="dashboard-link-card" data-dashboard-scroll-target="<%= link.scrollTarget %>" title="<%= link.label %>">
+                        <strong class="dashboard-link-card__title"><%= link.title %></strong>
+                        <span class="meta"><%= link.body %></span>
+                        <span class="dashboard-link-card__action"><%= link.label %></span>
+                    </button>
+                    <% } else { %>
+                    <a class="dashboard-link-card" href="<%= link.href %>" title="<%= link.label %>">
+                        <strong class="dashboard-link-card__title"><%= link.title %></strong>
+                        <span class="meta"><%= link.body %></span>
+                        <span class="dashboard-link-card__action"><%= link.label %></span>
+                    </a>
+                    <% } %>
+                    <% }); %>
+                </div>
+            </article>
+
+            <article class="card stack">
+                <div class="dashboard-section-header">
+                    <h2>Financial Ratios</h2>
+                    <p class="meta">Ratios render only when enough posted data exists to calculate them reliably.</p>
+                </div>
+                <% if (dashboardData.ratioCards.length === 0) { %>
+                <div class="notice">No ratio data is available yet. Post journal entries to populate the dashboard.</div>
+                <% } else { %>
+                <div class="grid dashboard-ratio-grid">
+                    <% dashboardData.ratioCards.forEach((card) => { %>
+                    <article class="card dashboard-card dashboard-card--ratio <%= card.toneClass %>">
+                        <div class="dashboard-card__top">
+                            <h2><%= card.title %></h2>
+                            <span class="dashboard-status-pill <%= card.toneClass %>"><%= card.statusLabel %></span>
+                        </div>
+                        <p class="dashboard-card__value"><%= card.value %></p>
+                        <p class="meta"><%= card.detail %></p>
+                    </article>
+                    <% }); %>
+                </div>
+                <% } %>
+            </article>
+
+            <article class="card stack">
+                <div class="dashboard-section-header">
+                    <h2>Important Messages</h2>
+                    <p class="meta">Highlighted issues and workflow items that may need attention.</p>
+                </div>
+                <div class="stack dashboard-alert-list">
+                    <% dashboardData.messages.forEach((message) => { %>
+                    <article class="dashboard-alert <%= message.toneClass %>">
+                        <div class="dashboard-alert__top">
+                            <strong><%= message.title %></strong>
+                            <span class="dashboard-status-pill <%= message.toneClass %>"><%= message.tone === "review" ? "Review" : message.tone === "warning" ? "Warning" : "Good" %></span>
+                        </div>
+                        <p class="meta"><%= message.body %></p>
+                        <% if (message.linkHref && message.linkLabel) { %>
+                        <p class="meta"><a class="account-transactions-link" href="<%= message.linkHref %>"><%= message.linkLabel %></a></p>
+                        <% } %>
+                    </article>
+                    <% }); %>
+                </div>
+            </article>
+
+            <article class="card stack">
+                <div class="dashboard-section-header">
+                    <h2>Color Guide</h2>
+                    <p class="meta">Use the dashboard colors as a quick screening tool, then open the detailed pages for context.</p>
+                </div>
+                <div class="stack dashboard-legend">
+                    <div class="dashboard-alert dashboard-tone--good">
+                        <div class="dashboard-alert__top">
+                            <strong>Green</strong>
+                            <span class="dashboard-status-pill dashboard-tone--good">Good</span>
+                        </div>
+                        <p class="meta">Healthy or comfortably within a general benchmark range.</p>
+                    </div>
+                    <div class="dashboard-alert dashboard-tone--warning">
+                        <div class="dashboard-alert__top">
+                            <strong>Yellow</strong>
+                            <span class="dashboard-status-pill dashboard-tone--warning">Warning</span>
+                        </div>
+                        <p class="meta">Borderline or trending toward a range that deserves closer monitoring.</p>
+                    </div>
+                    <div class="dashboard-alert dashboard-tone--review">
+                        <div class="dashboard-alert__top">
+                            <strong>Red</strong>
+                            <span class="dashboard-status-pill dashboard-tone--review">Review</span>
+                        </div>
+                        <p class="meta">Needs closer review or a concrete follow-up action.</p>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </section>
     <% 
     let usersWithPendingApprovalsLength = users.filter(user => user.status === 'pending').length;
     let usersWithSuspendedAccountsLength = users.filter(user => user.status === 'suspended').length;
+    let usersWithExpiredPasswords = users.filter(user => user.password_expires_at && new Date(user.password_expires_at) < new Date());
+    let deactivatedUsers = users.filter(user => user.status === 'deactivated');
     let usersAvailableToSuspend = users.filter(user => user.status === 'active' && user.id !== currentUserId);
+    let usersAvailableToDeactivate = users.filter(user => user.status === 'active' && user.id !== currentUserId);
     %>
     <% if (role === "administrator") { %>
-    <section class="stack">
+    <section id="user-management" class="stack">
         <header class="page-header">
             <h1>User Management</h1>
         </header>
@@ -54,13 +155,16 @@
             </article>
             <article class="card">
                 <h2>Users with Expired Passwords</h2>
-                <% if (users.filter(user => user.password_expired).length == 0) { %>
+                <% if (usersWithExpiredPasswords.length == 0) { %>
                 <p class="meta">No users with expired passwords</p>
                 <% } %>
-                <% for (let user of users.filter(user => user.password_expires_at < new Date())) { %>
+                <% for (let user of usersWithExpiredPasswords) { %>
                 <article class="data-row">
-                    <p class="value"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span><button class="button-small" title="Suspend this user due to an expired password.">Suspend User</button></p>
-                    <p class="meta">Password Expired on <%= user.password_expires_at %></p>
+                    <p class="value">
+                        <span><%= user.username %></span>
+                        <span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span>
+                    </p>
+                    <p class="meta">Password expired on <%= user.password_expires_at %>. Current status: <%= user.status %></p>
                 </article>
                 <% } %>
             </article>
@@ -80,6 +184,23 @@
                         </span>
                     </p>
                     <p class="meta">Ends <%= user.suspension_end_at %></p>
+                </article>
+                <% }); %>
+            </article>
+            <article class="card">
+                <h2>Deactivated Users</h2>
+                <% if (deactivatedUsers.length == 0) { %>
+                <p class="meta">No deactivated user accounts</p>
+                <% } %>
+                <% deactivatedUsers.forEach(user => { %>
+                <article class="data-row" data-deactivated_user_id-<%= user.id %>>
+                    <p class="value">
+                        <span class="span-label"><span><%= user.username %></span><span class="meta"> (Full name: <%= user.first_name %> <%= user.last_name %>)</span></span>
+                        <span class="span-actions">
+                            <button class="button-small" data-user-status-target="active" data-user-id="<%= user.id %>" title="Activate this user account.">Activate</button>
+                        </span>
+                    </p>
+                    <p class="meta">Deactivated account. Activate to restore sign-in access.</p>
                 </article>
                 <% }); %>
             </article>
@@ -119,12 +240,12 @@
                             </select>
                         </span>
                         <span class="span-actions page-navigation">
-                            <span data-users-page-down data-users-page-btn title="Go to the previous page of users.">&lt;</span>
-                            <span>Page: </span>
+                            <button type="button" class="button-small pagination-nav-button" data-users-page-down data-users-page-btn title="Go to the previous page of users.">&lt;</button>
+                            <span>Page </span>
                             <span data-users-current-page>1 </span>
                             <span>of </span>
                             <span data-users-total-pages>1</span>
-                            <span data-users-page-up data-users-page-btn title="Go to the next page of users.">&gt;</span>
+                            <button type="button" class="button-small pagination-nav-button" data-users-page-up data-users-page-btn title="Go to the next page of users.">&gt;</button>
                             <span>&nbsp;&nbsp;&nbsp;</span>
                         </span>
                     </p>
@@ -250,6 +371,25 @@
                         <button type="submit" title="Suspend the selected user.">Suspend User</button>
                     </form>
                 </article>
+                <article class="card">
+                    <h2>Deactivate User Account</h2>
+                    <form id="deactivate-user-form" class="stack">
+                        <div class="field">
+                            <label for="deactivate_username" title="Select a user to deactivate.">Username</label>
+                            <select id="deactivate_username" name="deactivate_username" required title="Select a user to deactivate.">
+                                <% if (usersAvailableToDeactivate.length === 0) { %>
+                                <option value="" disabled selected>No eligible users</option>
+                                <% } else { %>
+                                <option value="" disabled selected>Select a user</option>
+                                <% usersAvailableToDeactivate.forEach(user => { %>
+                                <option value="<%= user.username %>"><%= user.username %></option>
+                                <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+                        <button type="submit" title="Deactivate the selected user.">Deactivate User</button>
+                    </form>
+                </article>
             </div>
         </div>
         <div class="grid">
@@ -276,14 +416,6 @@
                     <button type="submit" title="Send the email to the selected user.">Send Email</button>
                 </form>
             </article>
-        </div>
-    </section>
-    <% } else { %>
-    <section class="card">
-        <h2>Your Workspace</h2>
-        <p class="meta">Signed in as role: <%= role %></p>
-        <div class="stack">
-            <div class="notice">Your most recent transactions</div>
         </div>
     </section>
     <% } %>

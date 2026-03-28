@@ -12,6 +12,10 @@ async function listAuditLogs(filters = {}) {
     const params = [];
     const where = [];
 
+    if (filters.event_type) {
+        params.push(String(filters.event_type).trim());
+        where.push(`event_type = $${params.length}`);
+    }
     if (filters.entity_type) {
         params.push(String(filters.entity_type).trim());
         where.push(`entity_type = $${params.length}`);

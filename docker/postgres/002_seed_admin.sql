@@ -30,11 +30,11 @@ INSERT INTO users (
   crypt('{{ADMIN_PASSWORD}}', gen_salt('bf')),
   now(),
   now() + interval '{{PASSWORD_EXPIRATION_DAYS}} days',
-  'What is your favorite color?',
-  crypt('blue', gen_salt('bf')),
-  'What city were you born in?',
+  'sq_favorite_food',
+  crypt('pizza', gen_salt('bf')),
+  'sq_birth_city',
   crypt('springfield', gen_salt('bf')),
-  'What is your pet’s name?',
+  'sq_first_pet',
   crypt('fluffy', gen_salt('bf'))
 )
 ON CONFLICT DO NOTHING;

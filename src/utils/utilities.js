@@ -64,9 +64,22 @@ async function cleanupUserData(){
         const docFiles = await fs.readdir(userDocsDir);
         log("debug", "Loaded user file inventories", { iconCount: iconFiles.length, docCount: docFiles.length }, getCallerInfo());
         const dbIconFilesResult = await db.query("SELECT user_icon_path FROM users WHERE user_icon_path IS NOT NULL");
-        const dbDocFilesResult = await db.query("SELECT file_name FROM documents WHERE file_name IS NOT NULL");
+        const dbDocFilesResult = await db.query(`
+            SELECT
+                file_name::text AS file_name,
+                file_extension
+            FROM documents
+            WHERE file_name IS NOT NULL
+        `);
         const dbIconFiles = new Set(dbIconFilesResult.rows.map(r => path.basename(r.user_icon_path)));
-        const dbDocFiles = new Set(dbDocFilesResult.rows.map(r => r.file_name));
+        const dbDocFiles = new Set(dbDocFilesResult.rows.map((r) => {
+            const fileName = String(r.file_name || "").trim();
+            const fileExtension = String(r.file_extension || "").trim();
+            if (!fileName) {
+                return "";
+            }
+            return `${fileName}${fileExtension}`;
+        }).filter(Boolean));
         let deletedIcons = 0;
         let deletedDocs = 0;
         for(const file of iconFiles){

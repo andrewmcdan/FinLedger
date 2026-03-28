@@ -12,7 +12,7 @@ const getIsAdmin = async () => {
     return data.is_admin === true || data.isAdmin === true;
 };
 
-export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay, showErrorModal }) {
+export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay, showErrorModal, showMessageModal }) {
     const isAdmin = await getIsAdmin();
     const editHoverText = "Double click to edit.";
     const navAndEditHoverText = "Single click opens Transactions page. Double click to edit.";
@@ -87,6 +87,41 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 window.location.reload();
             } catch (error) {
                 showErrorModal(error.message || "ERR_ACCOUNT_CREATION_FAILED");
+            } finally {
+                hideLoadingOverlay();
+            }
+        });
+    }
+
+    const accountPageEmailForm = document.getElementById("account_page_email_form");
+    if (accountPageEmailForm) {
+        accountPageEmailForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            showLoadingOverlay();
+            try {
+                const formData = new FormData(accountPageEmailForm);
+                const payload = {
+                    user_id: Number(formData.get("user_id")),
+                    subject: String(formData.get("subject") || "").trim(),
+                    message: String(formData.get("message") || "").trim(),
+                };
+                const response = await fetchWithAuth("/api/users/email-account-contact", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.error || "ERR_FAILED_TO_SEND_EMAIL");
+                }
+                if (typeof showMessageModal === "function") {
+                    await showMessageModal("MSG_EMAIL_SENT_SUCCESS");
+                }
+                accountPageEmailForm.reset();
+            } catch (error) {
+                showErrorModal(error.message || "ERR_FAILED_TO_SEND_EMAIL");
             } finally {
                 hideLoadingOverlay();
             }
@@ -179,7 +214,6 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         { value: "BS", label: "Balance Sheet" },
         { value: "RE", label: "Retained Earnings Statement" },
     ];
-
     const normalizeNormalSide = (value) => {
         if (!value) {
             return "";
@@ -488,12 +522,23 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     let currentPage = 1;
     let accountCount = 0;
     let accountsPerPage = accountsPerPageSelect ? parseInt(accountsPerPageSelect.value, 10) : 10;
+    const updatePaginationButtons = () => {
+        const totalPages = Math.max(1, Math.ceil(accountCount / accountsPerPage));
+        if (pageDownBtn) {
+            pageDownBtn.disabled = currentPage <= 1;
+        }
+        if (pageUpBtn) {
+            pageUpBtn.disabled = currentPage >= totalPages;
+        }
+    };
     const updateTotalPages = () => {
         if (!totalPagesEl) {
+            updatePaginationButtons();
             return;
         }
-        const totalPages = Math.ceil(accountCount / accountsPerPage);
+        const totalPages = Math.max(1, Math.ceil(accountCount / accountsPerPage));
         totalPagesEl.textContent = totalPages;
+        updatePaginationButtons();
     };
 
     if (accountsPerPageSelect) {
@@ -670,6 +715,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             auditButton.className = "button-small account-button";
             auditButton.setAttribute("data-account-id", account.id);
             auditButton.setAttribute("data-audit-account-button", "");
+            auditButton.title = "Open the Audit page for this account.";
             auditButton.textContent = "Audit";
             actionCell.appendChild(auditButton);
             tr.appendChild(actionCell);
@@ -740,6 +786,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             if (currentPageEl) {
                 currentPageEl.textContent = page;
             }
+            updatePaginationButtons();
         } catch (error) {
             showErrorModal(error.message || "ERR_FAILED_TO_LOAD_ACCOUNTS");
         } finally {
@@ -1423,6 +1470,25 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             el.style.cursor = "default";
         }
     });
+
+    if (accountsTableBody) {
+        accountsTableBody.addEventListener("click", (event) => {
+            const auditButton = event.target.closest("[data-audit-account-button]");
+            if (!auditButton) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const accountId = auditButton.getAttribute("data-account-id");
+            if (!accountId) {
+                showErrorModal("ERR_INVALID_SELECTION");
+                return;
+            }
+            const url = new URL(window.location.origin + `/#/audit?account_id=${accountId}`);
+            url.hash = `#/audit?account_id=${encodeURIComponent(accountId)}`;
+            window.location.href = url.toString();
+        });
+    }
 }
 
 async function loadNumericHelpers() {

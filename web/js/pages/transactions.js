@@ -3,15 +3,6 @@ const { fetchWithAuth } = authHelpers;
 const domHelpers = await loadDomHelpers();
 const { createCell, createInput, createSelect, createTextarea } = domHelpers;
 
-const getIsAdmin = async () => {
-    const res = await fetchWithAuth("/api/auth/status");
-    if (!res.ok) {
-        return false;
-    }
-    const data = await res.json();
-    return data.is_admin === true || data.isAdmin === true;
-};
-
 let showLoadingOverlayFn, hideLoadingOverlayFn, showErrorModalFn, showMessageModalFn;
 let accountsList = [];
 let draftJournalLineCounter = 1;
@@ -24,6 +15,7 @@ const JOURNAL_REFERENCE_CHECK_DEBOUNCE_MS = 350;
 const JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE = "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE";
 const JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE = "ERR_JOURNAL_REFERENCE_CODE_CHECK_PENDING";
 const JOURNAL_ENTRY_NOT_BALANCED_ERROR_CODE = "ERR_JOURNAL_ENTRY_NOT_BALANCED";
+const LEDGER_DEFAULT_LIMIT = 200;
 let refreshJournalSubmitButtonStateFn = () => {};
 
 const loadAccounts = async () => {
@@ -49,21 +41,16 @@ const updateJournalEntryTotals = (journalLinesContainer) => {
     }
     const debitCells = journalLinesContainer.querySelectorAll("[data-debit-inputs]");
     const creditCells = journalLinesContainer.querySelectorAll("[data-credit-inputs]");
-    console.log("Updating totals. Debit cells:", debitCells, "Credit cells:", creditCells);
     let totalDebit = 0;
     let totalCredit = 0;
     debitCells.forEach((input) => {
-        console.log("Processing debit input:", input);
         const value = parseFloat(input.value.replace(/[^0-9.-]/g, ""));
-        console.log("Debit input value:", input.value, "Parsed value:", value);
         if (!isNaN(value)) {
             totalDebit += value;
         }
     });
     creditCells.forEach((input) => {
-        console.log("Processing credit input:", input);
         const value = parseFloat(input.value.replace(/[^0-9.-]/g, ""));
-        console.log("Credit input value:", input.value, "Parsed value:", value);
         if (!isNaN(value)) {
             totalCredit += value;
         }
@@ -105,6 +92,86 @@ const parseCurrencyInput = (value) => {
         return Number.NaN;
     }
     return parsed;
+};
+
+const formatDateForDisplay = (value) => {
+    if (!value) {
+        return "--";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return String(value);
+    }
+    return parsed.toISOString().slice(0, 10);
+};
+
+const formatReferenceCode = (entry) => {
+    if (entry?.reference_code) {
+        return String(entry.reference_code);
+    }
+    if (!entry?.id) {
+        return "--";
+    }
+    return `JE-${String(entry.id).padStart(8, "0")}`;
+};
+
+const normalizeQueueStatus = (status) => {
+    const normalized = String(status || "")
+        .trim()
+        .toLowerCase();
+    if (!normalized) {
+        return "pending";
+    }
+    if (["pending", "approved", "rejected", "all"].includes(normalized)) {
+        return normalized;
+    }
+    return "pending";
+};
+
+const toQueueStatusLabel = (status) => {
+    const normalized = normalizeQueueStatus(status);
+    if (normalized === "approved") {
+        return "Approved";
+    }
+    if (normalized === "rejected") {
+        return "Rejected";
+    }
+    if (normalized === "all") {
+        return "All";
+    }
+    return "Pending";
+};
+
+const toQueueBadgeClass = (status) => {
+    const normalized = normalizeQueueStatus(status);
+    if (normalized === "approved") {
+        return "badge badge--approved";
+    }
+    if (normalized === "rejected") {
+        return "badge badge--rejected";
+    }
+    return "badge badge--pending";
+};
+
+const normalizeQueueJournalType = (journalType) => {
+    const normalizedJournalType = String(journalType || "")
+        .trim()
+        .toLowerCase();
+    if (["general", "adjusting", "all"].includes(normalizedJournalType)) {
+        return normalizedJournalType || "all";
+    }
+    return "all";
+};
+
+const toQueueJournalTypeLabel = (journalType) => {
+    const normalizedJournalType = normalizeQueueJournalType(journalType);
+    if (normalizedJournalType === "general") {
+        return "General";
+    }
+    if (normalizedJournalType === "adjusting") {
+        return "Adjusting";
+    }
+    return "All";
 };
 
 const getLineDocumentAssociationSet = (lineNumber) => {
@@ -267,6 +334,7 @@ const buildJournalLine = async (rowNum) => {
     lineDocumentsButton.type = "button";
     lineDocumentsButton.className = "button-small";
     lineDocumentsButton.textContent = "Docs";
+    lineDocumentsButton.title = "Manage documents attached to this journal line.";
     lineDocumentsButton.setAttribute("data-journal-line-documents-button", "");
     lineDocumentsButton.setAttribute("data-journal-line-number", String(rowNum));
     lineDocumentsButton.addEventListener("click", () => {
@@ -281,6 +349,7 @@ const buildJournalLine = async (rowNum) => {
     removeButton.type = "button";
     removeButton.className = "button-small";
     removeButton.textContent = "Remove";
+    removeButton.title = "Remove this journal line.";
     actionsCell.appendChild(removeButton);
 
     row.appendChild(rowNumCell);
@@ -298,7 +367,847 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     showErrorModalFn = showErrorModal;
     showMessageModalFn = showMessageModal;
     await loadAccounts();
-    console.log("Accounts list:", accountsList);
+    const numericHelpers = await loadNumericHelpers();
+    formatNumberAsCurrencyFn = numericHelpers.formatNumberAsCurrency;
+    formatNumberWithCommasFn = numericHelpers.formatNumberWithCommas;
+
+    const formatCurrencyDisplay = (value) => {
+        const numericValue = Number(value);
+        const normalizedValue = Number.isFinite(numericValue) ? numericValue : 0;
+        if (typeof formatNumberAsCurrencyFn === "function") {
+            return formatNumberAsCurrencyFn(normalizedValue);
+        }
+        return `$${normalizedValue.toFixed(2)}`;
+    };
+
+    const journalQueueSection = document.querySelector("[data-journal-queue-section]");
+    const journalQueueTableBody = document.querySelector("[data-journal-queue]");
+    const queueStatusFilter = document.querySelector("[data-queue-status-filter]");
+    const queueJournalTypeFilter = document.querySelector("[data-queue-journal-type-filter]");
+    const queueFromDateInput = document.querySelector("[data-queue-from-date]");
+    const queueToDateInput = document.querySelector("[data-queue-to-date]");
+    const queueSearchInput = document.querySelector("[data-queue-search]");
+    const queueApplyFiltersButton = document.getElementById("queue_apply_filters_button");
+    const queueClearFiltersButton = document.getElementById("queue_clear_filters_button");
+    const queueRefreshButton = document.querySelector("[data-refresh]");
+    const queueStatusLabel = document.querySelector("[data-status]");
+    const canApproveQueueEntries = journalQueueSection?.dataset?.canApprove === "true";
+    let activeQueueJournalEntryId = null;
+    let queueModalBusy = false;
+    let queueFetchSequence = 0;
+
+    const queueModal = document.getElementById("journal_queue_view_modal");
+    const closeQueueModalButtonTop = document.getElementById("close_journal_queue_view_modal");
+    const closeQueueModalButtonBottom = document.getElementById("journal_queue_modal_close_button");
+    const queueModalReferenceLabel = document.querySelector("[data-journal-queue-modal-reference]");
+    const queueModalStatusLabel = document.querySelector("[data-journal-queue-modal-status]");
+    const queueModalCreatedByLabel = document.querySelector("[data-journal-queue-modal-created-by]");
+    const queueModalEntryDateLabel = document.querySelector("[data-journal-queue-modal-entry-date]");
+    const queueModalTotalDebitsLabel = document.querySelector("[data-journal-queue-modal-total-debits]");
+    const queueModalTotalCreditsLabel = document.querySelector("[data-journal-queue-modal-total-credits]");
+    const queueModalJournalTypeLabel = document.querySelector("[data-journal-queue-modal-journal-type]");
+    const queueModalDescription = document.querySelector("[data-journal-queue-modal-description]");
+    const queueModalDocumentsList = document.querySelector("[data-journal-queue-modal-documents]");
+    const queueModalLinesBody = document.querySelector("[data-journal-queue-modal-lines]");
+    const queueModalManagerCommentInput = document.getElementById("journal_queue_manager_comment");
+    const queueModalApproveButton = document.getElementById("journal_queue_modal_approve_button");
+    const queueModalRejectButton = document.getElementById("journal_queue_modal_reject_button");
+
+    const ledgerRowsBody = document.querySelector("[data-ledger-rows]");
+    const ledgerDebitRowsBody = document.querySelector("[data-t-account-debit]");
+    const ledgerCreditRowsBody = document.querySelector("[data-t-account-credit]");
+    const ledgerAccountFilterSelect = document.querySelector("[data-ledger-account-filter]");
+    const ledgerFromDateInput = document.querySelector("[data-ledger-from-date]");
+    const ledgerToDateInput = document.querySelector("[data-ledger-to-date]");
+    const ledgerSearchInput = document.querySelector("[data-ledger-search]");
+    const ledgerApplyFiltersButton = document.getElementById("ledger_apply_filters_button");
+    const ledgerClearFiltersButton = document.getElementById("ledger_clear_filters_button");
+    let ledgerFetchSequence = 0;
+
+    const queuePageDownBtn = document.querySelector("[data-queue-page-down]");
+    const queuePageUpBtn = document.querySelector("[data-queue-page-up]");
+    const queueCurrentPageEl = document.querySelector("[data-queue-current-page]");
+    const queueTotalPagesEl = document.querySelector("[data-queue-total-pages]");
+    const queuePerPageSelect = document.querySelector("[data-queue-per-page-select]");
+    let queueCurrentPage = 1;
+    let queuePerPage = queuePerPageSelect ? parseInt(queuePerPageSelect.value, 10) : 10;
+    let queueTotal = 0;
+
+    const ledgerPageDownBtn = document.querySelector("[data-ledger-page-down]");
+    const ledgerPageUpBtn = document.querySelector("[data-ledger-page-up]");
+    const ledgerCurrentPageEl = document.querySelector("[data-ledger-current-page]");
+    const ledgerTotalPagesEl = document.querySelector("[data-ledger-total-pages]");
+    const ledgerPerPageSelect = document.querySelector("[data-ledger-per-page-select]");
+    let ledgerCurrentPage = 1;
+    let ledgerPerPage = ledgerPerPageSelect ? parseInt(ledgerPerPageSelect.value, 10) : 10;
+    let ledgerTotal = 0;
+
+    const updateQueuePaginationDisplay = () => {
+        const totalPages = Math.max(1, Math.ceil(queueTotal / queuePerPage));
+        if (queueCurrentPageEl) queueCurrentPageEl.textContent = String(queueCurrentPage);
+        if (queueTotalPagesEl) queueTotalPagesEl.textContent = String(totalPages);
+        if (queuePageDownBtn) queuePageDownBtn.disabled = queueCurrentPage <= 1;
+        if (queuePageUpBtn) queuePageUpBtn.disabled = queueCurrentPage >= totalPages;
+    };
+
+    const updateLedgerPaginationDisplay = () => {
+        const totalPages = Math.max(1, Math.ceil(ledgerTotal / ledgerPerPage));
+        if (ledgerCurrentPageEl) ledgerCurrentPageEl.textContent = String(ledgerCurrentPage);
+        if (ledgerTotalPagesEl) ledgerTotalPagesEl.textContent = String(totalPages);
+        if (ledgerPageDownBtn) ledgerPageDownBtn.disabled = ledgerCurrentPage <= 1;
+        if (ledgerPageUpBtn) ledgerPageUpBtn.disabled = ledgerCurrentPage >= totalPages;
+    };
+
+    const resolveFileNameFromResponse = (response, fallbackName = "journal-document") => {
+        const contentDisposition = String(response.headers.get("content-disposition") || "");
+        const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (utf8Match && utf8Match[1]) {
+            try {
+                return decodeURIComponent(utf8Match[1]);
+            } catch {
+                return utf8Match[1];
+            }
+        }
+        const fallbackMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+        if (fallbackMatch && fallbackMatch[1]) {
+            return fallbackMatch[1];
+        }
+        return fallbackName;
+    };
+
+    const parseErrorCodeFromResponse = async (response) => {
+        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+        if (!contentType.includes("application/json")) {
+            return "ERR_INTERNAL_SERVER";
+        }
+        const payload = await response.json().catch(() => null);
+        return payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER";
+    };
+
+    const triggerBrowserDownload = ({ blob, fileName }) => {
+        const downloadUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = downloadUrl;
+        anchor.download = fileName || "journal-document";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(downloadUrl);
+    };
+
+    const downloadDocumentFromUrl = async (downloadUrl, fallbackName = "journal-document") => {
+        if (!downloadUrl) {
+            showErrorModalFn("ERR_INVALID_SELECTION", false);
+            return;
+        }
+        showLoadingOverlayFn();
+        try {
+            const response = await fetchWithAuth(downloadUrl, { method: "GET" });
+            if (!response.ok) {
+                const errorCode = await parseErrorCodeFromResponse(response);
+                throw new Error(errorCode);
+            }
+            const responseBlob = await response.blob();
+            const resolvedFileName = resolveFileNameFromResponse(response, fallbackName);
+            triggerBrowserDownload({ blob: responseBlob, fileName: resolvedFileName });
+        } catch (error) {
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            hideLoadingOverlayFn();
+        }
+    };
+
+    const markQueueUpdated = (label = null) => {
+        if (!queueStatusLabel) {
+            return;
+        }
+        if (label) {
+            queueStatusLabel.textContent = label;
+            return;
+        }
+        const now = new Date();
+        queueStatusLabel.textContent = `Updated ${now.toISOString().slice(11, 19)}`;
+    };
+
+    const setQueueModalVisible = (visible) => {
+        if (!queueModal) {
+            return;
+        }
+        queueModal.classList.toggle("is-visible", visible);
+        queueModal.setAttribute("aria-hidden", visible ? "false" : "true");
+    };
+
+    const closeQueueModal = () => {
+        activeQueueJournalEntryId = null;
+        setQueueModalVisible(false);
+    };
+
+    const setQueueDecisionButtonsState = ({ pending = false, busy = false } = {}) => {
+        if (queueModalApproveButton) {
+            queueModalApproveButton.disabled = !pending || busy;
+        }
+        if (queueModalRejectButton) {
+            queueModalRejectButton.disabled = !pending || busy;
+        }
+        if (queueModalManagerCommentInput) {
+            queueModalManagerCommentInput.readOnly = !pending || !canApproveQueueEntries || busy;
+        }
+    };
+
+    const buildQueueRow = (entry) => {
+        const row = document.createElement("tr");
+        row.setAttribute("data-journal-queue-row-id", String(entry.id));
+
+        const idCell = createCell({ text: formatReferenceCode(entry) });
+        const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
+        const descriptionCell = createCell({ text: entry.description || "-", isLongText: true });
+        const typeCell = createCell({ text: toQueueJournalTypeLabel(entry.journal_type) });
+        const createdByCell = createCell({ text: entry.created_by_username || "-" });
+        const debitCell = createCell({ text: formatCurrencyDisplay(entry.total_debits) });
+        const creditCell = createCell({ text: formatCurrencyDisplay(entry.total_credits) });
+        const statusCell = createCell({});
+        const statusBadge = document.createElement("span");
+        statusBadge.className = toQueueBadgeClass(entry.status);
+        statusBadge.textContent = toQueueStatusLabel(entry.status);
+        statusCell.appendChild(statusBadge);
+        const managerCommentCell = createCell({ text: entry.manager_comment || "-", isLongText: true });
+        const actionsCell = createCell({});
+        const viewButton = document.createElement("button");
+        viewButton.type = "button";
+        viewButton.className = "button-small";
+        viewButton.textContent = "View";
+        viewButton.title = "View the full journal entry details.";
+        viewButton.setAttribute("data-journal-queue-view-button", "");
+        viewButton.setAttribute("data-journal-entry-id", String(entry.id));
+        actionsCell.appendChild(viewButton);
+
+        row.appendChild(idCell);
+        row.appendChild(dateCell);
+        row.appendChild(descriptionCell);
+        row.appendChild(typeCell);
+        row.appendChild(createdByCell);
+        row.appendChild(debitCell);
+        row.appendChild(creditCell);
+        row.appendChild(statusCell);
+        row.appendChild(managerCommentCell);
+        row.appendChild(actionsCell);
+        return row;
+    };
+
+    const renderQueueRows = (entries = []) => {
+        if (!journalQueueTableBody) {
+            return;
+        }
+        journalQueueTableBody.replaceChildren();
+        if (!Array.isArray(entries) || entries.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: "No journal entries found for the selected filters." });
+            cell.colSpan = 10;
+            cell.className = "meta";
+            row.appendChild(cell);
+            journalQueueTableBody.appendChild(row);
+            return;
+        }
+
+        entries.forEach((entry) => {
+            journalQueueTableBody.appendChild(buildQueueRow(entry));
+        });
+    };
+
+    const renderQueueModalDocuments = (documents = []) => {
+        if (!queueModalDocumentsList) {
+            return;
+        }
+        queueModalDocumentsList.replaceChildren();
+        if (!Array.isArray(documents) || documents.length === 0) {
+            const empty = document.createElement("li");
+            empty.className = "meta";
+            empty.textContent = "No documents attached.";
+            queueModalDocumentsList.appendChild(empty);
+            return;
+        }
+
+        documents.forEach((doc, index) => {
+            const item = document.createElement("li");
+            item.className = "journal-entry-document-item";
+            const title = doc.title || doc.original_file_name || `Document ${index + 1}`;
+            const extension = doc.file_extension || "";
+            const uploadedAt = formatDateForDisplay(doc.upload_at);
+            const labelPrefix = document.createTextNode(`${index + 1}. `);
+            item.appendChild(labelPrefix);
+            const link = document.createElement("a");
+            link.href = doc.download_url || "#";
+            link.textContent = `${title}${extension ? ` (${extension})` : ""}`;
+            link.setAttribute("data-document-download-url", doc.download_url || "");
+            link.setAttribute("data-document-download-name", title);
+            item.appendChild(link);
+            item.appendChild(document.createTextNode(` - ${uploadedAt}`));
+            queueModalDocumentsList.appendChild(item);
+        });
+    };
+
+    const renderQueueModalLines = (lines = []) => {
+        if (!queueModalLinesBody) {
+            return;
+        }
+        queueModalLinesBody.replaceChildren();
+
+        if (!Array.isArray(lines) || lines.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: "No journal lines available." });
+            cell.colSpan = 6;
+            cell.className = "meta";
+            row.appendChild(cell);
+            queueModalLinesBody.appendChild(row);
+            return;
+        }
+
+        lines.forEach((line) => {
+            const row = document.createElement("tr");
+            const lineNumberCell = createCell({ text: line.line_no });
+            const accountCell = createCell({ text: line.account_name || line.account_id || "-" });
+            const descriptionCell = createCell({ text: line.line_description || "-", isLongText: true });
+            const debitCell = createCell({ text: line.dc === "debit" ? formatCurrencyDisplay(line.amount) : "$0.00" });
+            const creditCell = createCell({ text: line.dc === "credit" ? formatCurrencyDisplay(line.amount) : "$0.00" });
+            const lineDocsCell = createCell({});
+
+            if (Array.isArray(line.documents) && line.documents.length > 0) {
+                const docsContainer = document.createElement("div");
+                docsContainer.className = "journal-line-doc-pills";
+                line.documents.forEach((doc) => {
+                    const docPill = document.createElement("a");
+                    docPill.className = "journal-line-doc-pill";
+                    docPill.href = doc.download_url || "#";
+                    docPill.setAttribute("data-document-download-url", doc.download_url || "");
+                    docPill.setAttribute("data-document-download-name", doc.title || doc.original_file_name || "Document");
+                    docPill.title = doc.title || doc.original_file_name || "Document";
+                    docPill.textContent = doc.title || doc.original_file_name || "Document";
+                    docsContainer.appendChild(docPill);
+                });
+                lineDocsCell.appendChild(docsContainer);
+            } else {
+                lineDocsCell.textContent = "-";
+            }
+
+            row.appendChild(lineNumberCell);
+            row.appendChild(accountCell);
+            row.appendChild(descriptionCell);
+            row.appendChild(debitCell);
+            row.appendChild(creditCell);
+            row.appendChild(lineDocsCell);
+            queueModalLinesBody.appendChild(row);
+        });
+    };
+
+    const hydrateQueueModal = (detail) => {
+        const journalEntry = detail?.journal_entry || {};
+        if (queueModalReferenceLabel) {
+            queueModalReferenceLabel.textContent = `Reference: ${formatReferenceCode(journalEntry)}`;
+        }
+        if (queueModalStatusLabel) {
+            queueModalStatusLabel.textContent = toQueueStatusLabel(journalEntry.status);
+        }
+        if (queueModalCreatedByLabel) {
+            queueModalCreatedByLabel.textContent = journalEntry.created_by_username || "--";
+        }
+        if (queueModalEntryDateLabel) {
+            queueModalEntryDateLabel.textContent = formatDateForDisplay(journalEntry.entry_date);
+        }
+        if (queueModalTotalDebitsLabel) {
+            queueModalTotalDebitsLabel.textContent = formatCurrencyDisplay(journalEntry.total_debits);
+        }
+        if (queueModalTotalCreditsLabel) {
+            queueModalTotalCreditsLabel.textContent = formatCurrencyDisplay(journalEntry.total_credits);
+        }
+        if (queueModalJournalTypeLabel) {
+            const normalizedJournalType = String(journalEntry.journal_type || "").trim();
+            queueModalJournalTypeLabel.textContent = normalizedJournalType ? `${normalizedJournalType.charAt(0).toUpperCase()}${normalizedJournalType.slice(1)}` : "--";
+        }
+        if (queueModalDescription) {
+            queueModalDescription.value = journalEntry.description || "";
+        }
+        if (queueModalManagerCommentInput) {
+            queueModalManagerCommentInput.value = journalEntry.manager_comment || "";
+            queueModalManagerCommentInput.placeholder = canApproveQueueEntries && journalEntry.status === "pending" ? "Required when rejecting." : "Manager comment (if provided).";
+        }
+        renderQueueModalDocuments(detail?.documents || []);
+        renderQueueModalLines(detail?.lines || []);
+        setQueueDecisionButtonsState({
+            pending: canApproveQueueEntries && normalizeQueueStatus(journalEntry.status) === "pending",
+            busy: false,
+        });
+    };
+
+    const openQueueModalForJournalEntry = async (journalEntryId) => {
+        if (!queueModal) {
+            return;
+        }
+        const normalizedJournalEntryId = Number(journalEntryId);
+        if (!Number.isSafeInteger(normalizedJournalEntryId) || normalizedJournalEntryId <= 0) {
+            showErrorModalFn("ERR_INVALID_SELECTION", false);
+            return;
+        }
+
+        queueModalBusy = true;
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(`/api/transactions/journal-entry/${normalizedJournalEntryId}`);
+            const detail = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(detail?.errorCode || detail?.error || "ERR_INTERNAL_SERVER");
+            }
+            activeQueueJournalEntryId = normalizedJournalEntryId;
+            hydrateQueueModal(detail);
+            setQueueModalVisible(true);
+        } catch (error) {
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            queueModalBusy = false;
+            hideLoadingOverlayFn();
+        }
+    };
+
+    const loadJournalQueue = async (page = queueCurrentPage) => {
+        if (!journalQueueTableBody) {
+            return;
+        }
+
+        queueCurrentPage = page;
+        const currentSequence = ++queueFetchSequence;
+        const status = normalizeQueueStatus(queueStatusFilter?.value || "pending");
+        const journalType = normalizeQueueJournalType(queueJournalTypeFilter?.value || "all");
+        const fromDate = String(queueFromDateInput?.value || "").trim();
+        const toDate = String(queueToDateInput?.value || "").trim();
+        const search = String(queueSearchInput?.value || "").trim();
+
+        const offset = (page - 1) * queuePerPage;
+        const query = new URLSearchParams({ status, limit: String(queuePerPage), offset: String(offset) });
+        if (journalType && journalType !== "all") {
+            query.set("journal_type", journalType);
+        }
+        if (fromDate) {
+            query.set("from_date", fromDate);
+        }
+        if (toDate) {
+            query.set("to_date", toDate);
+        }
+        if (search) {
+            query.set("search", search);
+        }
+
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(`/api/transactions/journal-queue?${query.toString()}`);
+            const payload = await res.json().catch(() => null);
+            if (currentSequence !== queueFetchSequence) {
+                return;
+            }
+            if (!res.ok) {
+                throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
+            }
+            queueTotal = payload?.pagination?.total ?? 0;
+            updateQueuePaginationDisplay();
+            renderQueueRows(payload?.journal_entries || []);
+            markQueueUpdated();
+        } catch (error) {
+            if (currentSequence !== queueFetchSequence) {
+                return;
+            }
+            renderQueueRows([]);
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            hideLoadingOverlayFn();
+        }
+    };
+
+    const submitQueueDecision = async (decision) => {
+        if (!canApproveQueueEntries || queueModalBusy) {
+            return;
+        }
+        const journalEntryId = activeQueueJournalEntryId;
+        if (!Number.isSafeInteger(Number(journalEntryId)) || Number(journalEntryId) <= 0) {
+            showErrorModalFn("ERR_INVALID_SELECTION", false);
+            return;
+        }
+
+        const managerComment = String(queueModalManagerCommentInput?.value || "").trim();
+        if (decision === "reject" && !managerComment) {
+            queueModalManagerCommentInput?.focus();
+            showErrorModalFn("ERR_JOURNAL_REJECTION_REASON_REQUIRED", false);
+            return;
+        }
+
+        const endpoint = decision === "approve" ? `/api/transactions/journal-entry/${journalEntryId}/approve` : `/api/transactions/journal-entry/${journalEntryId}/reject`;
+
+        queueModalBusy = true;
+        setQueueDecisionButtonsState({ pending: true, busy: true });
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(endpoint, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    manager_comment: managerComment || null,
+                }),
+            });
+            const payload = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
+            }
+            await showMessageModalFn(payload?.messageCode || "MSG_JOURNAL_QUEUE_REFRESHED", true);
+            closeQueueModal();
+            await loadJournalQueue(1);
+        } catch (error) {
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+            setQueueDecisionButtonsState({ pending: true, busy: false });
+        } finally {
+            queueModalBusy = false;
+            hideLoadingOverlayFn();
+        }
+    };
+
+    if (journalQueueTableBody) {
+        journalQueueTableBody.addEventListener("click", (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+            const viewButton = target.closest("[data-journal-queue-view-button]");
+            if (!viewButton) {
+                return;
+            }
+            const journalEntryId = viewButton.getAttribute("data-journal-entry-id");
+            void openQueueModalForJournalEntry(journalEntryId);
+        });
+    }
+
+    queueModal?.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        const downloadLink = target.closest("[data-document-download-url]");
+        if (!(downloadLink instanceof HTMLElement)) {
+            return;
+        }
+        event.preventDefault();
+        const downloadUrl = downloadLink.getAttribute("data-document-download-url") || "";
+        const downloadName = downloadLink.getAttribute("data-document-download-name") || "journal-document";
+        void downloadDocumentFromUrl(downloadUrl, downloadName);
+    });
+
+    queueApplyFiltersButton?.addEventListener("click", () => {
+        void loadJournalQueue(1);
+    });
+
+    queueClearFiltersButton?.addEventListener("click", () => {
+        if (queueStatusFilter) {
+            queueStatusFilter.value = "pending";
+        }
+        if (queueJournalTypeFilter) {
+            queueJournalTypeFilter.value = "all";
+        }
+        if (queueFromDateInput) {
+            queueFromDateInput.value = "";
+        }
+        if (queueToDateInput) {
+            queueToDateInput.value = "";
+        }
+        if (queueSearchInput) {
+            queueSearchInput.value = "";
+        }
+        void loadJournalQueue(1);
+    });
+
+    queueRefreshButton?.addEventListener("click", () => {
+        void loadJournalQueue(1);
+    });
+
+    queueSearchInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            void loadJournalQueue(1);
+        }
+    });
+
+    queuePerPageSelect?.addEventListener("change", () => {
+        queuePerPage = parseInt(queuePerPageSelect.value, 10);
+        void loadJournalQueue(1);
+    });
+
+    queuePageDownBtn?.addEventListener("click", () => {
+        if (queueCurrentPage > 1) {
+            void loadJournalQueue(queueCurrentPage - 1);
+        }
+    });
+
+    queuePageUpBtn?.addEventListener("click", () => {
+        if (queueCurrentPage * queuePerPage < queueTotal) {
+            void loadJournalQueue(queueCurrentPage + 1);
+        }
+    });
+
+    closeQueueModalButtonTop?.addEventListener("click", closeQueueModal);
+    closeQueueModalButtonBottom?.addEventListener("click", closeQueueModal);
+    queueModalApproveButton?.addEventListener("click", () => {
+        void submitQueueDecision("approve");
+    });
+    queueModalRejectButton?.addEventListener("click", () => {
+        void submitQueueDecision("reject");
+    });
+
+    if (journalQueueTableBody) {
+        await loadJournalQueue();
+        const urlParamsHelper = await loadUrlParamHelper();
+        const journalIdFromUrl = urlParamsHelper.getUrlParam("journal_id");
+        if (journalIdFromUrl) {
+            const parsedJournalIdFromUrl = Number(journalIdFromUrl);
+            if (Number.isSafeInteger(parsedJournalIdFromUrl) && parsedJournalIdFromUrl > 0) {
+                void openQueueModalForJournalEntry(parsedJournalIdFromUrl);
+            }
+        }
+    }
+
+    const setLedgerAccountOptions = () => {
+        if (!ledgerAccountFilterSelect) {
+            return;
+        }
+        const previousValue = ledgerAccountFilterSelect.value || "all";
+        ledgerAccountFilterSelect.replaceChildren();
+
+        const allAccountsOption = document.createElement("option");
+        allAccountsOption.value = "all";
+        allAccountsOption.textContent = "All Accounts";
+        ledgerAccountFilterSelect.appendChild(allAccountsOption);
+
+        accountsList
+            .slice()
+            .sort((a, b) => String(a.account_name || "").localeCompare(String(b.account_name || "")))
+            .forEach((account) => {
+                const option = document.createElement("option");
+                option.value = String(account.id);
+                option.textContent = account.account_name || `Account ${account.id}`;
+                ledgerAccountFilterSelect.appendChild(option);
+            });
+
+        const selectedCandidate = String(previousValue);
+        const hasPreviousOption = Array.from(ledgerAccountFilterSelect.options).some((option) => option.value === selectedCandidate);
+        ledgerAccountFilterSelect.value = hasPreviousOption ? selectedCandidate : "all";
+    };
+
+    const buildPostingReferenceLabel = (row) => {
+        if (row?.pr_journal_ref) {
+            return String(row.pr_journal_ref);
+        }
+        if (row?.reference_code) {
+            return String(row.reference_code);
+        }
+        if (row?.journal_entry_id) {
+            return `JE-${String(row.journal_entry_id).padStart(8, "0")}`;
+        }
+        return "--";
+    };
+
+    const appendPostingReferenceElement = (cell, row) => {
+        const postingReferenceLabel = buildPostingReferenceLabel(row);
+        const journalEntryId = Number(row?.journal_entry_id);
+        const canNavigateToQueueEntry = !!journalQueueTableBody && Number.isSafeInteger(journalEntryId) && journalEntryId > 0;
+        if (!canNavigateToQueueEntry) {
+            cell.textContent = postingReferenceLabel;
+            return;
+        }
+        const link = document.createElement("a");
+        link.href = `#/transactions?journal_id=${journalEntryId}`;
+        link.textContent = postingReferenceLabel;
+        cell.appendChild(link);
+    };
+
+    const renderLedgerRows = (entries = []) => {
+        if (!ledgerRowsBody) {
+            return;
+        }
+        ledgerRowsBody.replaceChildren();
+        if (!Array.isArray(entries) || entries.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: "No posted ledger entries found." });
+            cell.colSpan = 7;
+            cell.className = "meta";
+            row.appendChild(cell);
+            ledgerRowsBody.appendChild(row);
+            return;
+        }
+
+        entries.forEach((entry) => {
+            const row = document.createElement("tr");
+            const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
+            const accountCell = createCell({ text: entry.account_name || "-" });
+            const descriptionCell = createCell({ text: entry.description || "-", isLongText: true });
+            const postingReferenceCell = createCell({});
+            appendPostingReferenceElement(postingReferenceCell, entry);
+            const debitCell = createCell({ text: entry.dc === "debit" ? formatCurrencyDisplay(entry.amount) : "$0.00" });
+            const creditCell = createCell({ text: entry.dc === "credit" ? formatCurrencyDisplay(entry.amount) : "$0.00" });
+            const balanceCell = createCell({ text: formatCurrencyDisplay(entry.running_balance) });
+
+            row.appendChild(dateCell);
+            row.appendChild(accountCell);
+            row.appendChild(descriptionCell);
+            row.appendChild(postingReferenceCell);
+            row.appendChild(debitCell);
+            row.appendChild(creditCell);
+            row.appendChild(balanceCell);
+            ledgerRowsBody.appendChild(row);
+        });
+    };
+
+    const renderTAccountRows = (targetBody, entries = [], emptyMessage = "No activity for current filters.") => {
+        if (!targetBody) {
+            return;
+        }
+        targetBody.replaceChildren();
+        if (!Array.isArray(entries) || entries.length === 0) {
+            const row = document.createElement("tr");
+            const cell = createCell({ text: emptyMessage });
+            cell.colSpan = 3;
+            cell.className = "meta";
+            row.appendChild(cell);
+            targetBody.appendChild(row);
+            return;
+        }
+
+        entries.forEach((entry) => {
+            const row = document.createElement("tr");
+            const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
+            const postingReferenceCell = createCell({});
+            appendPostingReferenceElement(postingReferenceCell, entry);
+            const amountCell = createCell({ text: formatCurrencyDisplay(entry.amount) });
+
+            row.appendChild(dateCell);
+            row.appendChild(postingReferenceCell);
+            row.appendChild(amountCell);
+            targetBody.appendChild(row);
+        });
+    };
+
+    const loadLedgerEntries = async (page = ledgerCurrentPage) => {
+        if (!ledgerRowsBody) {
+            return;
+        }
+        ledgerCurrentPage = page;
+        const currentSequence = ++ledgerFetchSequence;
+        const accountId = String(ledgerAccountFilterSelect?.value || "all").trim();
+        const fromDate = String(ledgerFromDateInput?.value || "").trim();
+        const toDate = String(ledgerToDateInput?.value || "").trim();
+        const search = String(ledgerSearchInput?.value || "").trim();
+        const offset = (page - 1) * ledgerPerPage;
+        const query = new URLSearchParams({
+            limit: String(ledgerPerPage),
+            offset: String(offset),
+        });
+        if (accountId && accountId !== "all") {
+            query.set("account_id", accountId);
+        }
+        if (fromDate) {
+            query.set("from_date", fromDate);
+        }
+        if (toDate) {
+            query.set("to_date", toDate);
+        }
+        if (search) {
+            query.set("search", search);
+        }
+
+        showLoadingOverlayFn();
+        try {
+            const res = await fetchWithAuth(`/api/transactions/ledger?${query.toString()}`);
+            const payload = await res.json().catch(() => null);
+            if (currentSequence !== ledgerFetchSequence) {
+                return;
+            }
+            if (!res.ok) {
+                throw new Error(payload?.errorCode || payload?.error || "ERR_INTERNAL_SERVER");
+            }
+            ledgerTotal = payload?.pagination?.total ?? 0;
+            updateLedgerPaginationDisplay();
+            renderLedgerRows(payload?.ledger_entries || []);
+            renderTAccountRows(ledgerDebitRowsBody, payload?.t_account?.debit_entries || [], "No debit activity for current filters.");
+            renderTAccountRows(ledgerCreditRowsBody, payload?.t_account?.credit_entries || [], "No credit activity for current filters.");
+        } catch (error) {
+            if (currentSequence !== ledgerFetchSequence) {
+                return;
+            }
+            renderLedgerRows([]);
+            renderTAccountRows(ledgerDebitRowsBody, [], "No debit activity for current filters.");
+            renderTAccountRows(ledgerCreditRowsBody, [], "No credit activity for current filters.");
+            showErrorModalFn(error?.message || "ERR_INTERNAL_SERVER", false);
+        } finally {
+            hideLoadingOverlayFn();
+        }
+    };
+
+    if (ledgerRowsBody) {
+        const ledgerSection = document.querySelector('[aria-labelledby="ledger_title"]');
+        let shouldScrollToLedger = false;
+        setLedgerAccountOptions();
+        const urlParamsHelper = await loadUrlParamHelper();
+        const accountIdFromUrl = String(urlParamsHelper.getUrlParam("account_id") || "").trim();
+        if (accountIdFromUrl && ledgerAccountFilterSelect) {
+            const hasMatchingAccountOption = Array.from(ledgerAccountFilterSelect.options).some((option) => option.value === accountIdFromUrl);
+            if (hasMatchingAccountOption) {
+                ledgerAccountFilterSelect.value = accountIdFromUrl;
+                shouldScrollToLedger = true;
+            }
+        }
+        await loadLedgerEntries();
+        if (shouldScrollToLedger && ledgerSection) {
+            requestAnimationFrame(() => {
+                ledgerSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+        }
+    }
+
+    ledgerApplyFiltersButton?.addEventListener("click", () => {
+        void loadLedgerEntries(1);
+    });
+    ledgerClearFiltersButton?.addEventListener("click", () => {
+        if (ledgerAccountFilterSelect) {
+            ledgerAccountFilterSelect.value = "all";
+        }
+        if (ledgerFromDateInput) {
+            ledgerFromDateInput.value = "";
+        }
+        if (ledgerToDateInput) {
+            ledgerToDateInput.value = "";
+        }
+        if (ledgerSearchInput) {
+            ledgerSearchInput.value = "";
+        }
+        void loadLedgerEntries(1);
+    });
+    ledgerSearchInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            void loadLedgerEntries(1);
+        }
+    });
+
+    ledgerPerPageSelect?.addEventListener("change", () => {
+        ledgerPerPage = parseInt(ledgerPerPageSelect.value, 10);
+        void loadLedgerEntries(1);
+    });
+
+    ledgerPageDownBtn?.addEventListener("click", () => {
+        if (ledgerCurrentPage > 1) {
+            void loadLedgerEntries(ledgerCurrentPage - 1);
+        }
+    });
+
+    ledgerPageUpBtn?.addEventListener("click", () => {
+        if (ledgerCurrentPage * ledgerPerPage < ledgerTotal) {
+            void loadLedgerEntries(ledgerCurrentPage + 1);
+        }
+    });
 
     const draftJournalLines = document.querySelector("[data-journal-lines]");
     if (draftJournalLines) {
@@ -478,11 +1387,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     const hydrateJournalReferenceUnavailableTipMessage = async () => {
         try {
             const messagesHelper = await loadMessagesHelper();
-            const resolvedMessage = await messagesHelper.getMessage(
-                JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE,
-                {},
-                journalReferenceUnavailableTipMessage,
-            );
+            const resolvedMessage = await messagesHelper.getMessage(JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE, {}, journalReferenceUnavailableTipMessage);
             if (typeof resolvedMessage === "string" && resolvedMessage.trim()) {
                 journalReferenceUnavailableTipMessage = resolvedMessage.trim();
             }
@@ -755,7 +1660,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                 throw new Error("ERR_INVALID_SELECTION");
             }
             const lineNoText = row.querySelector("td")?.textContent?.trim() || String(index + 1);
-            const lineNo = Number.isSafeInteger(Number(lineNoText)) ? Number(lineNoText) : (index + 1);
+            const lineNo = Number.isSafeInteger(Number(lineNoText)) ? Number(lineNoText) : index + 1;
             const lineDocIds = Array.from(lineDocumentAssociations.get(String(lineNo)) || []);
 
             const dc = hasDebit ? "debit" : "credit";
@@ -781,7 +1686,19 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             throw new Error("ERR_INVALID_SELECTION");
         }
 
-        return lines;
+        return lines
+            .sort((left, right) => {
+                const leftPriority = left.dc === "debit" ? 0 : 1;
+                const rightPriority = right.dc === "debit" ? 0 : 1;
+                if (leftPriority !== rightPriority) {
+                    return leftPriority - rightPriority;
+                }
+                return left.line_no - right.line_no;
+            })
+            .map((line, index) => ({
+                ...line,
+                line_no: index + 1,
+            }));
     };
 
     const submitJournalEntryForApproval = async () => {
@@ -969,4 +1886,10 @@ async function loadFetchWithAuth() {
     const module = await import(moduleUrl);
     const { fetchWithAuth } = module;
     return { fetchWithAuth };
+}
+
+async function loadUrlParamHelper() {
+    const moduleUrl = new URL("/js/utils/url_params.js", window.location.origin).href;
+    const module = await import(moduleUrl);
+    return { getUrlParam: module.default };
 }

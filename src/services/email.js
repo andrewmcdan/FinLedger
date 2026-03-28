@@ -28,16 +28,56 @@ const DEFAULT_LOGO_URL = process.env.EMAIL_LOGO_URL || `${getFrontendBaseUrl()}/
 const DEFAULT_HTML_TEXT_FALLBACK = "This is an HTML email. Please view it in an HTML-compatible email viewer.";
 const DEFAULT_EMBEDDED_LOGO_PATH = process.env.EMAIL_LOGO_PATH || path.resolve(__dirname, "../../web/public_images/FL-logo.png");
 const DEFAULT_EMBEDDED_LOGO_CID = process.env.EMAIL_LOGO_CID || "finledger-logo@email";
+const DEFAULT_SMTP_PORT = 587;
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: true, // true for 465, false for other ports
-    auth: {
-        user: process.env.SMTP_USERNAME,
-        pass: process.env.SMTP_PASSWORD,
-    },
-});
+let transporter = null;
+
+function parseBooleanEnv(value) {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    if (!normalized) {
+        return null;
+    }
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+        return true;
+    }
+    if (["0", "false", "no", "off"].includes(normalized)) {
+        return false;
+    }
+    return null;
+}
+
+function getSmtpPort() {
+    const parsed = Number.parseInt(String(process.env.SMTP_PORT || "").trim(), 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+        return parsed;
+    }
+    return DEFAULT_SMTP_PORT;
+}
+
+function buildSmtpTransportOptions() {
+    const port = getSmtpPort();
+    const secureOverride = parseBooleanEnv(process.env.SMTP_SECURE);
+    const requireTlsOverride = parseBooleanEnv(process.env.SMTP_REQUIRE_TLS);
+    const secure = secureOverride ?? (port === 465);
+
+    return {
+        host: process.env.SMTP_HOST,
+        port,
+        secure,
+        requireTLS: requireTlsOverride ?? false,
+        auth: {
+            user: process.env.SMTP_USERNAME,
+            pass: process.env.SMTP_PASSWORD,
+        },
+    };
+}
+
+function getTransporter() {
+    if (!transporter) {
+        transporter = nodemailer.createTransport(buildSmtpTransportOptions());
+    }
+    return transporter;
+}
 
 function looksLikeHtml(content) {
     return typeof content === "string" && /<!doctype html>|<html[\s>]/i.test(content);
@@ -126,18 +166,37 @@ function sendEmail(to, subject, body, text = null, options = {}) {
         html: htmlBody || undefined,
         attachments: Array.isArray(options.attachments) && options.attachments.length > 0 ? options.attachments : undefined,
     };
-    return transporter.sendMail(mailOptions)
+    const transportOptions = buildSmtpTransportOptions();
+    return getTransporter().sendMail(mailOptions)
         .then((result) => {
             logger.log("debug", `Email sent to ${to}`, { function: "sendEmail", messageId: result?.messageId }, utilities.getCallerInfo());
             return result;
         })
         .catch((error) => {
-            logger.log("error", `Failed to send email to ${to}: ${error.message}`, { function: "sendEmail" }, utilities.getCallerInfo());
+            logger.log(
+                "error",
+                `Failed to send email to ${to}: ${error.message}`,
+                {
+                    function: "sendEmail",
+                    smtp_host: transportOptions.host,
+                    smtp_port: transportOptions.port,
+                    smtp_secure: transportOptions.secure,
+                    smtp_require_tls: transportOptions.requireTLS,
+                },
+                utilities.getCallerInfo(),
+            );
             throw error;
         });
 }
 
 module.exports = {
-    sendEmail,
+    buildSmtpTransportOptions,
     sendTemplatedEmail,
+    sendEmail,
+    __resetTransporterForTests: () => {
+        transporter = null;
+    },
+    __setTransporterForTests: (nextTransporter) => {
+        transporter = nextTransporter;
+    },
 };

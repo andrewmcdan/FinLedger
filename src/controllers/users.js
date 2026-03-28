@@ -166,6 +166,23 @@ const isManager = async (userId, token) => {
     });
 };
 
+const isAccountant = async (userId, token) => {
+    logger.log("trace", `Checking if user ${userId} is an accountant`, { function: "isAccountant" }, utilities.getCallerInfo(), userId);
+    if (!token) {
+        return false;
+    }
+    const loggedIn = await getUserLoggedInStatus(userId, token);
+    if (!loggedIn) {
+        return false;
+    }
+    return db.query("SELECT role FROM users WHERE id = $1", [userId]).then((result) => {
+        if (result.rowCount === 0) {
+            return false;
+        }
+        return result.rows[0].role === "accountant";
+    });
+};
+
 const getUserById = async (userId) => {
     logger.log("debug", "Fetching user by ID", { userId }, utilities.getCallerInfo(), userId);
     const userResult = await db.query("SELECT id, username, email, first_name, last_name, address, date_of_birth, role, status, user_icon_path, password_expires_at, created_at, suspension_start_at, suspension_end_at, failed_login_attempts, last_login_attempt_at, last_login_at FROM users WHERE id = $1", [userId]);
@@ -188,10 +205,7 @@ const getUserByEmail = async (email) => {
 
 const getUserByResetToken = async (resetToken) => {
     logger.log("debug", "Fetching user by reset token", {}, utilities.getCallerInfo());
-    const userResult = await db.query(
-        "SELECT id, username, email, first_name, last_name, reset_failed_attempts FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()",
-        [resetToken],
-    );
+    const userResult = await db.query("SELECT id, username, email, first_name, last_name, reset_failed_attempts FROM users WHERE reset_token = $1 AND reset_token_expires_at > now()", [resetToken]);
     if (userResult.rowCount === 0) {
         logger.log("warn", "User not found by reset token", {}, utilities.getCallerInfo());
         return null;
@@ -201,7 +215,7 @@ const getUserByResetToken = async (resetToken) => {
 
 const listUsers = async () => {
     logger.log("debug", "Listing users", {}, utilities.getCallerInfo());
-    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at, address, user_icon_path, temp_password, password_expires_at FROM users ORDER BY id ASC");
+    const usersResult = await db.query("SELECT id, username, email, first_name, last_name, role, status, created_at, last_login_at, suspension_start_at, suspension_end_at, address, date_of_birth, user_icon_path, temp_password, password_expires_at FROM users ORDER BY id ASC");
     logger.log("debug", "Users listed", { count: usersResult.rowCount }, utilities.getCallerInfo());
     return usersResult.rows;
 };
@@ -217,6 +231,19 @@ const listAdministratorContacts = async (excludeUserId = null) => {
     const adminResult = await db.query(`SELECT id, email, first_name FROM users WHERE ${whereClause} ORDER BY id ASC`, values);
     logger.log("debug", "Administrator contacts listed", { count: adminResult.rowCount }, utilities.getCallerInfo());
     return adminResult.rows;
+};
+
+const listManagerContacts = async (excludeUserId = null) => {
+    logger.log("debug", "Listing manager contacts", { excludeUserId }, utilities.getCallerInfo());
+    const values = [];
+    let whereClause = "role = 'manager' AND status = 'active' AND email IS NOT NULL AND email <> ''";
+    if (excludeUserId !== null && excludeUserId !== undefined) {
+        values.push(excludeUserId);
+        whereClause += " AND id <> $1";
+    }
+    const managerResult = await db.query(`SELECT id, email, first_name FROM users WHERE ${whereClause} ORDER BY id ASC`, values);
+    logger.log("debug", "Manager contacts listed", { count: managerResult.rowCount }, utilities.getCallerInfo());
+    return managerResult.rows;
 };
 
 const listLoggedInUsers = async () => {
@@ -248,7 +275,12 @@ const rejectUser = async (userId, changedByUserId = null) => {
 
 const suspendUser = async (userId, suspensionStart, suspensionEnd, changedByUserId = null) => {
     logger.log("info", `Suspending user with ID ${userId} from ${suspensionStart} to ${suspensionEnd}`, { function: "suspendUser" }, utilities.getCallerInfo(), userId);
-    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = 'suspended', updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId], changedByUserId);
+    await db.query("UPDATE users SET suspension_start_at = $1, suspension_end_at = $2, status = CASE WHEN $1 <= now() THEN 'suspended' ELSE status END, updated_at = now() WHERE id = $3", [suspensionStart, suspensionEnd, userId], changedByUserId);
+};
+
+const activateScheduledSuspensions = async () => {
+    const result = await db.query("UPDATE users SET status = 'suspended', updated_at = now() WHERE status = 'active' AND suspension_start_at IS NOT NULL AND suspension_start_at <= now() AND (suspension_end_at IS NULL OR suspension_end_at > now())");
+    logger.log("info", "Activated scheduled suspensions: " + result.rowCount, { function: "activateScheduledSuspensions" }, utilities.getCallerInfo());
 };
 
 const reinstateUser = async (userId, changedByUserId = null) => {
@@ -325,7 +357,7 @@ const updateUserProfile = async (userId, profileUpdates, changedByUserId = userI
         suspension_start_at: profileUpdates.suspension_start_at,
         suspension_end_at: profileUpdates.suspension_end_at,
         date_of_birth: profileUpdates.date_of_birth,
-        password_expires_at: profileUpdates.password_expires_at
+        password_expires_at: profileUpdates.password_expires_at,
     };
 
     const updates = [];
@@ -507,9 +539,7 @@ const unsuspendExpiredSuspensions = async () => {
 };
 
 const resetStaleFailedLoginAttempts = async () => {
-    const result = await db.query(
-        "UPDATE users SET failed_login_attempts = 0, updated_at = now() WHERE status = 'active' AND failed_login_attempts > 0 AND last_login_attempt_at IS NOT NULL AND last_login_attempt_at <= now() - INTERVAL '15 minutes'",
-    );
+    const result = await db.query("UPDATE users SET failed_login_attempts = 0, updated_at = now() WHERE status = 'active' AND failed_login_attempts > 0 AND last_login_attempt_at IS NOT NULL AND last_login_attempt_at <= now() - INTERVAL '15 minutes'");
     logger.log("info", "Reset stale failed login attempts: " + result.rowCount, { function: "resetStaleFailedLoginAttempts" }, utilities.getCallerInfo());
 };
 
@@ -536,11 +566,12 @@ const sendPasswordExpiryWarnings = async () => {
             continue;
         }
         const daysLeft = Math.ceil((row.password_expires_at - new Date()) / (1000 * 60 * 60 * 24));
-        const expiresOn = row.password_expires_at?.toLocaleDateString?.("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        }) || row.password_expires_at?.toString?.();
+        const expiresOn =
+            row.password_expires_at?.toLocaleDateString?.("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+            }) || row.password_expires_at?.toString?.();
         const emailSubject = "Password Expiration Warning";
         const emailBody = `Dear ${row.first_name} ${row.last_name},\n\nThis is a reminder that your password will expire in ${daysLeft} day(s) on ${row.password_expires_at.toDateString()}.\n\nPlease log in and change your password to avoid any disruption to your account access.\n\nBest regards,\nFinLedger Team`;
         let emailResult = await sendTemplatedEmail({
@@ -630,9 +661,11 @@ module.exports = {
     getUserLoggedInStatus,
     isAdmin,
     isManager,
+    isAccountant,
     getUserById,
     listUsers,
     listAdministratorContacts,
+    listManagerContacts,
     listLoggedInUsers,
     approveUser,
     createUser,
@@ -650,6 +683,7 @@ module.exports = {
     getUserByResetToken,
     logoutInactiveUsers,
     unsuspendExpiredSuspensions,
+    activateScheduledSuspensions,
     resetStaleFailedLoginAttempts,
     sendPasswordExpiryWarnings,
     suspendUsersWithExpiredPasswords,

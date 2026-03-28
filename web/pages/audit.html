@@ -1,0 +1,105 @@
+<section class="page">
+    <header class="page-header">
+        <h1>Audit Reports</h1>
+        <p>Generate detailed audit history by date range and filter by record type, event type, account, and/or user.</p>
+    </header>
+
+    <div class="stack">
+        <div class="card stack">
+            <h2>Report Filters</h2>
+            <div class="grid">
+                <div class="field">
+                    <label for="audit_from_date">From Date</label>
+                    <input id="audit_from_date" type="date" data-audit-from-date title="Set the start date for the audit report." />
+                </div>
+                <div class="field">
+                    <label for="audit_to_date">To Date</label>
+                    <input id="audit_to_date" type="date" data-audit-to-date title="Set the end date for the audit report." />
+                </div>
+                <div class="field">
+                    <label for="audit_account_select">Account</label>
+                    <select id="audit_account_select" data-audit-account-select title="Filter the audit report to one account or all accounts.">
+                        <option value="">All Accounts</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="audit_entity_type_select">Record Type</label>
+                    <select id="audit_entity_type_select" data-audit-entity-type-select title="Filter the audit report by the type of record that changed.">
+                        <option value="">All Record Types</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="audit_user_select">Changed By</label>
+                    <select id="audit_user_select" data-audit-user-select title="Filter the audit report by the user who made the change.">
+                        <option value="">All Users</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="audit_event_type_select">Event Type</label>
+                    <select id="audit_event_type_select" data-audit-event-type-select title="Filter the audit report by the stored audit event type.">
+                        <option value="">All Event Types</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="audit_action_select">Action</label>
+                    <select id="audit_action_select" data-audit-action-select title="Filter the audit report by audit action.">
+                        <option value="">All Actions</option>
+                        <option value="insert">Insert</option>
+                        <option value="update">Update</option>
+                        <option value="delete">Delete</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="audit_per_page_select">Rows Per Page</label>
+                    <select id="audit_per_page_select" data-audit-per-page-select title="Select how many audit entries to display per page.">
+                        <option value="10">10 per page</option>
+                        <option value="25" selected>25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </div>
+            </div>
+            <div class="stack" style="flex-direction: row; gap: 0.75rem; flex-wrap: wrap">
+                <button type="button" data-audit-generate-report title="Generate the audit report with the current filters.">Generate Report</button>
+                <button type="button" data-audit-clear-filters title="Clear all audit report filters.">Clear Filters</button>
+                <button type="button" data-audit-save-csv title="Save the current audit report page as CSV.">Save CSV</button>
+                <button type="button" data-audit-print-report title="Print the current audit report view.">Print</button>
+            </div>
+            <p class="meta" data-audit-filter-summary>Select filters and click Generate Report.</p>
+        </div>
+
+        <div class="card stack">
+            <h2 data-audit-report-title>Audit Summary</h2>
+            <p class="meta" data-audit-report-period>Choose a date range, record type, event type, account, and/or user filter to generate a report.</p>
+            <div class="notice" data-audit-report-highlight>No audit report generated yet.</div>
+            <div class="grid" data-audit-summary-grid>
+                <article class="notice">Rows: <strong>0</strong></article>
+                <article class="notice">Record Type: <strong>All Record Types</strong></article>
+                <article class="notice">Account: <strong>All Accounts</strong></article>
+                <article class="notice">Changed By: <strong>All Users</strong></article>
+                <article class="notice">Event Type: <strong>All Event Types</strong></article>
+                <article class="notice">Action: <strong>All Actions</strong></article>
+            </div>
+        </div>
+
+        <div class="card stack">
+            <div class="data-row">
+                <p class="value">
+                    <span class="span-label">Detailed Audit Entries</span>
+                    <span class="span-actions">
+                        <button type="button" class="button-small pagination-nav-button" data-audit-page-down title="Go to the previous page of audit entries.">&lt;</button>
+                        <span>Page <span data-audit-current-page>1</span> of <span data-audit-total-pages>1</span></span>
+                        <button type="button" class="button-small pagination-nav-button" data-audit-page-up title="Go to the next page of audit entries.">&gt;</button>
+                    </span>
+                </p>
+            </div>
+            <div class="stack" data-audit-report-output>
+                <p class="meta">No audit report generated yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <script id="audit-data" type="application/json">
+        <%- JSON.stringify({ allUsers, allAccounts, allEventTypes, allEntityTypes, role }).replaceAll("</", "<\\/") %>
+    </script>
+</section>

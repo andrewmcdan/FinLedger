@@ -10,10 +10,12 @@ const { getCallerInfo, cleanupUserData, cleanupLogs } = require("./utils/utiliti
 const usersRoutes = require("./routes/users");
 const usersController = require("./controllers/users");
 const accountsRoutes = require("./routes/accounts");
+const adjustmentsRoutes = require("./routes/adjustments");
+const reportsRoutes = require("./routes/reports");
 const auditLogsRoutes = require("./routes/audit_logs");
 const messagesRoutes = require("./routes/messages");
 const transactionsRoutes = require("./routes/transactions");
-const { dashboard, accountsList, forgotPasswordSubmit, profile, transactions } = require("./routes/rendered_routes");
+const { dashboard, accountsList, forgotPasswordSubmit, profile, transactions, audit } = require("./routes/rendered_routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,12 +32,15 @@ app.use(authMiddleware);
 app.get("/pages/dashboard.html", dashboard);
 app.get("/pages/accounts_list.html", accountsList);
 app.get("/pages/transactions.html", transactions);
+app.get("/pages/audit.html", audit);
 app.get("/pages/public/forgot-password_submit.html", forgotPasswordSubmit);
 app.get("/pages/profile.html", profile);
 app.use(express.static("web"));
 app.use("/api/documents", userDocRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/accounts", accountsRoutes);
+app.use("/api/adjustments", adjustmentsRoutes);
+app.use("/api/reports", reportsRoutes);
 app.use("/api/transactions", transactionsRoutes);
 app.use("/api/audit-logs", auditLogsRoutes);
 app.use("/images", imageRoutes);
@@ -52,14 +57,15 @@ if (require.main === module) {
         async () => {
             try {
                 await usersController.logoutInactiveUsers();
+                await usersController.activateScheduledSuspensions();
                 await usersController.unsuspendExpiredSuspensions();
                 await usersController.resetStaleFailedLoginAttempts();
             } catch (error) {
                 logger.log("error", `Error: ${error.message}`, {}, getCallerInfo());
             }
         },
-        10 * 60 * 1000,
-    ); // every 10 minutes
+        5 * 60 * 1000,
+    ); // every 5 minutes
 
     setInterval(
         async () => {

@@ -103,9 +103,5 @@ Current logging behavior:
 
 Current UI status:
 
-- The row `Audit` button is rendered but not wired to an audit-log viewer.
-- Audit access is currently API-based.
-
-## Current Gaps
-
-- No dedicated account-audit viewer page is implemented yet.
+- The row `Audit` button routes to the dedicated `#/audit` page with the selected `account_id`.
+- Managers and accountants can open the same read-only audit report flow.

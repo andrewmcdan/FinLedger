@@ -21,9 +21,6 @@ require.cache[emailModulePath] = {
     filename: emailModulePath,
     loaded: true,
     exports: {
-        sendEmail: async (to, subject, body) => {
-            return recordEmail({ to, subject, body });
-        },
         sendTemplatedEmail: async ({ to, subject, text }) => {
             return recordEmail({ to, subject, body: text || "" });
         },
@@ -283,6 +280,15 @@ test("createUser creates user and sends temp password email when needed", async 
     const tempCreated = await usersController.createUser("Bob", "Jones", "bob@example.com", "", "manager", "456 Main", new Date("1985-02-02"), null);
     const tempResult = await db.query("SELECT temp_password FROM users WHERE id = $1", [tempCreated.id]);
     assert.equal(tempResult.rows[0].temp_password, true);
+    assert.equal(emailCalls.length, 1);
+});
+
+test("createUser keeps administrator-created users pending approval", async () => {
+    const admin = await insertUser({ username: "creator-admin", email: "creator-admin@example.com", role: "administrator" });
+    const created = await usersController.createUser("Active", "Person", "active-person@example.com", "", "manager", "789 Main", new Date("1992-03-03"), null, admin.id);
+    const result = await db.query("SELECT status, temp_password FROM users WHERE id = $1", [created.id]);
+    assert.equal(result.rows[0].status, "pending");
+    assert.equal(result.rows[0].temp_password, true);
     assert.equal(emailCalls.length, 1);
 });
 

@@ -1,13 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const { isAdmin, isManager } = require("../controllers/users");
+const { isAdmin, isManager, isAccountant } = require("../controllers/users");
 const { listAuditLogs, listAuditLogsForEntity } = require("../controllers/audit_logs");
 const { log } = require("../utils/logger");
 const utilities = require("../utils/utilities");
 const { sendApiError } = require("../utils/api_messages");
 
 async function canViewAuditLogs(userId, token) {
-    return (await isAdmin(userId, token)) || (await isManager(userId, token));
+    return (await isAdmin(userId, token)) || (await isManager(userId, token)) || (await isAccountant(userId, token));
 }
 
 router.get("/", async (req, res) => {
@@ -20,8 +20,9 @@ router.get("/", async (req, res) => {
     }
 
     try {
-        const { entity_type, entity_id, changed_by, action, start_at, end_at, limit, offset } = req.query;
+        const { event_type, entity_type, entity_id, changed_by, action, start_at, end_at, limit, offset } = req.query;
         const result = await listAuditLogs({
+            event_type,
             entity_type,
             entity_id,
             changed_by,
@@ -57,8 +58,9 @@ router.get("/entity/:entityType/:entityId", async (req, res) => {
 
     try {
         const { entityType, entityId } = req.params;
-        const { changed_by, action, start_at, end_at, limit, offset } = req.query;
+        const { event_type, changed_by, action, start_at, end_at, limit, offset } = req.query;
         const result = await listAuditLogsForEntity(entityType, entityId, {
+            event_type,
             changed_by,
             action,
             start_at,

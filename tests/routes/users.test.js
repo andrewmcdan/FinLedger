@@ -24,9 +24,6 @@ require.cache[emailModulePath] = {
     filename: emailModulePath,
     loaded: true,
     exports: {
-        sendEmail: async (to, subject, body) => {
-            return recordEmail({ to, subject, body });
-        },
         sendTemplatedEmail: async ({ to, subject, text }) => {
             return recordEmail({ to, subject, body: text || "" });
         },
@@ -339,6 +336,68 @@ test("POST /api/users/email-user sends email for admin and 400s on missing field
         assert.equal(emailCalls.length, 1);
         assert.equal(emailCalls[0].to, recipient.email);
         assert.match(emailCalls[0].body, /Dear Bob/);
+    } finally {
+        server.close();
+    }
+});
+
+test("POST /api/users/email-account-contact enforces Sprint 3 role pairings", async () => {
+    const admin = await insertUser({ username: "acctpageadmin", email: "acctpageadmin@example.com", role: "administrator", firstName: "Admin" });
+    const manager = await insertUser({ username: "acctpagemgr", email: "acctpagemgr@example.com", role: "manager", firstName: "Manager" });
+    const accountant = await insertUser({ username: "acctpageacct", email: "acctpageacct@example.com", role: "accountant", firstName: "Accountant" });
+    const secondAdmin = await insertUser({ username: "acctpageadmin2", email: "acctpageadmin2@example.com", role: "administrator", firstName: "Second" });
+    const secondAccountant = await insertUser({ username: "acctpageacct2", email: "acctpageacct2@example.com", role: "accountant", firstName: "SecondAcct" });
+    const adminToken = "acct-page-admin-token";
+    const accountantToken = "acct-page-accountant-token";
+    await insertLoggedInUser({ userId: admin.id, token: adminToken });
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+
+        const adminToManager = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/email-account-contact",
+            headers: authHeaders({ userId: admin.id, token: adminToken }),
+            body: { user_id: manager.id, subject: "Account Page", message: "Please review this account." },
+        });
+        assert.equal(adminToManager.statusCode, 200);
+
+        const adminToAdmin = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/email-account-contact",
+            headers: authHeaders({ userId: admin.id, token: adminToken }),
+            body: { user_id: secondAdmin.id, subject: "Account Page", message: "This should be blocked." },
+        });
+        assert.equal(adminToAdmin.statusCode, 403);
+
+        const accountantToAdmin = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/email-account-contact",
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+            body: { user_id: admin.id, subject: "Question", message: "Need administrator input." },
+        });
+        assert.equal(accountantToAdmin.statusCode, 200);
+
+        const accountantToAccountant = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/email-account-contact",
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+            body: { user_id: secondAccountant.id, subject: "Question", message: "This should be blocked." },
+        });
+        assert.equal(accountantToAccountant.statusCode, 403);
+
+        assert.equal(emailCalls.length, 2);
+        assert.equal(emailCalls[0].to, manager.email);
+        assert.equal(emailCalls[1].to, admin.email);
+        assert.match(emailCalls[0].body, /Best regards,\nAdmin User/);
+        assert.match(emailCalls[1].body, /Best regards,\nAccountant User/);
     } finally {
         server.close();
     }
@@ -771,6 +830,82 @@ test("Admin user management endpoints: suspend, reinstate, update-user-field, de
 
         const gone = await db.query("SELECT 1 FROM users WHERE id = $1", [user.id]);
         assert.equal(gone.rowCount, 0);
+    } finally {
+        server.close();
+    }
+});
+
+test("POST /api/users/create-user creates a pending user when called by an administrator", async () => {
+    const admin = await insertUser({ username: "admin-create", email: "admin-create@example.com", role: "administrator" });
+    const token = "admin-create-token";
+    await insertLoggedInUser({ userId: admin.id, token });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+        const response = await requestMultipart({
+            port,
+            method: "POST",
+            path: "/api/users/create-user",
+            headers: authHeaders({ userId: admin.id, token }),
+            fields: {
+                first_name: "Created",
+                last_name: "Manager",
+                email: "created-manager@example.com",
+                role: "manager",
+                address: "123 Admin Way",
+                date_of_birth: "1990-01-01",
+            },
+        });
+
+        assert.equal(response.statusCode, 200);
+        assert.ok(response.body.user?.id);
+
+        const created = await db.query("SELECT status, temp_password, role FROM users WHERE id = $1", [response.body.user.id]);
+        assert.equal(created.rows[0].status, "pending");
+        assert.equal(created.rows[0].temp_password, true);
+        assert.equal(created.rows[0].role, "manager");
+    } finally {
+        server.close();
+    }
+});
+
+test("POST /api/users/update-user-field can deactivate and reactivate a user through status updates", async () => {
+    const admin = await insertUser({ username: "admin-status", email: "admin-status@example.com", role: "administrator" });
+    const user = await insertUser({ username: "toggle-user", email: "toggle-user@example.com", role: "accountant", status: "active" });
+    const token = "admin-status-token";
+    await insertLoggedInUser({ userId: admin.id, token });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+        const deactivate = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/update-user-field",
+            headers: authHeaders({ userId: admin.id, token }),
+            body: { user_id: user.id, field: "status", value: "deactivated" },
+        });
+        assert.equal(deactivate.statusCode, 200);
+        assert.equal(deactivate.body.messageCode, "MSG_USER_FIELD_UPDATED_SUCCESS");
+
+        let state = await db.query("SELECT status FROM users WHERE id = $1", [user.id]);
+        assert.equal(state.rows[0].status, "deactivated");
+
+        const reactivate = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/users/update-user-field",
+            headers: authHeaders({ userId: admin.id, token }),
+            body: { user_id: user.id, field: "status", value: "active" },
+        });
+        assert.equal(reactivate.statusCode, 200);
+        assert.equal(reactivate.body.messageCode, "MSG_USER_FIELD_UPDATED_SUCCESS");
+
+        state = await db.query("SELECT status FROM users WHERE id = $1", [user.id]);
+        assert.equal(state.rows[0].status, "active");
     } finally {
         server.close();
     }
