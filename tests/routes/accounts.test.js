@@ -308,6 +308,57 @@ test("manager and accountant cannot create, update, or deactivate accounts", asy
     }
 });
 
+test("administrator and accountant accounts pages expose the Sprint 3 email form, but manager does not", async () => {
+    const admin = await insertUser({ username: "acct_admin_route_email", email: "acct_admin_route_email@example.com", role: "administrator" });
+    const manager = await insertUser({ username: "acct_manager_route_email", email: "acct_manager_route_email@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_accountant_route_email", email: "acct_accountant_route_email@example.com", role: "accountant" });
+    const adminToken = "accounts-admin-token-email";
+    const managerToken = "accounts-manager-token-email";
+    const accountantToken = "accounts-accountant-token-email";
+    await insertLoggedInUser({ userId: admin.id, token: adminToken });
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+
+        const adminPage = await requestJson({
+            port,
+            method: "GET",
+            path: "/pages/accounts_list.html",
+            headers: authHeaders({ userId: admin.id, token: adminToken }),
+        });
+        assert.equal(adminPage.statusCode, 200);
+        assert.match(adminPage.rawBody, /Contact Team Member/);
+        assert.match(adminPage.rawBody, /Send email to a manager or accountant/);
+
+        const accountantPage = await requestJson({
+            port,
+            method: "GET",
+            path: "/pages/accounts_list.html",
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+        });
+        assert.equal(accountantPage.statusCode, 200);
+        assert.match(accountantPage.rawBody, /Contact Team Member/);
+        assert.match(accountantPage.rawBody, /Send email to a manager or administrator/);
+
+        const managerPage = await requestJson({
+            port,
+            method: "GET",
+            path: "/pages/accounts_list.html",
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+        assert.equal(managerPage.statusCode, 200);
+        assert.doesNotMatch(managerPage.rawBody, /Contact Team Member/);
+    } finally {
+        server.close();
+        await new Promise((resolve) => server.once("close", resolve));
+    }
+});
+
 test("manager and accountant can view account audit history", async () => {
     const admin = await insertUser({ username: "acct_admin_route_3", email: "acct_admin_route_3@example.com", role: "administrator" });
     const manager = await insertUser({ username: "acct_manager_route_3", email: "acct_manager_route_3@example.com", role: "manager" });

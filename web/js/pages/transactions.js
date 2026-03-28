@@ -1649,7 +1649,19 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             throw new Error("ERR_INVALID_SELECTION");
         }
 
-        return lines;
+        return lines
+            .sort((left, right) => {
+                const leftPriority = left.dc === "debit" ? 0 : 1;
+                const rightPriority = right.dc === "debit" ? 0 : 1;
+                if (leftPriority !== rightPriority) {
+                    return leftPriority - rightPriority;
+                }
+                return left.line_no - right.line_no;
+            })
+            .map((line, index) => ({
+                ...line,
+                line_no: index + 1,
+            }));
     };
 
     const submitJournalEntryForApproval = async () => {

@@ -132,15 +132,15 @@ async function insertAccount({ userId, accountName, accountNumber, normalSide, a
     return result.rows[0];
 }
 
-async function seedPendingJournalEntry({ createdByUserId, debitAccountId, creditAccountId, amount = 125.5, status = "pending" }) {
+async function seedPendingJournalEntry({ createdByUserId, debitAccountId, creditAccountId, amount = 125.5, status = "pending", entryDate = "2026-03-01T00:00:00.000Z" }) {
     const referenceCode = `JE-ROUTE-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
     const entryResult = await db.query(
         `INSERT INTO journal_entries
             (journal_type, entry_date, description, status, total_debits, total_credits, created_by, updated_by, reference_code)
          VALUES
-            ('general', now(), 'Route test journal entry', $1, $2, $2, $3, $3, $4)
+            ('general', $1, 'Route test journal entry', $2, $3, $3, $4, $4, $5)
          RETURNING id`,
-        [status, amount, createdByUserId, referenceCode],
+        [entryDate, status, amount, createdByUserId, referenceCode],
     );
 
     const journalEntryId = entryResult.rows[0].id;
@@ -835,6 +835,107 @@ test("journal submission notifies administrators in addition to managers", async
     }
 });
 
+test("journal submission stores debit lines before credit lines even when submitted out of order", async () => {
+    const manager = await insertUser({ username: "manager_route_5c", email: "manager_route_5c@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_route_5c", email: "acct_route_5c@example.com", role: "accountant" });
+    const accountantToken = "acct-route-token-5c";
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Cash 5C",
+        accountNumber: 1000002105,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Liability 5C",
+        accountNumber: 2000002105,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const payload = {
+        journal_type: "general",
+        entry_date: "2026-03-03",
+        description: "Out of order journal line test",
+        reference_code: null,
+        documents: [
+            {
+                client_document_id: "doc-1",
+                title: "Evidence",
+                upload_index: 0,
+                meta_data: {
+                    original_name: "evidence.txt",
+                    file_size: 11,
+                    last_modified: Date.now(),
+                },
+            },
+        ],
+        journal_entry_document_ids: ["doc-1"],
+        lines: [
+            {
+                line_no: 1,
+                account_id: creditAccount.id,
+                dc: "credit",
+                amount: "75.00",
+                line_description: "Credit entered first",
+                document_ids: ["doc-1"],
+            },
+            {
+                line_no: 2,
+                account_id: debitAccount.id,
+                dc: "debit",
+                amount: "75.00",
+                line_description: "Debit entered second",
+                document_ids: ["doc-1"],
+            },
+        ],
+    };
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+        const response = await requestMultipartWithFile({
+            port,
+            path: "/api/transactions/new-journal-entry",
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+            fields: {
+                payload: JSON.stringify(payload),
+            },
+            file: {
+                fieldName: "documents",
+                fileName: "evidence.txt",
+                contentType: "text/plain",
+                content: "hello-world",
+            },
+        });
+
+        assert.equal(response.statusCode, 200);
+        assert.equal(response.body.messageCode, "MSG_JOURNAL_ENTRY_CREATED_SUCCESS");
+
+        const lineRows = await db.query(
+            "SELECT line_no, account_id, dc FROM journal_entry_lines WHERE journal_entry_id = $1 ORDER BY line_no ASC, id ASC",
+            [response.body.journal_entry.id],
+        );
+        assert.equal(lineRows.rowCount, 2);
+        assert.equal(lineRows.rows[0].dc, "debit");
+        assert.equal(Number(lineRows.rows[0].account_id), Number(debitAccount.id));
+        assert.equal(lineRows.rows[1].dc, "credit");
+        assert.equal(Number(lineRows.rows[1].account_id), Number(creditAccount.id));
+    } finally {
+        server.close();
+    }
+});
+
 test("ledger endpoint returns posted rows with filtering and supports administrator read access", async () => {
     const manager = await insertUser({ username: "manager_route_6", email: "manager_route_6@example.com", role: "manager" });
     const accountant = await insertUser({ username: "acct_route_6", email: "acct_route_6@example.com", role: "accountant" });
@@ -910,6 +1011,85 @@ test("ledger endpoint returns posted rows with filtering and supports administra
         assert.equal(adminLedger.statusCode, 200);
         assert.ok(Array.isArray(adminLedger.body.ledger_entries));
         assert.equal(adminLedger.body.ledger_entries.length, 2);
+    } finally {
+        server.close();
+    }
+});
+
+test("ledger endpoint keeps running balances accurate when date filters exclude earlier postings", async () => {
+    const manager = await insertUser({ username: "manager_route_6b", email: "manager_route_6b@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_route_6b", email: "acct_route_6b@example.com", role: "accountant" });
+    const managerToken = "manager-route-token-6b";
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Cash 6B",
+        accountNumber: 1000003106,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Route Liability 6B",
+        accountNumber: 2000003106,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const firstJournal = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 100,
+        entryDate: "2026-03-01T00:00:00.000Z",
+    });
+    const secondJournal = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 220,
+        entryDate: "2026-03-15T00:00:00.000Z",
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+
+        const firstApprove = await requestJson({
+            port,
+            method: "PATCH",
+            path: `/api/transactions/journal-entry/${firstJournal.journalEntryId}/approve`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+            body: { manager_comment: "Approve first" },
+        });
+        assert.equal(firstApprove.statusCode, 200);
+
+        const secondApprove = await requestJson({
+            port,
+            method: "PATCH",
+            path: `/api/transactions/journal-entry/${secondJournal.journalEntryId}/approve`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+            body: { manager_comment: "Approve second" },
+        });
+        assert.equal(secondApprove.statusCode, 200);
+
+        const filteredLedger = await requestJson({
+            port,
+            method: "GET",
+            path: `/api/transactions/ledger?account_id=${debitAccount.id}&from_date=2026-03-10&to_date=2026-03-31`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+        });
+        assert.equal(filteredLedger.statusCode, 200);
+        assert.equal(filteredLedger.body.ledger_entries.length, 1);
+        assert.equal(Number(filteredLedger.body.ledger_entries[0].running_balance), 320);
     } finally {
         server.close();
     }

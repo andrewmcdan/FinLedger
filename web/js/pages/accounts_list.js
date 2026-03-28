@@ -12,7 +12,7 @@ const getIsAdmin = async () => {
     return data.is_admin === true || data.isAdmin === true;
 };
 
-export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay, showErrorModal }) {
+export default async function initAccountsList({ showLoadingOverlay, hideLoadingOverlay, showErrorModal, showMessageModal }) {
     const isAdmin = await getIsAdmin();
     const editHoverText = "Double click to edit.";
     const navAndEditHoverText = "Single click opens Transactions page. Double click to edit.";
@@ -87,6 +87,41 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 window.location.reload();
             } catch (error) {
                 showErrorModal(error.message || "ERR_ACCOUNT_CREATION_FAILED");
+            } finally {
+                hideLoadingOverlay();
+            }
+        });
+    }
+
+    const accountPageEmailForm = document.getElementById("account_page_email_form");
+    if (accountPageEmailForm) {
+        accountPageEmailForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            showLoadingOverlay();
+            try {
+                const formData = new FormData(accountPageEmailForm);
+                const payload = {
+                    user_id: Number(formData.get("user_id")),
+                    subject: String(formData.get("subject") || "").trim(),
+                    message: String(formData.get("message") || "").trim(),
+                };
+                const response = await fetchWithAuth("/api/users/email-account-contact", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.error || "ERR_FAILED_TO_SEND_EMAIL");
+                }
+                if (typeof showMessageModal === "function") {
+                    await showMessageModal("MSG_EMAIL_SENT_SUCCESS");
+                }
+                accountPageEmailForm.reset();
+            } catch (error) {
+                showErrorModal(error.message || "ERR_FAILED_TO_SEND_EMAIL");
             } finally {
                 hideLoadingOverlay();
             }

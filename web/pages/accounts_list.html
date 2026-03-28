@@ -1,4 +1,16 @@
 <section class="page">
+    <% const canSendAccountPageEmail = role === 'administrator' || role === 'accountant'; %>
+    <% const accountPageEmailRecipients = canSendAccountPageEmail ? allUsers.filter(function(user) {
+        const normalizedRole = String(user.role || '').toLowerCase();
+        const normalizedStatus = String(user.status || '').toLowerCase();
+        if (normalizedStatus !== 'active') {
+            return false;
+        }
+        if (role === 'administrator') {
+            return normalizedRole === 'manager' || normalizedRole === 'accountant';
+        }
+        return normalizedRole === 'manager' || normalizedRole === 'administrator';
+    }) : []; %>
     <header class="page-header">
         <h1>Chart of Accounts</h1>
         <p>Manage your accounts</p>
@@ -67,6 +79,42 @@
         </div>
     </div>
     </article>
+    <% if (canSendAccountPageEmail) { %>
+    <article class="card">
+        <h2>Contact Team Member</h2>
+        <p class="meta">
+            <% if (role === 'administrator') { %>
+            Send email to a manager or accountant without leaving the chart of accounts.
+            <% } else { %>
+            Send email to a manager or administrator without leaving the chart of accounts.
+            <% } %>
+        </p>
+        <form id="account_page_email_form" class="stack">
+            <div class="field">
+                <label for="account_page_email_user_id" title="Select the user to email from the chart of accounts page.">To</label>
+                <select id="account_page_email_user_id" name="user_id" required title="Select the user to email from the chart of accounts page.">
+                    <% if (accountPageEmailRecipients.length === 0) { %>
+                    <option value="" disabled selected>No eligible users</option>
+                    <% } else { %>
+                    <option value="" disabled selected>Select a user</option>
+                    <% accountPageEmailRecipients.forEach(function(user) { %>
+                    <option value="<%= user.id %>"><%= user.username %> (<%= user.role %>)</option>
+                    <% }); %>
+                    <% } %>
+                </select>
+            </div>
+            <div class="field">
+                <label for="account_page_email_subject" title="Enter the email subject.">Subject</label>
+                <input type="text" id="account_page_email_subject" name="subject" required title="Enter the email subject." />
+            </div>
+            <div class="field">
+                <label for="account_page_email_message" title="Enter the email message.">Message</label>
+                <textarea id="account_page_email_message" name="message" required title="Enter the email message."></textarea>
+            </div>
+            <button type="submit" title="Send the email to the selected user.">Send Email</button>
+        </form>
+    </article>
+    <% } %>
     <% if (role === 'administrator') { %>
     <section class="stack">
         <header class="page-header">

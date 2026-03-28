@@ -44,6 +44,7 @@ const {
     getUserByUsername,
     setUserPassword,
     isAdmin,
+    isAccountant,
     getUserById,
     listUsers,
     listAdministratorContacts,
@@ -94,6 +95,28 @@ const ensureAuthenticatedUser = (req, res, next) => {
         return sendApiError(res, 401, "ERR_UNAUTHORIZED");
     }
     return next();
+};
+
+const getAccountPageEmailSenderRole = async (requestingUserId, token) => {
+    if (await isAdmin(requestingUserId, token)) {
+        return "administrator";
+    }
+    if (await isAccountant(requestingUserId, token)) {
+        return "accountant";
+    }
+    return "";
+};
+
+const isAllowedAccountPageRecipientRole = (senderRole, recipientRole) => {
+    const normalizedSenderRole = String(senderRole || "").trim().toLowerCase();
+    const normalizedRecipientRole = String(recipientRole || "").trim().toLowerCase();
+    if (normalizedSenderRole === "administrator") {
+        return normalizedRecipientRole === "manager" || normalizedRecipientRole === "accountant";
+    }
+    if (normalizedSenderRole === "accountant") {
+        return normalizedRecipientRole === "manager" || normalizedRecipientRole === "administrator";
+    }
+    return false;
 };
 
 router.get("/security-questions-list", async (req, res) => {
@@ -194,6 +217,65 @@ router.post("/email-user", async (req, res) => {
         return sendApiSuccess(res, "MSG_EMAIL_SENT_SUCCESS");
     } catch (error) {
         log("error", `Error sending email to username ${username}: ${error}`, { function: "email-user" }, utilities.getCallerInfo(), requestingUserId);
+        return sendApiError(res, 500, "ERR_FAILED_TO_SEND_EMAIL");
+    }
+});
+
+router.post("/email-account-contact", async (req, res) => {
+    const requestingUserId = req.user.id;
+    if (!requestingUserId) {
+        log("warn", "Unauthorized email-account-contact request", { path: req.path }, utilities.getCallerInfo());
+        return sendApiError(res, 401, "ERR_UNAUTHORIZED");
+    }
+
+    const senderRole = await getAccountPageEmailSenderRole(requestingUserId, req.user.token);
+    if (!senderRole) {
+        log("warn", "Forbidden email-account-contact request", { requestingUserId }, utilities.getCallerInfo(), requestingUserId);
+        return sendApiError(res, 403, "ERR_FORBIDDEN");
+    }
+
+    const targetUserId = Number(req.body?.user_id);
+    const subject = String(req.body?.subject || "").trim();
+    const message = String(req.body?.message || "").trim();
+    if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0 || !subject || !message) {
+        log("warn", "Email-account-contact request missing fields", { requestingUserId }, utilities.getCallerInfo(), requestingUserId);
+        return sendApiError(res, 400, "ERR_PLEASE_FILL_ALL_FIELDS");
+    }
+
+    try {
+        const recipient = await getUserById(targetUserId);
+        if (!recipient?.id || !String(recipient.email || "").trim()) {
+            log("warn", "Email-account-contact target not found", { requestingUserId, targetUserId }, utilities.getCallerInfo(), requestingUserId);
+            return sendApiError(res, 404, "ERR_USER_NOT_FOUND");
+        }
+        if (!isAllowedAccountPageRecipientRole(senderRole, recipient.role)) {
+            log("warn", "Email-account-contact target role is not allowed", { requestingUserId, senderRole, targetUserId, recipientRole: recipient.role }, utilities.getCallerInfo(), requestingUserId);
+            return sendApiError(res, 403, "ERR_FORBIDDEN");
+        }
+
+        const sender = await getUserById(requestingUserId);
+        const senderName = `${sender?.first_name || ""} ${sender?.last_name || ""}`.trim() || sender?.username || "FinLedger Team";
+        const recipientName = recipient.first_name || recipient.username || "there";
+        const emailTextBody = `Dear ${recipientName},\n\n${message}\n\nBest regards,\n${senderName}`;
+        const emailResult = await sendTemplatedEmail({
+            to: recipient.email,
+            subject,
+            templateName: "direct_message",
+            text: emailTextBody,
+            templateData: {
+                preheader: subject,
+                title: subject,
+                firstName: recipientName,
+                message,
+                senderName,
+            },
+        });
+        if (!emailResult.accepted || emailResult.accepted.length === 0) {
+            log("warn", `Failed to send account-page email to ${recipient.email} for user ID ${targetUserId}`, { function: "email-account-contact" }, utilities.getCallerInfo(), requestingUserId);
+        }
+        return sendApiSuccess(res, "MSG_EMAIL_SENT_SUCCESS");
+    } catch (error) {
+        log("error", `Error sending account-page email to user ID ${targetUserId}: ${error}`, { function: "email-account-contact" }, utilities.getCallerInfo(), requestingUserId);
         return sendApiError(res, 500, "ERR_FAILED_TO_SEND_EMAIL");
     }
 });

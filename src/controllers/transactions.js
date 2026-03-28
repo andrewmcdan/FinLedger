@@ -142,6 +142,22 @@ const buildAutoReferenceCode = (journalEntryId) => {
     return `JE-${String(journalEntryId).padStart(8, "0")}`;
 };
 
+const sortJournalLinesDebitsFirst = (lines = []) => {
+    return [...lines]
+        .sort((left, right) => {
+            const leftPriority = left?.dc === "debit" ? 0 : 1;
+            const rightPriority = right?.dc === "debit" ? 0 : 1;
+            if (leftPriority !== rightPriority) {
+                return leftPriority - rightPriority;
+            }
+            return Number(left?.line_no || 0) - Number(right?.line_no || 0);
+        })
+        .map((line, index) => ({
+            ...line,
+            line_no: index + 1,
+        }));
+};
+
 const buildJournalDocumentDownloadUrl = (journalEntryId, documentId) => {
     const normalizedJournalEntryId = normalizeJournalEntryId(journalEntryId);
     const normalizedDocumentId = normalizeJournalEntryId(documentId);
@@ -339,6 +355,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
             if (totalDebits !== totalCredits) {
                 throw createCodeError("ERR_INVALID_SELECTION");
             }
+            const orderedLines = sortJournalLinesDebitsFirst(normalizedLines);
 
             const providedReferenceCode = normalizeReferenceCode(entryData.reference_code);
 
@@ -374,7 +391,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
             }
 
             const persistedLines = [];
-            for (const line of normalizedLines) {
+            for (const line of orderedLines) {
                 const lineInsertResult = await client.query(
                     `INSERT INTO journal_entry_lines
                         (journal_entry_id, line_no, account_id, dc, amount, line_description, created_by, updated_by)
@@ -566,96 +583,125 @@ const listLedgerEntries = async ({ accountId, fromDate, toDate, search, limit, o
     const normalizedLimit = parseLedgerLimit(limit);
     const normalizedOffset = parsePositiveInteger(offset, 0);
 
-    const whereClauses = [];
+    const balanceScopeClauses = [];
+    const filterClauses = [];
     const params = [];
 
     if (normalizedAccountId !== null) {
         params.push(normalizedAccountId);
-        whereClauses.push(`le.account_id = $${params.length}`);
+        balanceScopeClauses.push(`le.account_id = $${params.length}`);
     }
 
     if (normalizedFromDate) {
         params.push(normalizedFromDate);
-        whereClauses.push(`le.entry_date::date >= $${params.length}::date`);
+        filterClauses.push(`lwb.entry_date::date >= $${params.length}::date`);
     }
 
     if (normalizedToDate) {
         params.push(normalizedToDate);
-        whereClauses.push(`le.entry_date::date <= $${params.length}::date`);
+        filterClauses.push(`lwb.entry_date::date <= $${params.length}::date`);
     }
 
     if (normalizedSearch) {
         params.push(`%${normalizedSearch}%`);
         const searchParamRef = `$${params.length}`;
-        whereClauses.push(`(
-            a.account_name ILIKE ${searchParamRef}
-            OR COALESCE(le.description, '') ILIKE ${searchParamRef}
-            OR COALESCE(le.pr_journal_ref, '') ILIKE ${searchParamRef}
-            OR COALESCE(je.reference_code, '') ILIKE ${searchParamRef}
-            OR TO_CHAR(le.entry_date::date, 'YYYY-MM-DD') ILIKE ${searchParamRef}
-            OR le.amount::text ILIKE ${searchParamRef}
+        filterClauses.push(`(
+            lwb.account_name ILIKE ${searchParamRef}
+            OR COALESCE(lwb.description, '') ILIKE ${searchParamRef}
+            OR COALESCE(lwb.pr_journal_ref, '') ILIKE ${searchParamRef}
+            OR COALESCE(lwb.reference_code, '') ILIKE ${searchParamRef}
+            OR TO_CHAR(lwb.entry_date::date, 'YYYY-MM-DD') ILIKE ${searchParamRef}
+            OR lwb.amount::text ILIKE ${searchParamRef}
         )`);
     }
 
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    const balanceScopeSql = balanceScopeClauses.length > 0 ? `WHERE ${balanceScopeClauses.join(" AND ")}` : "";
+    const filterSql = filterClauses.length > 0 ? `WHERE ${filterClauses.join(" AND ")}` : "";
 
     const totalResult = await db.query(
-        `SELECT COUNT(*)::int AS total
-         FROM ledger_entries le
-         JOIN accounts a ON a.id = le.account_id
-         LEFT JOIN journal_entries je ON je.id = le.journal_entry_id
-         ${whereSql}`,
-        params,
-    );
-
-    const rowsParams = [...params, normalizedLimit, normalizedOffset];
-    const rowsResult = await db.query(
-        `WITH filtered_ledger AS (
+        `WITH ledger_with_balances AS (
             SELECT
                 le.id,
                 le.account_id,
                 a.account_name,
-                a.normal_side,
-                COALESCE(a.initial_balance, 0)::numeric(18,2) AS initial_balance,
                 le.entry_date,
                 le.description,
                 le.dc,
                 le.amount,
                 le.journal_entry_id,
                 le.pr_journal_ref,
-                je.reference_code
+                je.reference_code,
+                CASE
+                    WHEN a.normal_side = 'debit'
+                        THEN COALESCE(a.initial_balance, 0)::numeric(18,2)
+                            + SUM(CASE WHEN le.dc = 'debit' THEN le.amount ELSE 0 END)
+                                OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                            - SUM(CASE WHEN le.dc = 'credit' THEN le.amount ELSE 0 END)
+                                OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                    ELSE COALESCE(a.initial_balance, 0)::numeric(18,2)
+                        - SUM(CASE WHEN le.dc = 'debit' THEN le.amount ELSE 0 END)
+                            OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                        + SUM(CASE WHEN le.dc = 'credit' THEN le.amount ELSE 0 END)
+                            OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                END AS running_balance
             FROM ledger_entries le
             JOIN accounts a ON a.id = le.account_id
             LEFT JOIN journal_entries je ON je.id = le.journal_entry_id
-            ${whereSql}
-        ),
-        running_totals AS (
+            ${balanceScopeSql}
+        )
+        SELECT COUNT(*)::int AS total
+        FROM ledger_with_balances lwb
+        ${filterSql}`,
+        params,
+    );
+
+    const rowsParams = [...params, normalizedLimit, normalizedOffset];
+    const rowsResult = await db.query(
+        `WITH ledger_with_balances AS (
             SELECT
-                fl.*,
-                SUM(CASE WHEN fl.dc = 'debit' THEN fl.amount ELSE 0 END)
-                    OVER (PARTITION BY fl.account_id ORDER BY fl.entry_date ASC, fl.id ASC) AS running_debits,
-                SUM(CASE WHEN fl.dc = 'credit' THEN fl.amount ELSE 0 END)
-                    OVER (PARTITION BY fl.account_id ORDER BY fl.entry_date ASC, fl.id ASC) AS running_credits
-            FROM filtered_ledger fl
+                le.id,
+                le.account_id,
+                a.account_name,
+                le.entry_date,
+                le.description,
+                le.dc,
+                le.amount,
+                le.journal_entry_id,
+                le.pr_journal_ref,
+                je.reference_code,
+                CASE
+                    WHEN a.normal_side = 'debit'
+                        THEN COALESCE(a.initial_balance, 0)::numeric(18,2)
+                            + SUM(CASE WHEN le.dc = 'debit' THEN le.amount ELSE 0 END)
+                                OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                            - SUM(CASE WHEN le.dc = 'credit' THEN le.amount ELSE 0 END)
+                                OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                    ELSE COALESCE(a.initial_balance, 0)::numeric(18,2)
+                        - SUM(CASE WHEN le.dc = 'debit' THEN le.amount ELSE 0 END)
+                            OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                        + SUM(CASE WHEN le.dc = 'credit' THEN le.amount ELSE 0 END)
+                            OVER (PARTITION BY le.account_id ORDER BY le.entry_date ASC, le.id ASC)
+                END AS running_balance
+            FROM ledger_entries le
+            JOIN accounts a ON a.id = le.account_id
+            LEFT JOIN journal_entries je ON je.id = le.journal_entry_id
+            ${balanceScopeSql}
         )
         SELECT
-            rt.id,
-            rt.account_id,
-            rt.account_name,
-            rt.entry_date,
-            rt.description,
-            rt.dc,
-            rt.amount,
-            rt.journal_entry_id,
-            rt.pr_journal_ref,
-            rt.reference_code,
-            CASE
-                WHEN rt.normal_side = 'debit'
-                    THEN rt.initial_balance + rt.running_debits - rt.running_credits
-                ELSE rt.initial_balance - rt.running_debits + rt.running_credits
-            END AS running_balance
-        FROM running_totals rt
-        ORDER BY rt.entry_date DESC, rt.id DESC
+            lwb.id,
+            lwb.account_id,
+            lwb.account_name,
+            lwb.entry_date,
+            lwb.description,
+            lwb.dc,
+            lwb.amount,
+            lwb.journal_entry_id,
+            lwb.pr_journal_ref,
+            lwb.reference_code,
+            lwb.running_balance
+        FROM ledger_with_balances lwb
+        ${filterSql}
+        ORDER BY lwb.entry_date DESC, lwb.id DESC
         LIMIT $${rowsParams.length - 1}
         OFFSET $${rowsParams.length}`,
         rowsParams,
