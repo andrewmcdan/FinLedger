@@ -375,3 +375,92 @@ test("manager and accountant can view account audit history", async () => {
         await new Promise((resolve) => server.once("close", resolve));
     }
 });
+
+test("manager and accountant can open the audit page and run filtered account audit reports", async () => {
+    const admin = await insertUser({ username: "acct_admin_route_4", email: "acct_admin_route_4@example.com", role: "administrator" });
+    const manager = await insertUser({ username: "acct_manager_route_4", email: "acct_manager_route_4@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_accountant_route_4", email: "acct_accountant_route_4@example.com", role: "accountant" });
+    const adminToken = "accounts-admin-token-4";
+    const managerToken = "accounts-manager-token-4";
+    const accountantToken = "accounts-accountant-token-4";
+    await insertLoggedInUser({ userId: admin.id, token: adminToken });
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+
+    const created = await accountsController.createAccount(
+        admin.id,
+        "Audit Report Route Account",
+        "Audit report route account",
+        "debit",
+        "Assets",
+        "Current Assets",
+        0,
+        0,
+        0,
+        0,
+        50,
+        "BS",
+        "initial report comment",
+        admin.id,
+    );
+
+    const updateResult = await accountsController.updateAccountField({
+        account_id: created.id,
+        field: "comment",
+        value: "updated report comment",
+        user_id: admin.id,
+    });
+    assert.equal(updateResult.success, true);
+
+    const filteredAuditReportQuery = new URLSearchParams({
+        event_type: "accounts_update",
+        entity_type: "accounts",
+        entity_id: String(created.id),
+        changed_by: String(admin.id),
+        start_at: "2000-01-01T00:00:00.000",
+        end_at: "2100-01-01T23:59:59.999",
+        limit: "10",
+        offset: "0",
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+
+        for (const roleCase of [
+            { user: manager, token: managerToken },
+            { user: accountant, token: accountantToken },
+        ]) {
+            const pageResponse = await requestJson({
+                port,
+                method: "GET",
+                path: "/pages/audit.html",
+                headers: authHeaders({ userId: roleCase.user.id, token: roleCase.token }),
+            });
+            assert.equal(pageResponse.statusCode, 200);
+            assert.match(pageResponse.rawBody, /Audit Reports/);
+            assert.match(pageResponse.rawBody, /Record Type/);
+            assert.match(pageResponse.rawBody, /Event Type/);
+
+            const reportResponse = await requestJson({
+                port,
+                method: "GET",
+                path: `/api/audit-logs?${filteredAuditReportQuery.toString()}`,
+                headers: authHeaders({ userId: roleCase.user.id, token: roleCase.token }),
+            });
+            assert.equal(reportResponse.statusCode, 200);
+            assert.ok(Array.isArray(reportResponse.body.audit_logs));
+            assert.equal(reportResponse.body.audit_logs.length, 1);
+            assert.ok(reportResponse.body.audit_logs.every((row) => row.event_type === "accounts_update"));
+            assert.ok(reportResponse.body.audit_logs.every((row) => row.entity_type === "accounts"));
+            assert.ok(reportResponse.body.audit_logs.every((row) => String(row.entity_id) === String(created.id)));
+            assert.ok(reportResponse.body.audit_logs.every((row) => String(row.changed_by) === String(admin.id)));
+            assert.ok(reportResponse.body.audit_logs.every((row) => row.action === "update"));
+        }
+    } finally {
+        server.close();
+        await new Promise((resolve) => server.once("close", resolve));
+    }
+});

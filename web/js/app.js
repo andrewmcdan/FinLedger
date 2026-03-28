@@ -2,6 +2,7 @@ const routes = {
     dashboard: { title: "Dashboard", page: "pages/dashboard", module: "js/pages/dashboard" },
     transactions: { title: "Transactions", page: "pages/transactions", module: "js/pages/transactions" },
     reports: { title: "Reports", page: "pages/reports", module: "js/pages/reports" },
+    audit: { title: "Audit", page: "pages/audit", module: "js/pages/audit" },
     login: { title: "Login", page: "pages/public/login", module: "js/pages/public/login" },
     help: { title: "Help", page: "pages/public/help", module: "js/pages/public/help" },
     logout: { title: "Logout", page: "pages/public/logout", module: "js/pages/public/logout" },

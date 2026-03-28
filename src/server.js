@@ -15,7 +15,7 @@ const reportsRoutes = require("./routes/reports");
 const auditLogsRoutes = require("./routes/audit_logs");
 const messagesRoutes = require("./routes/messages");
 const transactionsRoutes = require("./routes/transactions");
-const { dashboard, accountsList, forgotPasswordSubmit, profile, transactions } = require("./routes/rendered_routes");
+const { dashboard, accountsList, forgotPasswordSubmit, profile, transactions, audit } = require("./routes/rendered_routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +32,7 @@ app.use(authMiddleware);
 app.get("/pages/dashboard.html", dashboard);
 app.get("/pages/accounts_list.html", accountsList);
 app.get("/pages/transactions.html", transactions);
+app.get("/pages/audit.html", audit);
 app.get("/pages/public/forgot-password_submit.html", forgotPasswordSubmit);
 app.get("/pages/profile.html", profile);
 app.use(express.static("web"));

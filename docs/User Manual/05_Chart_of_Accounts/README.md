@@ -103,5 +103,5 @@ Current logging behavior:
 
 Current UI status:
 
-- The row `Audit` button opens an audit-history modal for that account.
-- Managers and accountants can open the same read-only audit history.
+- The row `Audit` button routes to the dedicated `#/audit` page with the selected `account_id`.
+- Managers and accountants can open the same read-only audit report flow.

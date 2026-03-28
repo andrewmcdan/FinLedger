@@ -20,8 +20,9 @@ router.get("/", async (req, res) => {
     }
 
     try {
-        const { entity_type, entity_id, changed_by, action, start_at, end_at, limit, offset } = req.query;
+        const { event_type, entity_type, entity_id, changed_by, action, start_at, end_at, limit, offset } = req.query;
         const result = await listAuditLogs({
+            event_type,
             entity_type,
             entity_id,
             changed_by,
@@ -57,8 +58,9 @@ router.get("/entity/:entityType/:entityId", async (req, res) => {
 
     try {
         const { entityType, entityId } = req.params;
-        const { changed_by, action, start_at, end_at, limit, offset } = req.query;
+        const { event_type, changed_by, action, start_at, end_at, limit, offset } = req.query;
         const result = await listAuditLogsForEntity(entityType, entityId, {
+            event_type,
             changed_by,
             action,
             start_at,

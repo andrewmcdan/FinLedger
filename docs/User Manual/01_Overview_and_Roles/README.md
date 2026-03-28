@@ -10,6 +10,7 @@ Current user-facing modules are:
 - Accounts (Chart of Accounts)
 - Transactions
 - Reports
+- Audit
 - Help
 - Profile
 
@@ -33,17 +34,17 @@ FinLedger supports three roles: `administrator`, `manager`, and `accountant`.
 - Administrator:
   - Full user administration on Dashboard (approve/reject, create, edit, suspend/reinstate, delete, reset password, email user).
   - Full Chart of Accounts administration (create/edit/deactivate/reactivate accounts, manage categories/subcategories).
-  - Can access audit log APIs.
+  - Can use the Audit page and audit log APIs.
 - Manager:
   - No admin user-management controls.
   - Read-only use of current Accounts list UI.
-  - Can access audit log APIs.
+  - Can use the Audit page and audit log APIs.
   - Can use current Transactions, Reports, Help, and Profile pages.
 - Accountant:
   - No admin user-management controls.
   - Read-only use of current Accounts list UI.
+  - Can use the Audit page and audit log APIs.
   - Can use current Transactions, Reports, Help, and Profile pages.
-  - Cannot access audit log APIs.
 
 ## Module Map
 
@@ -55,6 +56,8 @@ FinLedger supports three roles: `administrator`, `manager`, and `accountant`.
   - Current page is a simple activity view with refresh timestamp behavior.
 - Reports:
   - Current page is a lightweight period selector and static summary text.
+- Audit:
+  - Dedicated audit-report page with date-range, account, and user filters.
 - Help:
   - Accordion help topics plus User Manual PDF link.
 - Profile:

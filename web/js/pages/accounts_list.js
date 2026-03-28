@@ -138,13 +138,6 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
     const subcategoryNameById = new Map(subcategories.map((subcategory) => [String(subcategory.id), subcategory.name]));
     const categoryById = new Map(categories.map((category) => [String(category.id), category]));
     const subcategoryById = new Map(subcategories.map((subcategory) => [String(subcategory.id), subcategory]));
-    const userDisplayById = new Map(
-        allUsers.map((user) => {
-            const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
-            const label = fullName ? `${user.username} (${fullName})` : user.username;
-            return [String(user.id), label];
-        }),
-    );
     const subcategoriesByCategoryId = new Map();
     subcategories.forEach((subcategory) => {
         const key = String(subcategory.account_category_id);
@@ -186,156 +179,6 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
         { value: "BS", label: "Balance Sheet" },
         { value: "RE", label: "Retained Earnings Statement" },
     ];
-    const accountAuditModal = document.getElementById("account_audit_modal");
-    const accountAuditModalAccountEl = document.querySelector("[data-account-audit-modal-account]");
-    const accountAuditListEl = document.querySelector("[data-account-audit-list]");
-    const closeAccountAuditModalButton = document.getElementById("close_account_audit_modal");
-    const accountAuditModalCloseActionButton = document.getElementById("account_audit_modal_close_button");
-
-    const closeAccountAuditModal = () => {
-        if (!accountAuditModal) {
-            return;
-        }
-        accountAuditModal.classList.remove("is-visible");
-        accountAuditModal.setAttribute("aria-hidden", "true");
-    };
-
-    const formatAuditTimestamp = (value) => {
-        if (!value) {
-            return "Unknown";
-        }
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return String(value);
-        }
-        return date.toLocaleString();
-    };
-
-    const formatAuditActor = (userId) => {
-        const normalized = String(userId ?? "").trim();
-        if (!normalized) {
-            return "System";
-        }
-        return userDisplayById.get(normalized) || userNameById.get(normalized) || `User ${normalized}`;
-    };
-
-    const formatAuditImage = (value) => {
-        if (value === null || value === undefined) {
-            return "No data";
-        }
-        if (typeof value === "string") {
-            return value;
-        }
-        try {
-            return JSON.stringify(value, null, 2);
-        } catch {
-            return String(value);
-        }
-    };
-
-    const renderAccountAuditLogs = (auditLogs) => {
-        if (!accountAuditListEl) {
-            return;
-        }
-        accountAuditListEl.replaceChildren();
-        if (!Array.isArray(auditLogs) || auditLogs.length === 0) {
-            const emptyState = document.createElement("p");
-            emptyState.className = "meta";
-            emptyState.textContent = "No audit history available.";
-            accountAuditListEl.appendChild(emptyState);
-            return;
-        }
-
-        auditLogs.forEach((entry) => {
-            const card = document.createElement("article");
-            card.className = "card stack";
-
-            const title = document.createElement("h2");
-            const actionLabel = entry.action ? String(entry.action).charAt(0).toUpperCase() + String(entry.action).slice(1) : "Change";
-            title.textContent = `${actionLabel} Event #${entry.id ?? "--"}`;
-            card.appendChild(title);
-
-            const summaryGrid = document.createElement("div");
-            summaryGrid.className = "grid";
-            const summaryFields = [
-                `Action: ${actionLabel}`,
-                `Changed By: ${formatAuditActor(entry.changed_by)}`,
-                `Changed At: ${formatAuditTimestamp(entry.changed_at)}`,
-                `Event Type: ${entry.event_type || entry.entity_type || "account change"}`,
-            ];
-            summaryFields.forEach((text) => {
-                const notice = document.createElement("article");
-                notice.className = "notice";
-                notice.textContent = text;
-                summaryGrid.appendChild(notice);
-            });
-            card.appendChild(summaryGrid);
-
-            const imageGrid = document.createElement("div");
-            imageGrid.className = "grid";
-
-            const beforeField = document.createElement("div");
-            beforeField.className = "field";
-            const beforeLabel = document.createElement("label");
-            beforeLabel.textContent = "Before Image";
-            const beforeImage = document.createElement("textarea");
-            beforeImage.rows = 10;
-            beforeImage.readOnly = true;
-            beforeImage.value = formatAuditImage(entry.b_image);
-            beforeField.appendChild(beforeLabel);
-            beforeField.appendChild(beforeImage);
-
-            const afterField = document.createElement("div");
-            afterField.className = "field";
-            const afterLabel = document.createElement("label");
-            afterLabel.textContent = "After Image";
-            const afterImage = document.createElement("textarea");
-            afterImage.rows = 10;
-            afterImage.readOnly = true;
-            afterImage.value = formatAuditImage(entry.a_image);
-            afterField.appendChild(afterLabel);
-            afterField.appendChild(afterImage);
-
-            imageGrid.appendChild(beforeField);
-            imageGrid.appendChild(afterField);
-            card.appendChild(imageGrid);
-
-            accountAuditListEl.appendChild(card);
-        });
-    };
-
-    const openAccountAuditModal = async (accountId, accountLabel) => {
-        if (!accountAuditModal) {
-            return;
-        }
-        showLoadingOverlay();
-        try {
-            const response = await fetchWithAuth(`/api/audit-logs/entity/accounts/${accountId}?limit=100`);
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(payload.error || "ERR_INTERNAL_SERVER");
-            }
-            if (accountAuditModalAccountEl) {
-                accountAuditModalAccountEl.textContent = `Account: ${accountLabel}`;
-            }
-            renderAccountAuditLogs(payload.audit_logs);
-            accountAuditModal.classList.add("is-visible");
-            accountAuditModal.setAttribute("aria-hidden", "false");
-        } catch (error) {
-            showErrorModal(error.message || "ERR_INTERNAL_SERVER");
-        } finally {
-            hideLoadingOverlay();
-        }
-    };
-
-    if (closeAccountAuditModalButton) {
-        closeAccountAuditModalButton.style.cursor = "pointer";
-        closeAccountAuditModalButton.addEventListener("click", closeAccountAuditModal);
-    }
-    if (accountAuditModalCloseActionButton) {
-        accountAuditModalCloseActionButton.addEventListener("click", closeAccountAuditModal);
-    }
-
     const normalizeNormalSide = (value) => {
         if (!value) {
             return "";
@@ -826,7 +669,7 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
             auditButton.className = "button-small account-button";
             auditButton.setAttribute("data-account-id", account.id);
             auditButton.setAttribute("data-audit-account-button", "");
-            auditButton.title = "View the audit history for this account.";
+            auditButton.title = "Open the Audit page for this account.";
             auditButton.textContent = "Audit";
             actionCell.appendChild(auditButton);
             tr.appendChild(actionCell);
@@ -1594,10 +1437,9 @@ export default async function initAccountsList({ showLoadingOverlay, hideLoading
                 showErrorModal("ERR_INVALID_SELECTION");
                 return;
             }
-            const accountName = document.querySelector(`[data-account_name-${accountId}]`)?.textContent?.trim() || `Account ${accountId}`;
-            const accountNumber = document.querySelector(`[data-account_number-${accountId}]`)?.textContent?.trim() || "";
-            const accountLabel = accountNumber ? `${accountName} (${accountNumber})` : accountName;
-            void openAccountAuditModal(accountId, accountLabel);
+            const url = new URL(window.location.origin + `/#/audit?account_id=${accountId}`);
+            url.hash = `#/audit?account_id=${encodeURIComponent(accountId)}`;
+            window.location.href = url.toString();
         });
     }
 }

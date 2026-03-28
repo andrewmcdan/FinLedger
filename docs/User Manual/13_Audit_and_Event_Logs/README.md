@@ -58,9 +58,10 @@ Current access roles:
 
 ## UI Availability
 
-Audit history is available from the Accounts page:
+Audit history is available from the dedicated `#/audit` page:
 
-- The Accounts table `Audit` button opens a modal showing account change history.
+- The Audit page can generate reports by date range and filter by record type, event type, account, and/or user.
+- The Accounts table `Audit` button routes directly to the Audit page for that account.
 - Each entry includes the action, user, timestamp, and before/after record images.
 
 ## Retention and Cleanup

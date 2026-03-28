@@ -101,10 +101,54 @@ async function transactions(req, res, next) {
     }
 }
 
+async function audit(req, res, next) {
+    try {
+        logger.log("debug", "Rendering audit page", { userId: req.user?.id }, getCallerInfo(), req.user?.id);
+        const result = await db.query("SELECT role FROM users WHERE id = $1", [req.user.id]);
+        const role = result.rows[0]?.role || "none";
+        const users = await usersController.listUsers();
+        const accountsResult = await accountsController.listAccounts(req.user.id, req.user.token, 0, 5000);
+        const eventTypesResult = await db.query(
+            `SELECT DISTINCT event_type
+             FROM audit_logs
+             WHERE event_type IS NOT NULL AND event_type <> ''
+             ORDER BY event_type ASC`,
+        );
+        const entityTypesResult = await db.query(
+            `SELECT DISTINCT entity_type
+             FROM audit_logs
+             WHERE entity_type IS NOT NULL AND entity_type <> ''
+             ORDER BY entity_type ASC`,
+        );
+        const allUsers = users.map((user) => ({
+            id: user.id,
+            username: user.username,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            role: user.role,
+            status: user.status,
+        }));
+        const allAccounts = accountsResult.rows.map((account) => ({
+            id: account.id,
+            account_name: account.account_name,
+            account_number: account.account_number,
+            status: account.status,
+            user_id: account.user_id,
+        }));
+        const allEventTypes = eventTypesResult.rows.map((row) => row.event_type);
+        const allEntityTypes = entityTypesResult.rows.map((row) => row.entity_type);
+        res.render("audit", { role, allUsers, allAccounts, allEventTypes, allEntityTypes });
+    } catch (error) {
+        logger.log("error", `Audit render failed: ${error.message}`, { userId: req.user?.id }, getCallerInfo(), req.user?.id);
+        next(error);
+    }
+}
+
 module.exports = {
     dashboard,
     accountsList,
     forgotPasswordSubmit,
     profile,
     transactions,
+    audit,
 };

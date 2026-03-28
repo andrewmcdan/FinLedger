@@ -302,24 +302,6 @@
         </div>
     </div>
     <% } %>
-    <div id="account_audit_modal" class="modal" aria-hidden="true">
-        <div class="modal-content stack">
-            <span class="close-button" id="close_account_audit_modal" aria-label="Close">&times;</span>
-            <h2>Account Audit History</h2>
-            <p class="meta" data-account-audit-modal-account>Account: --</p>
-            <div class="stack" data-account-audit-list>
-                <p class="meta">No audit history available.</p>
-            </div>
-            <div class="data-row">
-                <p class="value">
-                    <span class="span-label"></span>
-                    <span class="span-actions">
-                        <button type="button" class="button-small" id="account_audit_modal_close_button" title="Close the account audit history window.">Close</button>
-                    </span>
-                </p>
-            </div>
-        </div>
-    </div>
     <script id="accounts-data" type="application/json">
         <%- JSON.stringify({  allCategories, allUsers }).replaceAll("</", "<\\/") %>
     </script>
