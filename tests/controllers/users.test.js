@@ -283,11 +283,11 @@ test("createUser creates user and sends temp password email when needed", async 
     assert.equal(emailCalls.length, 1);
 });
 
-test("createUser creates active users when invoked by an administrator", async () => {
+test("createUser keeps administrator-created users pending approval", async () => {
     const admin = await insertUser({ username: "creator-admin", email: "creator-admin@example.com", role: "administrator" });
     const created = await usersController.createUser("Active", "Person", "active-person@example.com", "", "manager", "789 Main", new Date("1992-03-03"), null, admin.id);
     const result = await db.query("SELECT status, temp_password FROM users WHERE id = $1", [created.id]);
-    assert.equal(result.rows[0].status, "active");
+    assert.equal(result.rows[0].status, "pending");
     assert.equal(result.rows[0].temp_password, true);
     assert.equal(emailCalls.length, 1);
 });
