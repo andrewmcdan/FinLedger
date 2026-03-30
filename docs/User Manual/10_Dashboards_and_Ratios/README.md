@@ -6,36 +6,36 @@ The `Dashboard` page is the current landing page after login.
 
 Shared elements:
 
-- Static cards for `Cash on Hand`, `Payables`, and `Receivables`
-- Last-updated timestamp
-- Refresh button behavior for dashboard data section(s)
+- Summary cards (for example `Cash on Hand`, `Payables`, `Receivables`) with status pills
+- `Quick Access` links to role-appropriate workflows
+- `Financial Ratios` section
+- `Important Messages` section for workflow alerts
+- Color guide for dashboard status tones (good/warning/review)
+- Last-updated timestamp in the dashboard header
 
 Role-based rendering:
 
 - Administrator:
-  - Full `User Management` workspace (approvals, suspended users, user table, create/delete/reset/suspend/email tools).
+    - Full `User Management` workspace (approvals, suspended users, user table, create/delete/reset/suspend/email tools).
 - Manager and accountant:
-  - Simplified `Your Workspace` card only.
+    - Dashboard summary/ratio/message cards and quick-access links without admin user-management controls.
 
-## Ratios (Current Status)
+## Ratios
 
-Financial ratio calculations are not currently implemented in the dashboard UI.
+Dashboard ratio cards are calculated when enough posted accounting data exists.
 
-Not available yet:
+When ratio data is insufficient:
 
-- Ratio formulas and computed outputs
-- Ratio threshold rules
-- Green/yellow/red ratio state coding
+- The ratio section shows a fallback notice instead of metric cards.
 
 ## Alerts and Notifications
 
-Current in-app feedback uses the global message line for action results.
+Dashboard alerts are shown in the `Important Messages` section and can include links to related workflows.
 
-Not available yet:
+The global message line is still used for immediate action-result messages (success/error) across pages.
 
-- Dedicated persistent dashboard notification center
-- Ratio-driven alert widgets
+- A separate inbox-style notification center is not currently implemented.
 
 ## Documentation Note
 
-Update this section when dynamic financial metrics and ratio logic are implemented.
+Keep this section aligned with dashboard card logic and role-based quick links as they evolve.

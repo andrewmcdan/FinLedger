@@ -14,10 +14,6 @@ Current user-facing modules are:
 - Help
 - Profile
 
-Important current-state note:
-
-- Journal entry, ledger, adjusting-entry, and full financial-statement workflows are not exposed as complete UI/API user workflows yet, even though related database tables exist.
-
 ## UI Landmarks
 
 - Header: FinLedger branding, logged-in user label, calendar button, and top navigation.
@@ -32,36 +28,41 @@ Important current-state note:
 FinLedger supports three roles: `administrator`, `manager`, and `accountant`.
 
 - Administrator:
-  - Full user administration on Dashboard (approve/reject, create, edit, suspend/reinstate, delete, reset password, email user).
-  - Full Chart of Accounts administration (create/edit/deactivate/reactivate accounts, manage categories/subcategories).
-  - Can use the Audit page and audit log APIs.
+    - Full user administration on Dashboard (approve/reject, create, edit, suspend/reinstate, delete, reset password, email user).
+    - Full Chart of Accounts administration (create/edit/deactivate/reactivate accounts, manage categories/subcategories).
+    - Full report generation and report-email actions.
+    - Can use the Audit page and audit log APIs.
 - Manager:
-  - No admin user-management controls.
-  - Read-only use of current Accounts list UI.
-  - Can use the Audit page and audit log APIs.
-  - Can use current Transactions, Reports, Help, and Profile pages.
+    - No admin user-management controls.
+    - Read-only use of current Accounts list UI.
+    - Can create journal entries, review queue entries, and perform manager approval actions in Journal Queue.
+    - Can generate and email financial reports.
+    - Can use the Audit page and audit log APIs.
+    - Can use current Transactions, Reports, Help, and Profile pages.
 - Accountant:
-  - No admin user-management controls.
-  - Read-only use of current Accounts list UI.
-  - Can use the Audit page and audit log APIs.
-  - Can use current Transactions, Reports, Help, and Profile pages.
+    - No admin user-management controls.
+    - Read-only use of current Accounts list UI.
+    - Can create journal entries and review Journal Queue status, but cannot approve/reject queue entries.
+    - Can open Reports UI, but report-generation/report-email APIs are restricted to administrator and manager roles.
+    - Can use the Audit page and audit log APIs.
+    - Can use current Transactions, Reports, Help, and Profile pages.
 
 ## Module Map
 
 - Dashboard:
-  - Static summary cards plus admin-only user-management workspace.
+    - Dynamic summary cards, ratio cards, important messages, and admin-only user-management workspace.
 - Accounts:
-  - Implemented Chart of Accounts list and admin account/category management.
+    - Implemented Chart of Accounts list and admin account/category management.
 - Transactions:
-  - Current page is a simple activity view with refresh timestamp behavior.
+    - Journal entry creation, journal queue review/approval workflow, and posted ledger views.
 - Reports:
-  - Current page is a lightweight period selector and static summary text.
+    - Trial balance, income statement, balance sheet, and retained earnings report generation with CSV/email/print actions.
 - Audit:
-  - Dedicated audit-report page with date-range, account, and user filters.
+    - Dedicated audit-report page with date-range, account, and user filters.
 - Help:
-  - Accordion help topics plus User Manual PDF link.
+    - Accordion help topics plus User Manual PDF link.
 - Profile:
-  - Personal info updates, password change, and security question updates.
+    - Personal info updates, password change, and security question updates.
 
 For authentication and password policy details, see `docs/User Manual/02_Login_and_Security/README.md`.
 For administrator workflows, see `docs/User Manual/03_User_Administration/README.md`.

@@ -11,6 +11,8 @@ Current email-trigger scenarios include:
 - Forgot-password reset-link email
 - Administrator reset-user-password email with temporary password
 - Administrator direct email to a selected user (`Email User`)
+- Journal-submission notification email to manager/administrator stakeholders
+- Journal decision notification email (approval/rejection) to the journal creator
 - Password-expiry warning emails (scheduled)
 - Account suspended due to expired password email (scheduled)
 
@@ -31,22 +33,21 @@ In-app feedback is currently provided by the global message line:
 Not currently implemented:
 
 - Dedicated in-app notification center/inbox
-- Journal submission/approval notification workflows
-- Adjusting-entry notification workflows
+- Dedicated adjusting-entry-specific notification templates outside the journal workflow
 
 ## Timing and Automation
 
 Current server background jobs:
 
 - Every 10 minutes:
-  - inactive-session cleanup
-  - unsuspend users whose suspension window ended
+    - inactive-session cleanup
+    - unsuspend users whose suspension window ended
 - Every 1 hour:
-  - password-expiry warning processing
-  - suspension of users with expired passwords
-  - user-data cleanup tasks
+    - password-expiry warning processing
+    - suspension of users with expired passwords
+    - user-data cleanup tasks
 - Every 24 hours:
-  - log cleanup cycle
+    - log cleanup cycle
 
 ## Configuration Note
 

@@ -40,14 +40,14 @@ Current Journal controls:
 ## Expected Results
 
 - Journal entries are persisted as `pending`.
-- Manager notification email is dispatched after successful submission.
+- Submission notification email is dispatched to manager and administrator stakeholders after successful submission.
 - Role restrictions hide the Journal section from administrator users.
 - Reference codes are checked for availability before submission when provided.
 - Submission is blocked when:
-  - no documents are attached
-  - debits and credits are not balanced
-  - reference-code validation is still pending
-  - reference code is not available
+    - no documents are attached
+    - debits and credits are not balanced
+    - reference-code validation is still pending
+    - reference code is not available
 
 ## What Exists in the Database
 
@@ -60,7 +60,7 @@ Current Journal controls:
 ## Current Limitations and Scope
 
 - Journal types are currently limited to `General` and `Adjusting`.
-- Broader reporting/financial statement workflows are documented elsewhere and are still in progress.
+- Journal approval actions remain manager-only.
 
 ## Related Sections
 

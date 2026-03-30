@@ -1,31 +1,39 @@
 # Documents and Attachments
 
-## Current Status
+## Journal Document Workflow (Implemented)
 
-Document/attachment workflows are not fully implemented in the user-facing app.
+Journal entries support document attachments through the Transactions workflow.
 
-Current API route status:
+Implemented behavior:
 
-- `GET /api/documents/:filename` returns "not yet implemented."
-- `POST /api/documents/upload` returns "not yet implemented."
+- Users add one or more documents before submitting a journal entry.
+- Submission is blocked when no documents are attached.
+- Allowed file types are validated by extension/MIME mapping.
+- Uploaded files are stored in `user-docs/` and linked through journal/document tables.
+- Journal Queue review includes downloadable document links.
 
-## Not Yet Implemented
+## Supported Journal Document Types and Limits
 
-- Journal-entry source document upload from UI
-- Document retrieval/download with permission checks
-- User-facing attachment metadata management
-- Enforced allowed-file-type rules for user documents
+- Supported extensions include: `pdf`, `png`, `jpg`, `jpeg`, `gif`, `webp`, `txt`, `csv`, `xls`, `xlsx`, `doc`, `docx`.
+- Max file size per upload: 15 MB.
+- Max files per request is bounded by route-level upload limits.
 
-## What Exists Today
+## Separate User-Document Routes (Not Yet Implemented)
+
+Separate generic user-document endpoints remain placeholders:
+
+- `GET /api/documents/:filename`
+- `POST /api/documents/upload`
+
+These routes currently return "not yet implemented" responses and are distinct from journal-document handling under Transactions.
+
+## Data Model
 
 - `documents` table exists in the database.
-- Audit triggers include `documents`.
+- `journal_entry_documents` and `journal_entry_line_documents` link docs to journal headers/lines.
+- Audit triggers include `documents` and related journal entities.
 - Cleanup utilities remove unreferenced files from `user-docs/`.
 
 Related implemented upload feature (separate from documents):
 
 - User profile image upload is implemented with file-type and size validation.
-
-## Documentation Note
-
-Update this section when document upload/retrieval workflows are connected to journal or other user flows.
