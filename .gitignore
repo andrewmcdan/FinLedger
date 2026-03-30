@@ -147,3 +147,4 @@ logs/
 .VSCodeCounter/
 test-results
 playwright-report
+.claude
