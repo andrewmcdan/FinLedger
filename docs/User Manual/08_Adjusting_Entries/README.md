@@ -2,22 +2,43 @@
 
 ## Current Status
 
-Adjusting-entry workflows are not currently implemented in the user-facing UI/API.
+Adjusting entries are supported in the accounting workflow, but they are currently surfaced through the Transactions experience rather than a dedicated standalone Adjusting Entries page.
 
-Not yet available:
+## Where Users Work with Adjusting Entries
 
-- Create adjusting-entry form workflow
-- Submit/cancel/reset actions before submission
-- Manager approval/rejection workflow
-- Adjusting-entry status list and filtering
-- Posting integration to ledger/statements from UI workflow
-- Manager notification on adjusting-entry submission
+In Transactions:
 
-## What Exists Today
+- Journal creation supports `Journal Type = Adjusting`.
+- Journal Queue supports a `Journal Type` filter (`All`, `General`, `Adjusting`).
+- Manager users can approve/reject pending adjusting entries from the same queue controls used for general journal entries.
 
-- Database tables exist (`adjustment_metadata`, `adjustment_lines`).
-- Database audit triggers include adjustment tables.
+This aligns with Help guidance for month-end review using the Journal Queue type filter.
 
-## Documentation Note
+## API Support
 
-This section should be expanded once adjusting-entry pages and APIs are implemented.
+Adjustment routes exist and support list/create/approve/reject workflows:
+
+- `GET /api/adjustments`
+- `POST /api/adjustments`
+- `PATCH /api/adjustments/:journalEntryId/approve`
+- `PATCH /api/adjustments/:journalEntryId/reject`
+
+Access behavior:
+
+- `administrator`: blocked from adjustment actions.
+- `manager`: full access including approval/rejection.
+- `accountant`: can create/list but cannot approve/reject.
+
+## Data and Posting Behavior
+
+Adjusting entries use the same journal posting model:
+
+- Header record in `journal_entries` with `journal_type = adjusting`
+- Line records in `journal_entry_lines`
+- Optional adjustment-specific metadata in `adjustment_metadata` and `adjustment_lines`
+- Approved entries post to `ledger_entries`
+
+## Notes
+
+- There is no separate adjusting-entry navigation page at this time.
+- Use Transactions Journal and Journal Queue for operational adjusting-entry work.

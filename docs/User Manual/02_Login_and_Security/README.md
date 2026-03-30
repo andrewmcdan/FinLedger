@@ -117,6 +117,16 @@ After completion:
 - Temporary-password flag is cleared.
 - Normal route access resumes.
 
+## Profile and Security Self-Service
+
+From the `Profile` page, users can:
+
+- Update profile details (name, email, address, and profile image).
+- Change password using current-password verification.
+- Update security questions and answers.
+
+These actions align with Help topics under `Profile & Security`.
+
 ## Password Expiration and Warnings
 
 Password expiration is enforced.

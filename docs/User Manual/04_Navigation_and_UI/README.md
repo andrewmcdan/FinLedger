@@ -85,7 +85,9 @@ Interaction:
 Help behavior:
 
 - `Help` is a top-level page.
-- Help content is organized in expandable sections.
+- Help content is organized in expandable sections (Account Access, Profile and Security, Administrator Tools, Data and Reports, and Support).
+- Support guidance in Help directs users to contact their manager first, then `support@finledger.com` if unresolved.
+- Help includes a direct link to the latest User Manual PDF (`/pages/public/FinLedger_User_Manual.pdf`).
 
 Tooltip behavior:
 
@@ -118,8 +120,8 @@ Global loading overlay behavior:
 
 - `Dashboard`: operational admin/user workspace with live and static elements.
 - `Accounts`: primary account-management workflow is implemented.
-- `Transactions`: role-gated journal/queue/ledger UI scaffold is implemented; backend workflow integration is still in progress.
-- `Reports`: placeholder report UI is implemented; full report-generation workflows are still in progress.
+- `Transactions`: role-gated journal, journal queue, and ledger workflows are implemented.
+- `Reports`: report-generation workflows are implemented for trial balance, income statement, balance sheet, and retained earnings.
 
 ## Layout Consistency
 

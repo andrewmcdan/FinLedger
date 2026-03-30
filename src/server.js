@@ -27,6 +27,11 @@ app.set("views", path.join(__dirname, "..", "web", "pages"));
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messagesRoutes);
 
+app.use((req, res, next) => {
+    res.setHeader("Dino-Says", "RAWR!");
+    next();
+});
+
 app.use(authMiddleware);
 // Any routes added after this point will require authentication
 app.get("/pages/dashboard.html", dashboard);

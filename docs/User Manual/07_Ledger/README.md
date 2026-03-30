@@ -68,7 +68,7 @@ Current behavior:
 ## Current Limitations
 
 - Ledger drill-down currently routes back to Transactions queue context (`#/transactions?journal_id=...`).
-- Full financial-statement generation and formatting are still in progress.
+- Ledger shows posted activity; unposted journal work remains in Journal Queue until approved/posted.
 
 ## Related Sections
 

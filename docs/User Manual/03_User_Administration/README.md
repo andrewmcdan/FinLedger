@@ -18,6 +18,7 @@ The admin `User Management` area currently includes:
 - `User Approvals`
 - `Users with Expired Passwords`
 - `Suspended Users`
+- `Deactivated Users`
 - `Currently Logged-in Users`
 - `All Users` table
 - `Create User`
@@ -96,6 +97,14 @@ Additional behavior:
 - Expired suspensions are automatically cleared by background jobs.
 - Users can also be suspended by security policies (failed login attempts, password expiry).
 
+## Deactivate and Reactivate Users
+
+Administrators can manage account availability through user status updates.
+
+- Deactivated users are listed in `Deactivated Users`.
+- `Activate` restores sign-in access for deactivated accounts.
+- This is useful when an account should remain in the system but should not be able to sign in.
+
 ## Delete User
 
 Use `Delete User` to remove an account.
@@ -105,6 +114,8 @@ Behavior:
 - Admin selects a username.
 - Confirmation prompt appears before deletion.
 - The UI prevents an admin from deleting their own account.
+- If the target user is referenced by accounting records (for example, journal or ledger activity they created, updated, approved, or posted), deletion is blocked by data-integrity constraints.
+- When deletion is blocked, keep the accounting history intact and use status controls (for example, deactivate or suspend) instead of deleting the account.
 
 ## Reset User Password
 
