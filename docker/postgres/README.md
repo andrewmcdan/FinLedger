@@ -132,6 +132,7 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - entry_date: timestamp without time zone
 - description: text
 - status: text (pending, approved, rejected)
+- manager_comment: text
 - total_debits: numeric
 - total_credits: numeric
 - created_by: integer (ref public.users.id)
@@ -142,7 +143,6 @@ Template placeholders like `{{ADMIN_USERNAME}}` are replaced using environment v
 - approved_at: timestamp without time zone
 - posted_at: timestamp without time zone
 - reference_code: text
-- manager_comment: text
 
 ### public.journal_entry_documents
 - id: integer
