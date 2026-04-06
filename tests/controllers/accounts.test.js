@@ -248,3 +248,168 @@ test("no-op account updates do not write audit log entries", async () => {
     assert.equal(secondNoopResult.success, true);
     assert.equal(await countUpdates(), 1);
 });
+
+test("deactivateAccount rejects account with non-zero balance", async () => {
+    const user = await insertUser({ username: "acct-nonzero", email: "acct-nonzero@example.com" });
+
+    const account = await accountsController.createAccount(
+        user.id,
+        "Nonzero Balance Account",
+        "Should not deactivate",
+        "debit",
+        "Assets",
+        "Current Assets",
+        100, // balance NOT zero
+        100,
+        0,
+        0,
+        1,
+        "BS",
+        ""
+    );
+
+    await assert.rejects(
+        () => accountsController.setAccountStatus(account.id, "inactive", user.id),
+        /non-zero balance/
+    );
+});
+
+test("setAccountStatus rejects invalid status", async () => {
+    const user = await insertUser({ username: "acct-status", email: "acct-status@example.com" });
+
+    const account = await accountsController.createAccount(
+        user.id,
+        "Status Test Account",
+        "Testing invalid status",
+        "debit",
+        "Assets",
+        "Current Assets",
+        0,
+        0,
+        0,
+        0,
+        1,
+        "BS",
+        ""
+    );
+
+    await assert.rejects(
+        () => accountsController.setAccountStatus(account.id, "invalid-status", user.id),
+        /Invalid status/
+    );
+});
+
+test("updateAccountField rejects disallowed field", async () => {
+    const user = await insertUser({ username: "acct-invalid-field", email: "acct-invalid-field@example.com" });
+
+    const account = await accountsController.createAccount(
+        user.id,
+        "Invalid Field Account",
+        "Testing invalid field",
+        "debit",
+        "Assets",
+        "Current Assets",
+        0,
+        0,
+        0,
+        0,
+        1,
+        "BS",
+        ""
+    );
+
+    const result = await accountsController.updateAccountField({
+        account_id: account.id,
+        field: "balance", // NOT allowed
+        value: 999,
+        user_id: user.id,
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.message, /cannot be updated/);
+});
+
+test("updateAccountField rejects invalid normal_side", async () => {
+    const user = await insertUser({ username: "acct-normal", email: "acct-normal@example.com" });
+
+    const account = await accountsController.createAccount(
+        user.id,
+        "Normal Side Test",
+        "Testing invalid normal side",
+        "debit",
+        "Assets",
+        "Current Assets",
+        0,
+        0,
+        0,
+        0,
+        1,
+        "BS",
+        ""
+    );
+
+    const result = await accountsController.updateAccountField({
+        account_id: account.id,
+        field: "normal_side",
+        value: "invalid",
+        user_id: user.id,
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.message, /Invalid normal side/);
+});
+
+test("addCategory rejects duplicate category name", async () => {
+    await accountsController.addCategory(
+        "Revenue",
+        "40",
+        "Revenue category",
+        "Sales",
+        "Sales subcategory",
+        10
+    );
+
+    await assert.rejects(
+        () => accountsController.addCategory(
+            "Revenue", // duplicate
+            "41",
+            "Another revenue",
+            "Other Sales",
+            "Other subcategory",
+            20
+        ),
+        /already exists/
+    );
+});
+
+test("deleteCategory rejects when accounts exist", async () => {
+    const user = await insertUser({ username: "acct-delcat", email: "acct-delcat@example.com" });
+
+    const account = await accountsController.createAccount(
+        user.id,
+        "Category Block Test",
+        "Testing delete category",
+        "debit",
+        "Assets",
+        "Current Assets",
+        0,
+        0,
+        0,
+        0,
+        1,
+        "BS",
+        ""
+    );
+
+    const categoryResult = await db.query(
+        "SELECT account_category_id FROM accounts WHERE id = $1",
+        [account.id]
+    );
+
+    const categoryId = categoryResult.rows[0].account_category_id;
+
+    await assert.rejects(
+        () => accountsController.deleteCategory(categoryId),
+        /associated accounts/
+    );
+});
