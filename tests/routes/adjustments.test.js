@@ -124,6 +124,33 @@ function authHeaders({ userId, token }) {
     };
 }
 
+/** Pending general journal (no adjustment_metadata) — used to verify /api/adjustments only touches adjusting entries. */
+async function seedGeneralPendingJournalEntry({ createdByUserId, debitAccountId, creditAccountId, amount = 100 }) {
+    const referenceCode = `JE-GEN-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const entryResult = await db.query(
+        `INSERT INTO journal_entries
+            (journal_type, entry_date, description, status, total_debits, total_credits, created_by, updated_by, reference_code)
+         VALUES
+            ('general', now(), 'General pending for adjustment route test', 'pending', $1, $1, $2, $2, $3)
+         RETURNING id`,
+        [amount, createdByUserId, referenceCode],
+    );
+    const journalEntryId = entryResult.rows[0].id;
+    await db.query(
+        `INSERT INTO journal_entry_lines
+            (journal_entry_id, line_no, account_id, dc, amount, line_description, created_by, updated_by)
+         VALUES ($1, 1, $2, 'debit', $3, 'Debit line', $4, $4)`,
+        [journalEntryId, debitAccountId, amount, createdByUserId],
+    );
+    await db.query(
+        `INSERT INTO journal_entry_lines
+            (journal_entry_id, line_no, account_id, dc, amount, line_description, created_by, updated_by)
+         VALUES ($1, 2, $2, 'credit', $3, 'Credit line', $4, $4)`,
+        [journalEntryId, creditAccountId, amount, createdByUserId],
+    );
+    return journalEntryId;
+}
+
 function requestJson({ port, method, path: reqPath, headers = {}, body = null }) {
     const payload = body === null ? null : JSON.stringify(body);
     return new Promise((resolve, reject) => {
@@ -369,6 +396,159 @@ test("non-manager cannot approve adjustments", async () => {
 
         assert.equal(approveResponse.statusCode, 403);
         assert.equal(approveResponse.body.errorCode, "ERR_FORBIDDEN_MANAGER_APPROVAL_REQUIRED");
+    } finally {
+        server.close();
+        await new Promise((resolve) => server.once("close", resolve));
+    }
+});
+
+test("manager reject adjustment requires manager_comment", async () => {
+    const manager = await insertUser({ username: "manager_adjust_reject", email: "manager_adjust_reject@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_adjust_reject", email: "acct_adjust_reject@example.com", role: "accountant" });
+    const managerToken = "manager-adjust-reject-token";
+    const accountantToken = "acct-adjust-reject-token";
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+    await insertLoggedInUser({ userId: accountant.id, token: accountantToken });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Reject Test Dr",
+        accountNumber: 1000000299,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Reject Test Cr",
+        accountNumber: 2000000299,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+
+        const createResponse = await requestJson({
+            port,
+            method: "POST",
+            path: "/api/adjustments",
+            headers: authHeaders({ userId: accountant.id, token: accountantToken }),
+            body: {
+                adjustment_reason: "other",
+                period_end_date: "2026-03-31",
+                description: "Reject reason required test",
+                lines: [
+                    { account_id: debitAccount.id, dc: "debit", amount: 40 },
+                    { account_id: creditAccount.id, dc: "credit", amount: 40 },
+                ],
+            },
+        });
+
+        assert.equal(createResponse.statusCode, 200);
+        const journalEntryId = createResponse.body.adjustment_entry.id;
+
+        const rejectWithoutReason = await requestJson({
+            port,
+            method: "PATCH",
+            path: `/api/adjustments/${journalEntryId}/reject`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+            body: { manager_comment: "" },
+        });
+
+        assert.equal(rejectWithoutReason.statusCode, 400);
+        assert.equal(rejectWithoutReason.body.errorCode, "ERR_JOURNAL_REJECTION_REASON_REQUIRED");
+
+        const stillPending = await db.query("SELECT status FROM journal_entries WHERE id = $1", [journalEntryId]);
+        assert.equal(stillPending.rows[0].status, "pending");
+
+        const rejectWithReason = await requestJson({
+            port,
+            method: "PATCH",
+            path: `/api/adjustments/${journalEntryId}/reject`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+            body: { manager_comment: "Missing support for this adjustment" },
+        });
+
+        assert.equal(rejectWithReason.statusCode, 200);
+        assert.equal(rejectWithReason.body.adjustment_entry.status, "rejected");
+    } finally {
+        server.close();
+        await new Promise((resolve) => server.once("close", resolve));
+    }
+});
+
+test("adjustments approve and reject routes reject non-adjusting journal entry id", async () => {
+    const manager = await insertUser({ username: "manager_adjust_na", email: "manager_adjust_na@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct_adjust_na", email: "acct_adjust_na@example.com", role: "accountant" });
+    const managerToken = "manager-adjust-na-token";
+    await insertLoggedInUser({ userId: manager.id, token: managerToken });
+    await insertLoggedInUser({ userId: accountant.id, token: "acct-adjust-na-token" });
+
+    const categories = await seedCategories();
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "General Dr",
+        accountNumber: 1000000399,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "General Cr",
+        accountNumber: 2000000399,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const generalJournalId = await seedGeneralPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 55,
+    });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+
+    try {
+        const { port } = server.address();
+
+        const approveResponse = await requestJson({
+            port,
+            method: "PATCH",
+            path: `/api/adjustments/${generalJournalId}/approve`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+            body: { manager_comment: "Should not apply to general journal" },
+        });
+
+        assert.equal(approveResponse.statusCode, 400);
+        assert.equal(approveResponse.body.errorCode, "ERR_INVALID_SELECTION");
+
+        const rejectResponse = await requestJson({
+            port,
+            method: "PATCH",
+            path: `/api/adjustments/${generalJournalId}/reject`,
+            headers: authHeaders({ userId: manager.id, token: managerToken }),
+            body: { manager_comment: "Should not apply to general journal" },
+        });
+
+        assert.equal(rejectResponse.statusCode, 400);
+        assert.equal(rejectResponse.body.errorCode, "ERR_INVALID_SELECTION");
+
+        const entryState = await db.query("SELECT status FROM journal_entries WHERE id = $1", [generalJournalId]);
+        assert.equal(entryState.rows[0].status, "pending");
     } finally {
         server.close();
         await new Promise((resolve) => server.once("close", resolve));
