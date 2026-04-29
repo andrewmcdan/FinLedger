@@ -61,7 +61,7 @@ router.post("/", ensureNotAdminUser, async (req, res) => {
         const result = await createAdjustmentEntry(req.user.id, req.body || {});
         return sendApiSuccess(res, "MSG_JOURNAL_ENTRY_CREATED_SUCCESS", result);
     } catch (error) {
-        if (["ERR_PLEASE_FILL_ALL_FIELDS", "ERR_INVALID_SELECTION", "ERR_JOURNAL_ENTRY_NOT_BALANCED"].includes(error?.code)) {
+        if (["ERR_PLEASE_FILL_ALL_FIELDS", "ERR_INVALID_SELECTION", "ERR_JOURNAL_DUPLICATE_ACCOUNT", "ERR_JOURNAL_ENTRY_NOT_BALANCED"].includes(error?.code)) {
             return sendApiError(res, 400, error.code);
         }
         log("error", "Failed to create adjustment entry", { userId: req.user?.id, error: error.message }, utilities.getCallerInfo(), req.user?.id);

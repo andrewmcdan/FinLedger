@@ -247,6 +247,7 @@ VALUES
     ('ERR_FAILED_TO_UPDATE_ACCOUNT_FIELD', 'Failed to update account field', 'error'),
     ('ERR_NO_SUBCATEGORIES_FOUND', 'No subcategories found for the selected category.', 'error'),
     ('ERR_INVALID_SELECTION', 'Invalid selection.', 'error'),
+    ('ERR_JOURNAL_DUPLICATE_ACCOUNT', 'An account cannot be used more than once in the same transaction.', 'error'),
     ('ERR_JOURNAL_ENTRY_NOT_BALANCED', 'Debits and credits must balance before submission.', 'error'),
     ('ERR_JOURNAL_ENTRY_NOT_FOUND', 'Journal entry not found.', 'error'),
     ('ERR_JOURNAL_ENTRY_NOT_PENDING', 'Journal entry is not pending approval.', 'error'),

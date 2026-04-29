@@ -74,10 +74,7 @@ async function insertUser({ username, email, role = "accountant", status = "acti
 }
 
 async function insertLoggedInUser({ userId, token = "token-1" } = {}) {
-    await db.query(
-        "INSERT INTO logged_in_users (user_id, token, login_at, logout_at) VALUES ($1, $2, now(), now() + interval '1 hour')",
-        [userId, token],
-    );
+    await db.query("INSERT INTO logged_in_users (user_id, token, login_at, logout_at) VALUES ($1, $2, now(), now() + interval '1 hour')", [userId, token]);
 }
 
 async function seedCategories() {
@@ -121,28 +118,12 @@ function buildMultipart(fields = {}, files = []) {
     const parts = [];
 
     for (const [name, value] of Object.entries(fields)) {
-        parts.push(
-            Buffer.from(
-                `--${boundary}\r\n` +
-                `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
-                `${value}\r\n`,
-            ),
-        );
+        parts.push(Buffer.from(`--${boundary}\r\n` + `Content-Disposition: form-data; name="${name}"\r\n\r\n` + `${value}\r\n`));
     }
 
     for (const { name, filename, content, contentType = "text/plain" } of files) {
         const contentBuffer = typeof content === "string" ? Buffer.from(content) : content;
-        parts.push(
-            Buffer.concat([
-                Buffer.from(
-                    `--${boundary}\r\n` +
-                    `Content-Disposition: form-data; name="${name}"; filename="${filename}"\r\n` +
-                    `Content-Type: ${contentType}\r\n\r\n`,
-                ),
-                contentBuffer,
-                Buffer.from("\r\n"),
-            ]),
-        );
+        parts.push(Buffer.concat([Buffer.from(`--${boundary}\r\n` + `Content-Disposition: form-data; name="${name}"; filename="${filename}"\r\n` + `Content-Type: ${contentType}\r\n\r\n`), contentBuffer, Buffer.from("\r\n")]));
     }
 
     parts.push(Buffer.from(`--${boundary}--\r\n`));
@@ -166,10 +147,16 @@ function requestRaw({ port, method = "POST", path: reqPath, headers = {}, body }
             (res) => {
                 let data = "";
                 res.setEncoding("utf8");
-                res.on("data", (chunk) => { data += chunk; });
+                res.on("data", (chunk) => {
+                    data += chunk;
+                });
                 res.on("end", () => {
                     let parsed = null;
-                    try { parsed = JSON.parse(data); } catch { parsed = null; }
+                    try {
+                        parsed = JSON.parse(data);
+                    } catch {
+                        parsed = null;
+                    }
                     resolve({ statusCode: res.statusCode, body: parsed, rawBody: data });
                 });
             },
@@ -197,10 +184,16 @@ function requestJson({ port, method = "GET", path: reqPath, headers = {}, body =
             (res) => {
                 let data = "";
                 res.setEncoding("utf8");
-                res.on("data", (chunk) => { data += chunk; });
+                res.on("data", (chunk) => {
+                    data += chunk;
+                });
                 res.on("end", () => {
                     let parsed = null;
-                    try { parsed = JSON.parse(data); } catch { parsed = null; }
+                    try {
+                        parsed = JSON.parse(data);
+                    } catch {
+                        parsed = null;
+                    }
                     resolve({ statusCode: res.statusCode, body: parsed });
                 });
             },
@@ -380,10 +373,7 @@ test("POST new-journal-entry returns 400 ERR_INVALID_SELECTION when payload is n
     await new Promise((resolve) => server.once("listening", resolve));
     try {
         const { port } = server.address();
-        const { body: multipartBody, contentType } = buildMultipart(
-            { payload: "not-valid-json{{" },
-            [{ name: "documents", filename: "test.txt", content: "test content", contentType: "text/plain" }],
-        );
+        const { body: multipartBody, contentType } = buildMultipart({ payload: "not-valid-json{{" }, [{ name: "documents", filename: "test.txt", content: "test content", contentType: "text/plain" }]);
         const res = await requestRaw({
             port,
             path: "/api/transactions/new-journal-entry",
@@ -422,16 +412,13 @@ test("POST new-journal-entry creates a journal entry with balanced lines and a d
             reference_code: "JE-TEST-CREATE-001",
             entry_date: "2026-01-15",
             lines: [
-                { account_id: cashAccount.id, dc: "debit", amount: 100.00, description: "Cash debit" },
-                { account_id: revenueAccount.id, dc: "credit", amount: 100.00, description: "Revenue credit" },
+                { account_id: cashAccount.id, dc: "debit", amount: 100.0, description: "Cash debit" },
+                { account_id: revenueAccount.id, dc: "credit", amount: 100.0, description: "Revenue credit" },
             ],
             documents: [{ upload_index: 0, title: "Test Receipt" }],
         });
 
-        const { body: multipartBody, contentType } = buildMultipart(
-            { payload },
-            [{ name: "documents", filename: "receipt.txt", content: "receipt data", contentType: "text/plain" }],
-        );
+        const { body: multipartBody, contentType } = buildMultipart({ payload }, [{ name: "documents", filename: "receipt.txt", content: "receipt data", contentType: "text/plain" }]);
 
         const res = await requestRaw({
             port,
@@ -470,16 +457,11 @@ test("POST new-journal-entry returns 400 ERR_JOURNAL_ENTRY_NOT_BALANCED for unba
         const payload = JSON.stringify({
             description: "Unbalanced journal entry",
             journal_type: "general",
-            lines: [
-                { account_id: cashAccount.id, dc: "debit", amount: 200.00, description: "Debit only" },
-            ],
+            lines: [{ account_id: cashAccount.id, dc: "debit", amount: 200.0, description: "Debit only" }],
             documents: [{ upload_index: 0, title: "Test" }],
         });
 
-        const { body: multipartBody, contentType } = buildMultipart(
-            { payload },
-            [{ name: "documents", filename: "doc.txt", content: "content", contentType: "text/plain" }],
-        );
+        const { body: multipartBody, contentType } = buildMultipart({ payload }, [{ name: "documents", filename: "doc.txt", content: "content", contentType: "text/plain" }]);
 
         const res = await requestRaw({
             port,
@@ -499,6 +481,48 @@ test("POST new-journal-entry returns 400 ERR_JOURNAL_ENTRY_NOT_BALANCED for unba
     }
 });
 
+test("POST new-journal-entry returns 400 ERR_JOURNAL_DUPLICATE_ACCOUNT when an account is reused", async () => {
+    const accountant = await insertUser({ username: "txn_new_acct_5_dup", email: "txn_new_acct_5_dup@example.com" });
+    const token = "txn-acct-token-5-dup";
+    await insertLoggedInUser({ userId: accountant.id, token });
+
+    const cashAccount = await seedAccount({ userId: accountant.id, name: "Cash TxnNew5 Dup", normalSide: "debit", accountNumber: 10055 });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+        const { port } = server.address();
+
+        const payload = JSON.stringify({
+            description: "Duplicate account journal entry",
+            journal_type: "general",
+            lines: [
+                { account_id: cashAccount.id, dc: "debit", amount: 200.0, description: "Debit line" },
+                { account_id: cashAccount.id, dc: "credit", amount: 200.0, description: "Credit line" },
+            ],
+            documents: [{ upload_index: 0, title: "Test" }],
+        });
+
+        const { body: multipartBody, contentType } = buildMultipart({ payload }, [{ name: "documents", filename: "dup.txt", content: "content", contentType: "text/plain" }]);
+
+        const res = await requestRaw({
+            port,
+            path: "/api/transactions/new-journal-entry",
+            headers: {
+                ...authHeaders({ userId: accountant.id, token }),
+                "Content-Type": contentType,
+            },
+            body: multipartBody,
+        });
+
+        assert.equal(res.statusCode, 400);
+        assert.equal(res.body.errorCode, "ERR_JOURNAL_DUPLICATE_ACCOUNT");
+    } finally {
+        server.close();
+        await new Promise((resolve) => server.once("close", resolve));
+    }
+});
+
 test("POST new-journal-entry rejects duplicate reference_code", async () => {
     const accountant = await insertUser({ username: "txn_new_acct_6", email: "txn_new_acct_6@example.com" });
     const token = "txn-acct-token-6";
@@ -507,16 +531,17 @@ test("POST new-journal-entry rejects duplicate reference_code", async () => {
     const cashAccount = await seedAccount({ userId: accountant.id, name: "Cash TxnNew6", normalSide: "debit", accountNumber: 1006 });
     const revenueAccount = await seedAccount({ userId: accountant.id, name: "Revenue TxnNew6", normalSide: "credit", accountNumber: 2006 });
 
-    const makePayload = (refCode) => JSON.stringify({
-        description: "Dup ref test",
-        journal_type: "general",
-        reference_code: refCode,
-        lines: [
-            { account_id: cashAccount.id, dc: "debit", amount: 50.00 },
-            { account_id: revenueAccount.id, dc: "credit", amount: 50.00 },
-        ],
-        documents: [{ upload_index: 0, title: "Doc" }],
-    });
+    const makePayload = (refCode) =>
+        JSON.stringify({
+            description: "Dup ref test",
+            journal_type: "general",
+            reference_code: refCode,
+            lines: [
+                { account_id: cashAccount.id, dc: "debit", amount: 50.0 },
+                { account_id: revenueAccount.id, dc: "credit", amount: 50.0 },
+            ],
+            documents: [{ upload_index: 0, title: "Doc" }],
+        });
 
     const server = app.listen(0);
     await new Promise((resolve) => server.once("listening", resolve));
@@ -524,10 +549,7 @@ test("POST new-journal-entry rejects duplicate reference_code", async () => {
         const { port } = server.address();
 
         // First submission — should succeed
-        const { body: body1, contentType: ct1 } = buildMultipart(
-            { payload: makePayload("JE-DUP-001") },
-            [{ name: "documents", filename: "d1.txt", content: "d1", contentType: "text/plain" }],
-        );
+        const { body: body1, contentType: ct1 } = buildMultipart({ payload: makePayload("JE-DUP-001") }, [{ name: "documents", filename: "d1.txt", content: "d1", contentType: "text/plain" }]);
         const res1 = await requestRaw({
             port,
             path: "/api/transactions/new-journal-entry",
@@ -537,10 +559,7 @@ test("POST new-journal-entry rejects duplicate reference_code", async () => {
         assert.equal(res1.statusCode, 200);
 
         // Second submission with same reference_code — should fail
-        const { body: body2, contentType: ct2 } = buildMultipart(
-            { payload: makePayload("JE-DUP-001") },
-            [{ name: "documents", filename: "d2.txt", content: "d2", contentType: "text/plain" }],
-        );
+        const { body: body2, contentType: ct2 } = buildMultipart({ payload: makePayload("JE-DUP-001") }, [{ name: "documents", filename: "d2.txt", content: "d2", contentType: "text/plain" }]);
         const res2 = await requestRaw({
             port,
             path: "/api/transactions/new-journal-entry",

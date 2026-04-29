@@ -524,14 +524,7 @@ router.post("/new-journal-entry", ensureNotAdminUser, uploadDoc.array("documents
         if (error?.code === "ERR_UNAUTHORIZED") {
             return sendApiError(res, 401, "ERR_UNAUTHORIZED");
         }
-        if (
-            error?.code === "ERR_PLEASE_FILL_ALL_FIELDS"
-            || error?.code === "ERR_INVALID_SELECTION"
-            || error?.code === "ERR_NO_FILE_UPLOADED"
-            || error?.code === "ERR_INVALID_FILE_TYPE"
-            || error?.code === "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE"
-            || error?.code === "ERR_JOURNAL_ENTRY_NOT_BALANCED"
-        ) {
+        if (error?.code === "ERR_PLEASE_FILL_ALL_FIELDS" || error?.code === "ERR_INVALID_SELECTION" || error?.code === "ERR_NO_FILE_UPLOADED" || error?.code === "ERR_INVALID_FILE_TYPE" || error?.code === "ERR_JOURNAL_REFERENCE_CODE_NOT_AVAILABLE" || error?.code === "ERR_JOURNAL_DUPLICATE_ACCOUNT" || error?.code === "ERR_JOURNAL_ENTRY_NOT_BALANCED") {
             return sendApiError(res, 400, error.code);
         }
         return sendApiError(res, 500, "ERR_INTERNAL_SERVER");

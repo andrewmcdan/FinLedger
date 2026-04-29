@@ -565,7 +565,7 @@ test("journal queue can be filtered to adjusting entries by journal type", async
     }
 });
 
-test("administrator cannot access journal queue/detail or approval actions", async () => {
+test("administrator cannot access journal queue or approval actions but can open journal detail", async () => {
     const admin = await insertUser({ username: "admin_route_3", email: "admin_route_3@example.com", role: "administrator" });
     const accountant = await insertUser({ username: "acct_route_3", email: "acct_route_3@example.com", role: "accountant" });
     const adminToken = "admin-route-token-3";
@@ -619,8 +619,9 @@ test("administrator cannot access journal queue/detail or approval actions", asy
             path: `/api/transactions/journal-entry/${seeded.journalEntryId}`,
             headers: authHeaders({ userId: admin.id, token: adminToken }),
         });
-        assert.equal(detail.statusCode, 403);
-        assert.equal(detail.body.errorCode, "ERR_FORBIDDEN");
+        assert.equal(detail.statusCode, 200);
+        assert.equal(detail.body.journal_entry.id, seeded.journalEntryId);
+        assert.equal(detail.body.lines.length, 2);
 
         const approve = await requestJson({
             port,
@@ -985,10 +986,7 @@ test("journal submission stores debit lines before credit lines even when submit
         assert.equal(response.statusCode, 200);
         assert.equal(response.body.messageCode, "MSG_JOURNAL_ENTRY_CREATED_SUCCESS");
 
-        const lineRows = await db.query(
-            "SELECT line_no, account_id, dc FROM journal_entry_lines WHERE journal_entry_id = $1 ORDER BY line_no ASC, id ASC",
-            [response.body.journal_entry.id],
-        );
+        const lineRows = await db.query("SELECT line_no, account_id, dc FROM journal_entry_lines WHERE journal_entry_id = $1 ORDER BY line_no ASC, id ASC", [response.body.journal_entry.id]);
         assert.equal(lineRows.rowCount, 2);
         assert.equal(lineRows.rows[0].dc, "debit");
         assert.equal(Number(lineRows.rows[0].account_id), Number(debitAccount.id));
@@ -1321,14 +1319,14 @@ test("journal document download supports manager/accountant and blocks administr
         assert.equal(accountantDownload.statusCode, 200);
         assert.equal(accountantDownload.bodyBuffer.toString("utf8"), "download-test-content");
 
-        const adminDownload = await requestJson({
+        const adminDownload = await requestRaw({
             port,
             method: "GET",
             path: downloadPath,
             headers: authHeaders({ userId: admin.id, token: adminToken }),
         });
-        assert.equal(adminDownload.statusCode, 403);
-        assert.equal(adminDownload.body.errorCode, "ERR_FORBIDDEN");
+        assert.equal(adminDownload.statusCode, 200);
+        assert.equal(adminDownload.bodyBuffer.toString("utf8"), "download-test-content");
 
         const missingDocument = await requestJson({
             port,

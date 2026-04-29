@@ -57,7 +57,7 @@ Current behavior:
 - Ledger rows load from posted `ledger_entries` data.
 - Account/date/search filters are applied server-side through `/api/transactions/ledger`.
 - Running balance is calculated per account and displayed in the ledger table.
-- Posting-reference links are visible in ledger/T-account rows.
+- Posting-reference links are visible in ledger/T-account rows and open the source journal entry in a read-only review modal.
 - Trial-balance quick link is visible in Ledger controls.
 
 ## What Exists in the Database
@@ -67,7 +67,6 @@ Current behavior:
 
 ## Current Limitations
 
-- Ledger drill-down currently routes back to Transactions queue context (`#/transactions?journal_id=...`).
 - Ledger shows posted activity; unposted journal work remains in Journal Queue until approved/posted.
 
 ## Related Sections
