@@ -18,6 +18,7 @@
 
 const db = require("../src/db/db");
 const accountsController = require("../src/controllers/accounts");
+const reportsController = require("../src/controllers/reports");
 const transactionsController = require("../src/controllers/transactions");
 
 const SOURCE_FILE = "accounting_solved_problem_markdown.md";
@@ -228,11 +229,11 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-04",
         description: "Owner contributed beginning assets to Addams & Family Inc.",
         lines: [
-            { accountName: "Cash", dc: "debit", amount: 10000.00 },
-            { accountName: "Accounts Receivable", dc: "debit", amount: 1500.00 },
-            { accountName: "Supplies", dc: "debit", amount: 1250.00 },
-            { accountName: "Office Equipment", dc: "debit", amount: 7500.00 },
-            { accountName: "Contributed Capital", dc: "credit", amount: 20250.00 },
+            { accountName: "Cash", dc: "debit", amount: 10000.0 },
+            { accountName: "Accounts Receivable", dc: "debit", amount: 1500.0 },
+            { accountName: "Supplies", dc: "debit", amount: 1250.0 },
+            { accountName: "Office Equipment", dc: "debit", amount: 7500.0 },
+            { accountName: "Contributed Capital", dc: "credit", amount: 20250.0 },
         ],
     },
     {
@@ -241,8 +242,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-04",
         description: "Paid three months of rent in advance.",
         lines: [
-            { accountName: "Prepaid Rent", dc: "debit", amount: 4500.00 },
-            { accountName: "Cash", dc: "credit", amount: 4500.00 },
+            { accountName: "Prepaid Rent", dc: "debit", amount: 4500.0 },
+            { accountName: "Cash", dc: "credit", amount: 4500.0 },
         ],
     },
     {
@@ -251,8 +252,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-04",
         description: "Paid annual property and casualty insurance premium.",
         lines: [
-            { accountName: "Prepaid Insurance", dc: "debit", amount: 1800.00 },
-            { accountName: "Cash", dc: "credit", amount: 1800.00 },
+            { accountName: "Prepaid Insurance", dc: "debit", amount: 1800.0 },
+            { accountName: "Cash", dc: "credit", amount: 1800.0 },
         ],
     },
     {
@@ -261,8 +262,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-06",
         description: "Received client advance payment for services to be provided.",
         lines: [
-            { accountName: "Cash", dc: "debit", amount: 3000.00 },
-            { accountName: "Unearned Revenue", dc: "credit", amount: 3000.00 },
+            { accountName: "Cash", dc: "debit", amount: 3000.0 },
+            { accountName: "Unearned Revenue", dc: "credit", amount: 3000.0 },
         ],
     },
     {
@@ -271,8 +272,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-07",
         description: "Purchased additional office furniture on account from Morrilton Company.",
         lines: [
-            { accountName: "Office Equipment", dc: "debit", amount: 1800.00 },
-            { accountName: "Accounts Payable", dc: "credit", amount: 1800.00 },
+            { accountName: "Office Equipment", dc: "debit", amount: 1800.0 },
+            { accountName: "Accounts Payable", dc: "credit", amount: 1800.0 },
         ],
     },
     {
@@ -281,8 +282,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-08",
         description: "Collected cash from clients on account.",
         lines: [
-            { accountName: "Cash", dc: "debit", amount: 800.00 },
-            { accountName: "Accounts Receivable", dc: "credit", amount: 800.00 },
+            { accountName: "Cash", dc: "debit", amount: 800.0 },
+            { accountName: "Accounts Receivable", dc: "credit", amount: 800.0 },
         ],
     },
     {
@@ -291,8 +292,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-11",
         description: "Paid newspaper advertising cost.",
         lines: [
-            { accountName: "Advertising Expense", dc: "debit", amount: 120.00 },
-            { accountName: "Cash", dc: "credit", amount: 120.00 },
+            { accountName: "Advertising Expense", dc: "debit", amount: 120.0 },
+            { accountName: "Cash", dc: "credit", amount: 120.0 },
         ],
     },
     {
@@ -301,8 +302,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-12",
         description: "Paid part of the Morrilton Company balance.",
         lines: [
-            { accountName: "Accounts Payable", dc: "debit", amount: 800.00 },
-            { accountName: "Cash", dc: "credit", amount: 800.00 },
+            { accountName: "Accounts Payable", dc: "debit", amount: 800.0 },
+            { accountName: "Cash", dc: "credit", amount: 800.0 },
         ],
     },
     {
@@ -311,8 +312,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-15",
         description: "Recorded services provided on account for April 4-15.",
         lines: [
-            { accountName: "Accounts Receivable", dc: "debit", amount: 2250.00 },
-            { accountName: "Service Revenue", dc: "credit", amount: 2250.00 },
+            { accountName: "Accounts Receivable", dc: "debit", amount: 2250.0 },
+            { accountName: "Service Revenue", dc: "credit", amount: 2250.0 },
         ],
     },
     {
@@ -321,8 +322,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-15",
         description: "Paid part-time receptionist for two weeks of salary.",
         lines: [
-            { accountName: "Salaries Expense", dc: "debit", amount: 400.00 },
-            { accountName: "Cash", dc: "credit", amount: 400.00 },
+            { accountName: "Salaries Expense", dc: "debit", amount: 400.0 },
+            { accountName: "Cash", dc: "credit", amount: 400.0 },
         ],
     },
     {
@@ -331,8 +332,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-15",
         description: "Recorded cash fees earned from cash clients for April 4-15.",
         lines: [
-            { accountName: "Cash", dc: "debit", amount: 3175.00 },
-            { accountName: "Service Revenue", dc: "credit", amount: 3175.00 },
+            { accountName: "Cash", dc: "debit", amount: 3175.0 },
+            { accountName: "Service Revenue", dc: "credit", amount: 3175.0 },
         ],
     },
     {
@@ -341,8 +342,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-18",
         description: "Paid cash for additional supplies.",
         lines: [
-            { accountName: "Supplies", dc: "debit", amount: 750.00 },
-            { accountName: "Cash", dc: "credit", amount: 750.00 },
+            { accountName: "Supplies", dc: "debit", amount: 750.0 },
+            { accountName: "Cash", dc: "credit", amount: 750.0 },
         ],
     },
     {
@@ -351,8 +352,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-22",
         description: "Recorded services provided on account for April 18-22.",
         lines: [
-            { accountName: "Accounts Receivable", dc: "debit", amount: 1100.00 },
-            { accountName: "Service Revenue", dc: "credit", amount: 1100.00 },
+            { accountName: "Accounts Receivable", dc: "debit", amount: 1100.0 },
+            { accountName: "Service Revenue", dc: "credit", amount: 1100.0 },
         ],
     },
     {
@@ -361,8 +362,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-22",
         description: "Recorded cash fees earned from cash clients for April 18-22.",
         lines: [
-            { accountName: "Cash", dc: "debit", amount: 1850.00 },
-            { accountName: "Service Revenue", dc: "credit", amount: 1850.00 },
+            { accountName: "Cash", dc: "debit", amount: 1850.0 },
+            { accountName: "Service Revenue", dc: "credit", amount: 1850.0 },
         ],
     },
     {
@@ -371,8 +372,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-25",
         description: "Collected cash from clients on account.",
         lines: [
-            { accountName: "Cash", dc: "debit", amount: 1600.00 },
-            { accountName: "Accounts Receivable", dc: "credit", amount: 1600.00 },
+            { accountName: "Cash", dc: "debit", amount: 1600.0 },
+            { accountName: "Accounts Receivable", dc: "credit", amount: 1600.0 },
         ],
     },
     {
@@ -381,8 +382,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-27",
         description: "Paid part-time receptionist for two more weeks of salary.",
         lines: [
-            { accountName: "Salaries Expense", dc: "debit", amount: 400.00 },
-            { accountName: "Cash", dc: "credit", amount: 400.00 },
+            { accountName: "Salaries Expense", dc: "debit", amount: 400.0 },
+            { accountName: "Cash", dc: "credit", amount: 400.0 },
         ],
     },
     {
@@ -391,8 +392,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-28",
         description: "Paid April telephone bill.",
         lines: [
-            { accountName: "Telephone Expense", dc: "debit", amount: 130.00 },
-            { accountName: "Cash", dc: "credit", amount: 130.00 },
+            { accountName: "Telephone Expense", dc: "debit", amount: 130.0 },
+            { accountName: "Cash", dc: "credit", amount: 130.0 },
         ],
     },
     {
@@ -401,8 +402,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-29",
         description: "Paid April electric bill.",
         lines: [
-            { accountName: "Utilities Expense", dc: "debit", amount: 200.00 },
-            { accountName: "Cash", dc: "credit", amount: 200.00 },
+            { accountName: "Utilities Expense", dc: "debit", amount: 200.0 },
+            { accountName: "Cash", dc: "credit", amount: 200.0 },
         ],
     },
     {
@@ -411,8 +412,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-29",
         description: "Recorded cash fees earned from cash clients for April 25-29.",
         lines: [
-            { accountName: "Cash", dc: "debit", amount: 2050.00 },
-            { accountName: "Service Revenue", dc: "credit", amount: 2050.00 },
+            { accountName: "Cash", dc: "debit", amount: 2050.0 },
+            { accountName: "Service Revenue", dc: "credit", amount: 2050.0 },
         ],
     },
     {
@@ -421,8 +422,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-29",
         description: "Recorded services provided on account for April 25-29.",
         lines: [
-            { accountName: "Accounts Receivable", dc: "debit", amount: 1000.00 },
-            { accountName: "Service Revenue", dc: "credit", amount: 1000.00 },
+            { accountName: "Accounts Receivable", dc: "debit", amount: 1000.0 },
+            { accountName: "Service Revenue", dc: "credit", amount: 1000.0 },
         ],
     },
     {
@@ -431,8 +432,8 @@ const GENERAL_ENTRIES = [
         entryDate: "2002-04-29",
         description: "Recorded salary paid to John from the company.",
         lines: [
-            { accountName: "Salaries Expense", dc: "debit", amount: 4500.00 },
-            { accountName: "Cash", dc: "credit", amount: 4500.00 },
+            { accountName: "Salaries Expense", dc: "debit", amount: 4500.0 },
+            { accountName: "Cash", dc: "credit", amount: 4500.0 },
         ],
     },
 ];
@@ -447,8 +448,8 @@ const ADJUSTING_ENTRIES = [
         periodEndDate: "2002-04-30",
         notes: "Source adjustment a: Insurance expired in April, $150.",
         lines: [
-            { accountName: "Insurance Expense", dc: "debit", amount: 150.00 },
-            { accountName: "Prepaid Insurance", dc: "credit", amount: 150.00 },
+            { accountName: "Insurance Expense", dc: "debit", amount: 150.0 },
+            { accountName: "Prepaid Insurance", dc: "credit", amount: 150.0 },
         ],
     },
     {
@@ -460,8 +461,8 @@ const ADJUSTING_ENTRIES = [
         periodEndDate: "2002-04-30",
         notes: "Source adjustment b: Supplies on hand April 29 were $1,020, so supplies used were $980.",
         lines: [
-            { accountName: "Supplies Expense", dc: "debit", amount: 980.00 },
-            { accountName: "Supplies", dc: "credit", amount: 980.00 },
+            { accountName: "Supplies Expense", dc: "debit", amount: 980.0 },
+            { accountName: "Supplies", dc: "credit", amount: 980.0 },
         ],
     },
     {
@@ -473,8 +474,8 @@ const ADJUSTING_ENTRIES = [
         periodEndDate: "2002-04-30",
         notes: "Source adjustment c: Depreciation for the office equipment in April, $500.",
         lines: [
-            { accountName: "Depreciation Expense", dc: "debit", amount: 500.00 },
-            { accountName: "Accumulated Depreciation", dc: "credit", amount: 500.00 },
+            { accountName: "Depreciation Expense", dc: "debit", amount: 500.0 },
+            { accountName: "Accumulated Depreciation", dc: "credit", amount: 500.0 },
         ],
     },
     {
@@ -486,8 +487,8 @@ const ADJUSTING_ENTRIES = [
         periodEndDate: "2002-04-30",
         notes: "Source adjustment d: Accrued receptionist salary on April 30, $20.",
         lines: [
-            { accountName: "Salaries Expense", dc: "debit", amount: 20.00 },
-            { accountName: "Salaries Payable", dc: "credit", amount: 20.00 },
+            { accountName: "Salaries Expense", dc: "debit", amount: 20.0 },
+            { accountName: "Salaries Payable", dc: "credit", amount: 20.0 },
         ],
     },
     {
@@ -499,8 +500,8 @@ const ADJUSTING_ENTRIES = [
         periodEndDate: "2002-04-30",
         notes: "Source adjustment e: Rent expired in April, $1,500.",
         lines: [
-            { accountName: "Rent Expense", dc: "debit", amount: 1500.00 },
-            { accountName: "Prepaid Rent", dc: "credit", amount: 1500.00 },
+            { accountName: "Rent Expense", dc: "debit", amount: 1500.0 },
+            { accountName: "Prepaid Rent", dc: "credit", amount: 1500.0 },
         ],
     },
     {
@@ -512,8 +513,8 @@ const ADJUSTING_ENTRIES = [
         periodEndDate: "2002-04-30",
         notes: "Source adjustment f: Earned $2,000 of services previously paid for on April 6.",
         lines: [
-            { accountName: "Unearned Revenue", dc: "debit", amount: 2000.00 },
-            { accountName: "Service Revenue", dc: "credit", amount: 2000.00 },
+            { accountName: "Unearned Revenue", dc: "debit", amount: 2000.0 },
+            { accountName: "Service Revenue", dc: "credit", amount: 2000.0 },
         ],
     },
 ];
@@ -525,66 +526,87 @@ const CLOSING_ENTRIES = [
         entryDate: CLOSING_POST_DATE,
         description: "Close April 2002 revenue and expense accounts to Retained Earnings.",
         lines: [
-            { accountName: "Service Revenue", dc: "debit", amount: 13425.00 },
-            { accountName: "Insurance Expense", dc: "credit", amount: 150.00 },
-            { accountName: "Depreciation Expense", dc: "credit", amount: 500.00 },
-            { accountName: "Rent Expense", dc: "credit", amount: 1500.00 },
-            { accountName: "Supplies Expense", dc: "credit", amount: 980.00 },
-            { accountName: "Salaries Expense", dc: "credit", amount: 5320.00 },
-            { accountName: "Telephone Expense", dc: "credit", amount: 130.00 },
-            { accountName: "Utilities Expense", dc: "credit", amount: 200.00 },
-            { accountName: "Advertising Expense", dc: "credit", amount: 120.00 },
-            { accountName: "Retained Earnings", dc: "credit", amount: 4525.00 },
+            { accountName: "Service Revenue", dc: "debit", amount: 13425.0 },
+            { accountName: "Insurance Expense", dc: "credit", amount: 150.0 },
+            { accountName: "Depreciation Expense", dc: "credit", amount: 500.0 },
+            { accountName: "Rent Expense", dc: "credit", amount: 1500.0 },
+            { accountName: "Supplies Expense", dc: "credit", amount: 980.0 },
+            { accountName: "Salaries Expense", dc: "credit", amount: 5320.0 },
+            { accountName: "Telephone Expense", dc: "credit", amount: 130.0 },
+            { accountName: "Utilities Expense", dc: "credit", amount: 200.0 },
+            { accountName: "Advertising Expense", dc: "credit", amount: 120.0 },
+            { accountName: "Retained Earnings", dc: "credit", amount: 4525.0 },
         ],
     },
 ];
 
 const EXPECTED_ADJUSTED_BALANCES = {
-    Cash: 8875.00,
-    "Accounts Receivable": 3450.00,
-    Supplies: 1020.00,
-    "Prepaid Rent": 3000.00,
-    "Prepaid Insurance": 1650.00,
-    "Office Equipment": 9300.00,
-    "Accumulated Depreciation": 500.00,
-    "Accounts Payable": 1000.00,
-    "Salaries Payable": 20.00,
-    "Unearned Revenue": 1000.00,
-    "Contributed Capital": 20250.00,
-    "Retained Earnings": 0.00,
-    "Service Revenue": 13425.00,
-    "Insurance Expense": 150.00,
-    "Depreciation Expense": 500.00,
-    "Rent Expense": 1500.00,
-    "Supplies Expense": 980.00,
-    "Salaries Expense": 5320.00,
-    "Telephone Expense": 130.00,
-    "Utilities Expense": 200.00,
-    "Advertising Expense": 120.00,
+    Cash: 8875.0,
+    "Accounts Receivable": 3450.0,
+    Supplies: 1020.0,
+    "Prepaid Rent": 3000.0,
+    "Prepaid Insurance": 1650.0,
+    "Office Equipment": 9300.0,
+    "Accumulated Depreciation": 500.0,
+    "Accounts Payable": 1000.0,
+    "Salaries Payable": 20.0,
+    "Unearned Revenue": 1000.0,
+    "Contributed Capital": 20250.0,
+    "Retained Earnings": 0.0,
+    "Service Revenue": 13425.0,
+    "Insurance Expense": 150.0,
+    "Depreciation Expense": 500.0,
+    "Rent Expense": 1500.0,
+    "Supplies Expense": 980.0,
+    "Salaries Expense": 5320.0,
+    "Telephone Expense": 130.0,
+    "Utilities Expense": 200.0,
+    "Advertising Expense": 120.0,
 };
 
 const EXPECTED_POST_CLOSING_BALANCES = {
-    Cash: 8875.00,
-    "Accounts Receivable": 3450.00,
-    Supplies: 1020.00,
-    "Prepaid Rent": 3000.00,
-    "Prepaid Insurance": 1650.00,
-    "Office Equipment": 9300.00,
-    "Accumulated Depreciation": 500.00,
-    "Accounts Payable": 1000.00,
-    "Salaries Payable": 20.00,
-    "Unearned Revenue": 1000.00,
-    "Contributed Capital": 20250.00,
-    "Retained Earnings": 4525.00,
-    "Service Revenue": 0.00,
-    "Insurance Expense": 0.00,
-    "Depreciation Expense": 0.00,
-    "Rent Expense": 0.00,
-    "Supplies Expense": 0.00,
-    "Salaries Expense": 0.00,
-    "Telephone Expense": 0.00,
-    "Utilities Expense": 0.00,
-    "Advertising Expense": 0.00,
+    Cash: 8875.0,
+    "Accounts Receivable": 3450.0,
+    Supplies: 1020.0,
+    "Prepaid Rent": 3000.0,
+    "Prepaid Insurance": 1650.0,
+    "Office Equipment": 9300.0,
+    "Accumulated Depreciation": 500.0,
+    "Accounts Payable": 1000.0,
+    "Salaries Payable": 20.0,
+    "Unearned Revenue": 1000.0,
+    "Contributed Capital": 20250.0,
+    "Retained Earnings": 4525.0,
+    "Service Revenue": 0.0,
+    "Insurance Expense": 0.0,
+    "Depreciation Expense": 0.0,
+    "Rent Expense": 0.0,
+    "Supplies Expense": 0.0,
+    "Salaries Expense": 0.0,
+    "Telephone Expense": 0.0,
+    "Utilities Expense": 0.0,
+    "Advertising Expense": 0.0,
+};
+
+const ACCOUNT_DEFINITIONS_BY_NAME = new Map(ACCOUNT_DEFINITIONS.map((definition) => [definition.accountName, definition]));
+
+const EXPECTED_REPORT_TOTALS = {
+    trialBalance: {
+        totalDebits: 36195.0,
+        totalCredits: 36195.0,
+    },
+    balanceSheet: {
+        totalAssets: 26795.0,
+        totalLiabilities: 2020.0,
+        totalEquity: 24775.0,
+        totalLiabilitiesAndEquity: 26795.0,
+    },
+    retainedEarnings: {
+        beginningRetainedEarnings: 0.0,
+        netIncome: 4525.0,
+        distributions: 0.0,
+        endingRetainedEarnings: 4525.0,
+    },
 };
 
 function parseArgs(argv) {
@@ -688,9 +710,7 @@ function validateExistingAccount(existingAccount, definition) {
         mismatches.push(`subcategory=${existingAccount.subcategory_name}`);
     }
     if (mismatches.length > 0) {
-        throw new Error(
-            `Existing account "${definition.accountName}" does not match the solved-problem definition (${mismatches.join(", ")}).`,
-        );
+        throw new Error(`Existing account "${definition.accountName}" does not match the solved-problem definition (${mismatches.join(", ")}).`);
     }
 }
 
@@ -708,22 +728,7 @@ async function ensureAccounts(ownerId, changedByUserId) {
             continue;
         }
 
-        const created = await accountsController.createAccount(
-            ownerId,
-            definition.accountName,
-            definition.accountDescription,
-            definition.normalSide,
-            definition.category,
-            definition.subcategory,
-            0,
-            0,
-            0,
-            0,
-            definition.accountOrder,
-            definition.statementType,
-            `${SOURCE_LABEL} seeded from ${SOURCE_FILE}`,
-            changedByUserId,
-        );
+        const created = await accountsController.createAccount(ownerId, definition.accountName, definition.accountDescription, definition.normalSide, definition.category, definition.subcategory, 0, 0, 0, 0, definition.accountOrder, definition.statementType, `${SOURCE_LABEL} seeded from ${SOURCE_FILE}`, changedByUserId);
         accountsByName.set(definition.accountName, created);
         createdCount += 1;
     }
@@ -769,15 +774,7 @@ async function insertPendingJournalEntry({ entry, accountMap, createdByUserId })
              VALUES
                 ($1, $2::timestamp, $3, 'pending', $4, $5, $6, $6, $7)
              RETURNING id`,
-            [
-                entry.journalType,
-                entry.entryDate,
-                entry.description,
-                totals.totalDebits,
-                totals.totalCredits,
-                createdByUserId,
-                entry.referenceCode,
-            ],
+            [entry.journalType, entry.entryDate, entry.description, totals.totalDebits, totals.totalCredits, createdByUserId, entry.referenceCode],
         );
 
         const journalEntryId = Number(headerResult.rows[0].id);
@@ -791,15 +788,7 @@ async function insertPendingJournalEntry({ entry, accountMap, createdByUserId })
                  VALUES
                     ($1, $2, $3, $4, $5, $6, $7, $7)
                  RETURNING id`,
-                [
-                    journalEntryId,
-                    index + 1,
-                    line.accountId,
-                    line.dc,
-                    line.amount,
-                    line.lineDescription,
-                    createdByUserId,
-                ],
+                [journalEntryId, index + 1, line.accountId, line.dc, line.amount, line.lineDescription, createdByUserId],
             );
             persistedLines.push({
                 id: Number(lineResult.rows[0].id),
@@ -817,13 +806,7 @@ async function insertPendingJournalEntry({ entry, accountMap, createdByUserId })
                  VALUES
                     ($1, $2, $3::timestamp, $4, $5)
                  RETURNING id`,
-                [
-                    journalEntryId,
-                    entry.adjustmentReason,
-                    entry.periodEndDate,
-                    createdByUserId,
-                    entry.notes || null,
-                ],
+                [journalEntryId, entry.adjustmentReason, entry.periodEndDate, createdByUserId, entry.notes || null],
             );
 
             const adjustmentMetadataId = Number(metadataResult.rows[0].id);
@@ -833,14 +816,7 @@ async function insertPendingJournalEntry({ entry, accountMap, createdByUserId })
                         (adjustment_metadata_id, account_id, dc, amount, line_description, created_by)
                      VALUES
                         ($1, $2, $3, $4, $5, $6)`,
-                    [
-                        adjustmentMetadataId,
-                        line.accountId,
-                        line.dc,
-                        line.amount,
-                        line.lineDescription,
-                        createdByUserId,
-                    ],
+                    [adjustmentMetadataId, line.accountId, line.dc, line.amount, line.lineDescription, createdByUserId],
                 );
             }
         }
@@ -962,24 +938,206 @@ function assertExpectedBalanceMap(label, actualMap, expectedMap) {
 
 function assertExpectedTotals(label, actual, expected) {
     const fields = ["totalRevenue", "totalExpense", "netIncome"];
-    const mismatches = fields
-        .filter((field) => roundMoney(actual[field]) !== roundMoney(expected[field]))
-        .map((field) => `${field}: expected ${roundMoney(expected[field])}, got ${roundMoney(actual[field])}`);
+    const mismatches = fields.filter((field) => roundMoney(actual[field]) !== roundMoney(expected[field])).map((field) => `${field}: expected ${roundMoney(expected[field])}, got ${roundMoney(actual[field])}`);
 
     if (mismatches.length > 0) {
         throw new Error(`${label} verification failed:\n${mismatches.join("\n")}`);
     }
 }
 
-async function verifySeed({ includeClosing }) {
+function assertStatementHeadingMetadata(label, report) {
+    if (!report?.company_name || !report?.title_line || !report?.subtitle_line) {
+        throw new Error(`${label} verification failed:\nReport is missing formal heading metadata.`);
+    }
+    if (!Array.isArray(report.heading_lines) || report.heading_lines.length !== 3) {
+        throw new Error(`${label} verification failed:\nExpected exactly three heading lines, got ${Array.isArray(report?.heading_lines) ? report.heading_lines.length : 0}.`);
+    }
+}
+
+function assertExpectedLineAmounts(label, actualMap, expectedMap) {
+    const mismatches = [];
+    for (const [name, expected] of Object.entries(expectedMap)) {
+        const actual = roundMoney(actualMap.get(name));
+        if (actual !== roundMoney(expected)) {
+            mismatches.push(`${name}: expected ${roundMoney(expected)}, got ${actual}`);
+        }
+    }
+    if (mismatches.length > 0) {
+        throw new Error(`${label} verification failed:\n${mismatches.join("\n")}`);
+    }
+}
+
+function buildExpectedTrialBalanceLines(balanceMap) {
+    const expected = {};
+    for (const [accountName, balance] of Object.entries(balanceMap)) {
+        const definition = ACCOUNT_DEFINITIONS_BY_NAME.get(accountName);
+        if (!definition) {
+            continue;
+        }
+        const amount = roundMoney(balance);
+        expected[accountName] = definition.normalSide === "credit" ? { debit: 0.0, credit: amount } : { debit: amount, credit: 0.0 };
+    }
+    return expected;
+}
+
+function buildExpectedIncomeStatementLines(balanceMap) {
+    const revenue = {};
+    const expense = {};
+    for (const [accountName, balance] of Object.entries(balanceMap)) {
+        const definition = ACCOUNT_DEFINITIONS_BY_NAME.get(accountName);
+        if (!definition || definition.statementType !== "IS") {
+            continue;
+        }
+        if (definition.normalSide === "credit") {
+            revenue[accountName] = roundMoney(balance);
+        } else {
+            expense[accountName] = roundMoney(balance);
+        }
+    }
+    return { revenue, expense };
+}
+
+function buildExpectedBalanceSheetLines(balanceMap) {
+    const assets = {};
+    const liabilities = {};
+    const equity = {};
+
+    for (const [accountName, balance] of Object.entries(balanceMap)) {
+        const definition = ACCOUNT_DEFINITIONS_BY_NAME.get(accountName);
+        if (!definition || !["BS", "RE"].includes(definition.statementType)) {
+            continue;
+        }
+
+        const amount = roundMoney(balance);
+        if (definition.category === "Assets") {
+            assets[accountName] = definition.normalSide === "credit" ? -amount : amount;
+            continue;
+        }
+        if (definition.category === "Liabilities") {
+            liabilities[accountName] = definition.normalSide === "debit" ? -amount : amount;
+            continue;
+        }
+        if (/retained earnings/i.test(accountName)) {
+            equity[accountName] = EXPECTED_REPORT_TOTALS.retainedEarnings.endingRetainedEarnings;
+            continue;
+        }
+        equity[accountName] = definition.normalSide === "debit" ? -amount : amount;
+    }
+
+    return { assets, liabilities, equity };
+}
+
+async function verifyGeneratedReports({ userId }) {
+    const trialBalanceReport = await reportsController.generateTrialBalance({
+        userId,
+        asOfDate: APRIL_END,
+        runType: "adjusted",
+    });
+    assertStatementHeadingMetadata("Trial balance report", trialBalanceReport);
+
+    const expectedTrialBalanceLines = buildExpectedTrialBalanceLines(EXPECTED_ADJUSTED_BALANCES);
+    const actualTrialBalanceLines = new Map(
+        (trialBalanceReport.lines || []).map((line) => [
+            line.account_name,
+            {
+                debit: roundMoney(line.debit_balance),
+                credit: roundMoney(line.credit_balance),
+            },
+        ]),
+    );
+    const tbLineMismatches = [];
+    for (const [accountName, expected] of Object.entries(expectedTrialBalanceLines)) {
+        const actual = actualTrialBalanceLines.get(accountName) || { debit: 0.0, credit: 0.0 };
+        if (roundMoney(actual.debit) !== roundMoney(expected.debit) || roundMoney(actual.credit) !== roundMoney(expected.credit)) {
+            tbLineMismatches.push(`${accountName}: expected debit ${roundMoney(expected.debit)} / credit ${roundMoney(expected.credit)}, got debit ${roundMoney(actual.debit)} / credit ${roundMoney(actual.credit)}`);
+        }
+    }
+    if (tbLineMismatches.length > 0) {
+        throw new Error(`Trial balance report verification failed:\n${tbLineMismatches.join("\n")}`);
+    }
+    if (roundMoney(trialBalanceReport?.totals?.total_debits) !== EXPECTED_REPORT_TOTALS.trialBalance.totalDebits || roundMoney(trialBalanceReport?.totals?.total_credits) !== EXPECTED_REPORT_TOTALS.trialBalance.totalCredits) {
+        throw new Error(`Trial balance totals verification failed:\nexpected debits ${EXPECTED_REPORT_TOTALS.trialBalance.totalDebits} / credits ${EXPECTED_REPORT_TOTALS.trialBalance.totalCredits}, got debits ${roundMoney(trialBalanceReport?.totals?.total_debits)} / credits ${roundMoney(trialBalanceReport?.totals?.total_credits)}`);
+    }
+
+    const incomeStatementReport = await reportsController.generateIncomeStatement({
+        userId,
+        fromDate: APRIL_START,
+        toDate: APRIL_END,
+    });
+    assertStatementHeadingMetadata("Income statement report", incomeStatementReport);
+    const expectedIncomeStatementLines = buildExpectedIncomeStatementLines(EXPECTED_ADJUSTED_BALANCES);
+    assertExpectedLineAmounts("Income statement revenue lines", new Map((incomeStatementReport.revenue_lines || []).map((line) => [line.account_name, roundMoney(line.amount)])), expectedIncomeStatementLines.revenue);
+    assertExpectedLineAmounts("Income statement expense lines", new Map((incomeStatementReport.expense_lines || []).map((line) => [line.account_name, roundMoney(line.amount)])), expectedIncomeStatementLines.expense);
+    assertExpectedTotals(
+        "Income statement totals",
+        {
+            totalRevenue: incomeStatementReport?.totals?.total_revenue,
+            totalExpense: incomeStatementReport?.totals?.total_expense,
+            netIncome: incomeStatementReport?.totals?.net_income,
+        },
+        {
+            totalRevenue: 13425.0,
+            totalExpense: 8900.0,
+            netIncome: 4525.0,
+        },
+    );
+
+    const balanceSheetReport = await reportsController.generateBalanceSheet({
+        userId,
+        asOfDate: APRIL_END,
+    });
+    assertStatementHeadingMetadata("Balance sheet report", balanceSheetReport);
+    const expectedBalanceSheetLines = buildExpectedBalanceSheetLines(EXPECTED_ADJUSTED_BALANCES);
+    assertExpectedLineAmounts("Balance sheet asset lines", new Map((balanceSheetReport.assets || []).map((line) => [line.account_name, roundMoney(line.display_amount ?? line.amount)])), expectedBalanceSheetLines.assets);
+    assertExpectedLineAmounts("Balance sheet liability lines", new Map((balanceSheetReport.liabilities || []).map((line) => [line.account_name, roundMoney(line.display_amount ?? line.amount)])), expectedBalanceSheetLines.liabilities);
+    assertExpectedLineAmounts("Balance sheet equity lines", new Map((balanceSheetReport.equity || []).map((line) => [line.account_name, roundMoney(line.display_amount ?? line.amount)])), expectedBalanceSheetLines.equity);
+    if (
+        roundMoney(balanceSheetReport?.totals?.total_assets) !== EXPECTED_REPORT_TOTALS.balanceSheet.totalAssets ||
+        roundMoney(balanceSheetReport?.totals?.total_liabilities) !== EXPECTED_REPORT_TOTALS.balanceSheet.totalLiabilities ||
+        roundMoney(balanceSheetReport?.totals?.total_equity) !== EXPECTED_REPORT_TOTALS.balanceSheet.totalEquity ||
+        roundMoney(balanceSheetReport?.totals?.total_liabilities_and_equity) !== EXPECTED_REPORT_TOTALS.balanceSheet.totalLiabilitiesAndEquity
+    ) {
+        throw new Error(
+            `Balance sheet totals verification failed:\nexpected assets ${EXPECTED_REPORT_TOTALS.balanceSheet.totalAssets}, liabilities ${EXPECTED_REPORT_TOTALS.balanceSheet.totalLiabilities}, equity ${EXPECTED_REPORT_TOTALS.balanceSheet.totalEquity}, liabilities and equity ${EXPECTED_REPORT_TOTALS.balanceSheet.totalLiabilitiesAndEquity}; got assets ${roundMoney(balanceSheetReport?.totals?.total_assets)}, liabilities ${roundMoney(balanceSheetReport?.totals?.total_liabilities)}, equity ${roundMoney(balanceSheetReport?.totals?.total_equity)}, liabilities and equity ${roundMoney(balanceSheetReport?.totals?.total_liabilities_and_equity)}`,
+        );
+    }
+
+    const retainedEarningsReport = await reportsController.generateRetainedEarnings({
+        userId,
+        fromDate: APRIL_START,
+        toDate: APRIL_END,
+    });
+    assertStatementHeadingMetadata("Retained earnings report", retainedEarningsReport);
+    const actualRetainedEarnings = retainedEarningsReport?.values || {};
+    const expectedRetainedEarnings = EXPECTED_REPORT_TOTALS.retainedEarnings;
+    const retainedEarningsMismatches = [
+        ["beginningRetainedEarnings", roundMoney(actualRetainedEarnings.beginning_retained_earnings), expectedRetainedEarnings.beginningRetainedEarnings],
+        ["netIncome", roundMoney(actualRetainedEarnings.net_income), expectedRetainedEarnings.netIncome],
+        ["distributions", roundMoney(actualRetainedEarnings.distributions), expectedRetainedEarnings.distributions],
+        ["endingRetainedEarnings", roundMoney(actualRetainedEarnings.ending_retained_earnings), expectedRetainedEarnings.endingRetainedEarnings],
+    ].filter(([, actual, expected]) => actual !== expected);
+
+    if (retainedEarningsMismatches.length > 0) {
+        throw new Error(`Retained earnings report verification failed:\n${retainedEarningsMismatches.map(([field, actual, expected]) => `${field}: expected ${expected}, got ${actual}`).join("\n")}`);
+    }
+
+    return {
+        trialBalanceReport,
+        incomeStatementReport,
+        balanceSheetReport,
+        retainedEarningsReport,
+    };
+}
+
+async function verifySeed({ includeClosing, userId }) {
     const adjustedBalances = await computeBalancesAsOf(APRIL_END);
     assertExpectedBalanceMap("Adjusted balance verification", adjustedBalances, EXPECTED_ADJUSTED_BALANCES);
 
     const aprilIncomeStatement = await computeIncomeStatementTotals(APRIL_START, APRIL_END);
     assertExpectedTotals("Income statement verification", aprilIncomeStatement, {
-        totalRevenue: 13425.00,
-        totalExpense: 8900.00,
-        netIncome: 4525.00,
+        totalRevenue: 13425.0,
+        totalExpense: 8900.0,
+        netIncome: 4525.0,
     });
 
     if (includeClosing) {
@@ -987,9 +1145,12 @@ async function verifySeed({ includeClosing }) {
         assertExpectedBalanceMap("Post-closing verification", postClosingBalances, EXPECTED_POST_CLOSING_BALANCES);
     }
 
+    const generatedReports = await verifyGeneratedReports({ userId });
+
     return {
         adjustedBalances,
         aprilIncomeStatement,
+        generatedReports,
     };
 }
 
@@ -1006,11 +1167,7 @@ async function run() {
     console.log(`[${SEED_TAG}] Accounts created: ${createdCount}`);
     console.log(`[${SEED_TAG}] Accounts reused: ${reusedCount}`);
 
-    const allEntries = [
-        ...GENERAL_ENTRIES,
-        ...ADJUSTING_ENTRIES,
-        ...(options.includeClosing ? CLOSING_ENTRIES : []),
-    ];
+    const allEntries = [...GENERAL_ENTRIES, ...ADJUSTING_ENTRIES, ...(options.includeClosing ? CLOSING_ENTRIES : [])];
 
     const seedResults = {
         created: 0,
@@ -1037,15 +1194,14 @@ async function run() {
         }
     }
 
-    const verification = await verifySeed({ includeClosing: options.includeClosing });
+    const verification = await verifySeed({ includeClosing: options.includeClosing, userId: Number(creator.id) });
 
     console.log(`[${SEED_TAG}] Journal entries created this run: ${seedResults.created}`);
     console.log(`[${SEED_TAG}] Journal entries approved this run: ${seedResults.approved}`);
     console.log(`[${SEED_TAG}] Existing seed entries reused: ${seedResults.reusedExisting}`);
     console.log(`[${SEED_TAG}] Verified adjusted balances as of ${APRIL_END}`);
-    console.log(
-        `[${SEED_TAG}] Verified April income statement (${APRIL_START} to ${APRIL_END}): revenue ${verification.aprilIncomeStatement.totalRevenue.toFixed(2)}, expense ${verification.aprilIncomeStatement.totalExpense.toFixed(2)}, net income ${verification.aprilIncomeStatement.netIncome.toFixed(2)}`,
-    );
+    console.log(`[${SEED_TAG}] Verified April income statement (${APRIL_START} to ${APRIL_END}): revenue ${verification.aprilIncomeStatement.totalRevenue.toFixed(2)}, expense ${verification.aprilIncomeStatement.totalExpense.toFixed(2)}, net income ${verification.aprilIncomeStatement.netIncome.toFixed(2)}`);
+    console.log(`[${SEED_TAG}] Verified generated trial balance, income statement, balance sheet, and retained earnings statement against the solved problem.`);
     if (options.includeClosing) {
         console.log(`[${SEED_TAG}] Verified post-closing balances as of ${CLOSING_POST_DATE}`);
         console.log(`[${SEED_TAG}] Closing entries are posted on ${CLOSING_POST_DATE} to keep April 2002 adjusted reports intact.`);
@@ -1053,16 +1209,29 @@ async function run() {
     console.log(`[${SEED_TAG}] Complete.`);
 }
 
-run()
-    .catch((error) => {
-        console.error(`[${SEED_TAG}] Failed.`);
-        console.error(error.message || error);
-        process.exitCode = 1;
-    })
-    .finally(async () => {
-        try {
-            await db.closePool();
-        } catch (error) {
-            console.error(`[${SEED_TAG}] Failed to close DB pool: ${error.message}`);
-        }
-    });
+if (require.main === module) {
+    run()
+        .catch((error) => {
+            console.error(`[${SEED_TAG}] Failed.`);
+            console.error(error.message || error);
+            process.exitCode = 1;
+        })
+        .finally(async () => {
+            try {
+                await db.closePool();
+            } catch (error) {
+                console.error(`[${SEED_TAG}] Failed to close DB pool: ${error.message}`);
+            }
+        });
+}
+
+module.exports = {
+    ACCOUNT_DEFINITIONS,
+    EXPECTED_ADJUSTED_BALANCES,
+    EXPECTED_POST_CLOSING_BALANCES,
+    ensureAccounts,
+    findSeedUsers,
+    seedAndApproveEntry,
+    verifyGeneratedReports,
+    verifySeed,
+};

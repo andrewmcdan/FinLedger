@@ -15,7 +15,7 @@ Version Control
 | Version | Release | Responsible Party | Major Changes | Date |
 | :---- | :---- | :---- | :---- | :---- |
 | 0.1 | Initial Document Release for Comment | Andrew McDaniel | Initial draft | 2/20/2026 |
-| 1.0 | Baseline Release | Andrew McDaniel (Team Lead) | Approved baseline SPMP for course submission | 03/03/2026 |
+| 1.0 | Baseline Release | Andrew McDaniel (Team Lead) | Approved baseline STS for course submission | 03/03/2026 |
 
 Table of Contents
 
@@ -63,21 +63,41 @@ Table of Contents
 
 [3.1. Suite-Level Execution Definitions	7](#suite-level-execution-definitions)
 
-[3.1.1. Backend Integration and Verification Suite	7](#backend-integration-and-verification-suite)
+[3.1.1. Backend Automated Regression Suite	7](#backend-automated-regression-suite)
 
-[3.1.2. UI E2E Sprint 1 Suite	8](#ui-e2e-sprint-1-suite)
+[3.1.2. UI E2E Regression Suite	8](#ui-e2e-regression-suite)
 
 [3.2. Automated Backend Tests	9](#automated-backend-tests)
 
 [3.2.1. Server Smoke Test	9](#server-smoke-test)
 
-[3.2.2. Users Controller Integration Tests	9](#users-controller-integration-tests)
+[3.2.2. Authentication Middleware Tests	9](#authentication-middleware-tests)
 
-[3.2.3. Accounts Controller Integration Tests	11](#accounts-controller-integration-tests)
+[3.2.3. Users Controller Integration Tests	10](#users-controller-integration-tests)
 
-[3.2.4. User Route Integration Tests	12](#user-route-integration-tests)
+[3.2.4. Accounts Controller Integration Tests	10](#accounts-controller-integration-tests)
 
-[3.3. Sprint 1 UI E2E Test Catalog	12](#sprint-1-ui-e2e-test-catalog)
+[3.2.5. Transactions Controller Integration Tests	10](#transactions-controller-integration-tests)
+
+[3.2.6. Authentication Route Integration Tests	11](#authentication-route-integration-tests)
+
+[3.2.7. User Route Integration Tests	11](#user-route-integration-tests)
+
+[3.2.8. Accounts and Audit Route Integration Tests	12](#accounts-and-audit-route-integration-tests)
+
+[3.2.9. Transactions and Journal Submission Route Integration Tests	12](#transactions-and-journal-submission-route-integration-tests)
+
+[3.2.10. Adjustments Route Integration Tests	13](#adjustments-route-integration-tests)
+
+[3.2.11. Reports Route Integration Tests	13](#reports-route-integration-tests)
+
+[3.2.12. Dashboard Route Integration Tests	13](#dashboard-route-integration-tests)
+
+[3.2.13. Miscellaneous Route Integration Tests	14](#miscellaneous-route-integration-tests)
+
+[3.2.14. Service and Utility Tests	14](#service-and-utility-tests)
+
+[3.3. UI E2E Test Catalog	15](#ui-e2e-test-catalog)
 
 1. # Introduction {#introduction}
 
@@ -89,11 +109,11 @@ Table of Contents
 
    This STS covers:
 
-- Software integration and verification tests executed with Node’s built-in ‘node:test’ runner.  
-- End-to-end UI test executed using Playwright.  
-- Test evidence collection using console output, database state validation, and Playwright reports in rich HTML.
+- Software integration and verification tests executed with Node's built-in `node:test` runner across middleware, controllers, routes, services, and utilities.  
+- End-to-end UI tests executed using Playwright against the current browser workflows.  
+- Test evidence collection using console output, database state validation, attached UI screenshots, and Playwright HTML reports.
 
-	The scope of this document will evolve as the team progresses through each sprint.
+	The scope of this document reflects the implemented automated-test baseline through the current project state.
 
 2. ## Abbreviations and Glossary {#abbreviations-and-glossary}
 
@@ -131,10 +151,21 @@ Table of Contents
 Test ID format:
 
 - "FL-SMOKE-xxx" for server smoke tests.  
+- "FL-MW-AUTH-xxx" for authentication middleware tests.  
 - "FL-BE-USR-xxx" for ‘users’ controller integration tests.  
 - "FL-BE-ACC-xxx" for ‘accounts’ controller integration tests.  
+- "FL-BE-TRN-xxx" for ‘transactions’ controller integration tests.  
+- "FL-RT-AUTH-xxx" for authentication route integration tests.  
 - "FL-RT-USR-xxx" for ‘users’ route integration tests.  
-- "FL-UI-S1-xxx" for Sprint 1 Playwright UI tests.
+- "FL-RT-ACC-xxx" for accounts and audit route integration tests.  
+- "FL-RT-TRN-xxx" for transactions and journal-submission route integration tests.  
+- "FL-RT-ADJ-xxx" for adjustment route integration tests.  
+- "FL-RT-RPT-xxx" for reports route integration tests.  
+- "FL-RT-DB-xxx" for dashboard route integration tests.  
+- "FL-RT-MISC-xxx" for message/image/document auxiliary route integration tests.  
+- "FL-SVC-xxx" for service-layer tests.  
+- "FL-UT-xxx" for utility tests.  
+- "FL-UI-S1-xxx" for the current Playwright UI tests in `tests/ui/sprint1.ui.spec.js` (legacy file/prefix naming retained).
 
 Verification method codes:
 
@@ -149,13 +180,13 @@ Pass criteria:
 
 - Command exits with code "0".  
 - All listed test cases complete without assertion failures.  
-- For UI tests, expected screenshots/attachments exist in Playwright report artifacts.
+- For UI tests, Playwright report artifacts are generated, attached step screenshots are available, and retry traces/failure screenshots are available when triggered by the Playwright configuration.
 
 2. # Tests Preparation {#tests-preparation}
 
    1. ## Backend Automated Test Preparation {#backend-automated-test-preparation}
 
-      Impacted tests: \`FL-SMOKE-\*\`, \`FL-BE-\*\`, \`FL-RT-\*\`
+      Impacted tests: \`FL-SMOKE-\*\`, \`FL-MW-\*\`, \`FL-BE-\*\`, \`FL-RT-\*\`, \`FL-SVC-\*\`, \`FL-UT-\*\`
 
       1. ### Hardware Preparation {#hardware-preparation}
 
@@ -184,10 +215,12 @@ Pass criteria:
 
    ‘npm test’
 
+   Note: the `pretest` script also invokes `npm run db-init:test`, so direct `npm test` execution reinitializes the test database automatically.
+
    3. ### Other Test Preparation {#other-test-preparation}
 
 - Avoid reusing production DB credentials in ‘.env.test’.  
-- Ensure no long-running process is already bound to the test server port.
+- Ensure no long-running process is already bound to the test server port if backend route tests are started manually outside the standard test runner.
 
   4. ### Safety, Security, and Privacy Precautions {#safety,-security,-and-privacy-precautions}
 
@@ -236,10 +269,12 @@ Pass criteria:
 
    ‘npm run test:ui’
 
+   Note: Playwright starts the application by using the `webServer.command` defined in `playwright.config.js`, which runs `npm run db-init:test` and then launches `src/server.js` with `.env.test`.
+
    3. ### Other Test Preparation {#other-test-preparation-1}
 
-- Ensure no conflicting process is using the configured port (defined in ‘env.test’, default of 3050\)  
-- Ensure test DB is initialized before running UI tests
+- Ensure no conflicting process is using the configured port (default `TEST_PORT` 3050 unless overridden).  
+- Ensure the `.env.test` values used by the Playwright web server point to a disposable test database.
 
   4. ### Safety, Security, and Privacy Precautions {#safety,-security,-and-privacy-precautions-1}
 
@@ -252,21 +287,21 @@ Pass criteria:
 		Run and verify:
 
 1. ‘npm run test:ui’ completes with exit code ‘0’  
-2. ‘npx playwright show-report’ open HTML report with all test and step artifacts.  
-3. ‘test-results/’ and ‘playwright-report/’ folders are generated after the test run and contain the proper artifacts. 
+2. ‘npx playwright show-report’ opens an HTML report with test results and attached screenshots.  
+3. ‘test-results/’ and ‘playwright-report/’ folders are generated after the test run and contain the expected artifacts. 
 
 3. # Test Descriptions (index) {#test-descriptions-(index)}
 
    1. ## Suite-Level Execution Definitions {#suite-level-execution-definitions}
 
-      1. ### Backend Integration and Verification Suite {#backend-integration-and-verification-suite}
+      1. ### Backend Automated Regression Suite {#backend-automated-regression-suite}
 
 | Test ID | FL-SUITE-BE-001 |
 | :---- | :---- |
 | Test Description | Executes all Node backend tests (\`node:test\`) |
-| Entry Requirement | Sprint 1 core auth/user/password flows; partial Sprint 2 account validation |
+| Entry Requirement | Current auth, user-management, accounts, transactions, adjustments, reports, dashboard, service, and utility implementations are present |
 | Initial Conditions | ‘.env.test’ file configured; PostgreSQL test DB reachable |
-| Test Inputs | Source files in tests/server.test.js, tests/controllers/\*.test.js, tests/routes/\*.test.js |
+| Test Inputs | Source files in tests/server.test.js, tests/middleware/\*.test.js, tests/controllers/\*.test.js, tests/routes/\*.test.js, tests/services/\*.test.js, tests/utils/\*.test.js |
 | Data Collection | Capture command output from npm test |
 | Test Outputs | Pass/fail summary and per-test status lines |
 | Assumptions and Constraints | Test DB can be truncated/reinitialized |
@@ -277,20 +312,20 @@ Test Procedure:
 | Step Num | Operator Actions | Expected Result |
 | :---- | :---- | :---- |
 | 1 | Run ‘npm run db-init:test’ | Test DB schema and data properly initialized |
-| 2 | Run ‘npm test’ | Test runner executes tests successfully.  |
+| 2 | Run ‘npm test’ | Test runner executes server, middleware, controller, route, service, and utility tests successfully.  |
 | 3 | Review Summary | All backend tests pass. |
 
-2. ### UI E2E Sprint 1 Suite {#ui-e2e-sprint-1-suite}
+2. ### UI E2E Regression Suite {#ui-e2e-regression-suite}
 
 | Test ID | FL-SUITE-UI-001 |
 | :---- | :---- |
-| Test Description | Execute Sprint 1 Playwright UI tests |
-| Entry Requirement | Sprint 1 UI login and password-validation behavior |
+| Test Description | Execute current Playwright UI regression tests |
+| Entry Requirement | Implemented login, registration validation, profile password-change, and transactions-page browser workflows |
 | Initial Conditions | Playwright installed, Chromium installed, .env.test configured |
 | Test Inputs | tests/ui/sprint1.ui.spec.js |
-| Data Collection | Attach screenshots to Playwright report, collect traces on retry	 |
+| Data Collection | Attach step screenshots to Playwright report, collect traces on retry, and capture failure screenshots per config	 |
 | Test Outputs | Console pass/fail \+ playwright-report/ \+ test-results/	 |
-| Assumptions and Constraints | Web server starts from webServer.command in config	 |
+| Assumptions and Constraints | Web server starts from webServer.command in config; the Playwright file name remains sprint1.ui.spec.js although it now covers additional smoke scenarios	 |
 | Expected Results | Exit code 0; all UI tests pass; screenshots available in report	 |
 
 Test Procedure:
@@ -307,83 +342,128 @@ Test Procedure:
 
 | Test ID | Test Description | Source |
 | :---- | :---- | :---- |
-| FL-SMOKE-001	 | server responds to GET /	 | tests/server.test.js |
+| FL-SMOKE-001 | server responds to base GET request and confirms the application starts under the test harness | tests/server.test.js |
 
-      2. ### Users Controller Integration Tests {#users-controller-integration-tests}
-
-| Test ID | Test Description | Source |
-| :---- | :---- | :---- |
-| FL-BE-USR-001 | getUserLoggedInStatus returns false when not logged in	 | tests/controllers/users.test.js |
-| FL-BE-USR-002 | getUserLoggedInStatus returns true and extends session	 | tests/controllers/users.test.js |
-| FL-BE-USR-003 | getUserLoggedInStatus returns false for expired session	 | tests/controllers/users.test.js |
-| FL-BE-USR-004 | isAdmin returns true only for admin with valid session	 | tests/controllers/users.test.js |
-| FL-BE-USR-005 | isAdmin returns false when token missing or session invalid	 | tests/controllers/users.test.js |
-| FL-BE-USR-006 | getUserById returns user and null for missing	 | tests/controllers/users.test.js |
-| FL-BE-USR-007 | getUserByEmail returns user and null for missing	 | tests/controllers/users.test.js |
-| FL-BE-USR-008 | getUserByResetToken returns user only when token valid	 | tests/controllers/users.test.js |
-| FL-BE-USR-009 | getUserByResetToken returns null for expired token	 | tests/controllers/users.test.js |
-| FL-BE-USR-010 | listUsers returns users ordered by id	 | tests/controllers/users.test.js |
-| FL-BE-USR-011 | listLoggedInUsers returns unique active users with latest login	 | tests/controllers/users.test.js |
-| FL-BE-USR-012 | listLoggedInUsers returns one row per user | tests/controllers/users.test.js |
-| FL-BE-USR-013 | approveUser updates status to active | tests/controllers/users.test.js |
-| FL-BE-USR-014 | rejectUser updates status to rejected | tests/controllers/users.test.js |
-| FL-BE-USR-015 | suspendUser and reinstateUser update suspension fields | tests/controllers/users.test.js |
-| FL-BE-USR-016 | changePassword enforces complexity and history | tests/controllers/users.test.js |
-| FL-BE-USR-017 | changePassword clears temp\_password flag | tests/controllers/users.test.js |
-| FL-BE-USR-018 | createUser creates user and sends temp password email when needed | tests/controllers/users.test.js |
-| FL-BE-USR-019 | createUser rejects invalid role and missing required fields | tests/controllers/users.test.js |
-| FL-BE-USR-020 | updateSecurityQuestions \+ verifySecurityAnswers | tests/controllers/users.test.js |
-| FL-BE-USR-021 | updateSecurityQuestions rejects non-3 question sets | tests/controllers/users.test.js |
-| FL-BE-USR-022 | verifySecurityAnswers rejects non-3 answers | tests/controllers/users.test.js |
-| FL-BE-USR-023 | logoutInactiveUsers removes expired sessions | tests/controllers/users.test.js |
-| FL-BE-USR-024 | unsuspendExpiredSuspensions restores active status | tests/controllers/users.test.js |
-| FL-BE-USR-025 | sendPasswordExpiryWarnings sends once per day and tracks | tests/controllers/users.test.js |
-| FL-BE-USR-026 | sendPasswordExpiryWarnings skips users outside warning window | tests/controllers/users.test.js |
-| FL-BE-USR-027 | suspendUsersWithExpiredPasswords suspends and logs email | tests/controllers/users.test.js |
-| FL-BE-USR-028 | suspendUsersWithExpiredPasswords ignores non-expired users | tests/controllers/users.test.js |
-| FL-BE-USR-029 | changePasswordWithCurrentPassword updates password when current password matches | tests/controllers/users.test.js |
-| FL-BE-USR-030 | changePasswordWithCurrentPassword rejects invalid current password | tests/controllers/users.test.js |
-| FL-BE-USR-031 | updateSecurityQuestionsWithCurrentPassword updates questions when current password matches | tests/controllers/users.test.js |
-| FL-BE-USR-032 | updateSecurityQuestionsWithCurrentPassword rejects invalid current password | tests/controllers/users.test.js |
-| FL-BE-USR-033 | updateUserProfile updates provided fields and returns updated user | tests/controllers/users.test.js |
-| FL-BE-USR-034 | updateUserProfile returns null when no updates provided | tests/controllers/users.test.js |
-| FL-BE-USR-035 | updateUserProfile returns null when user missing | tests/controllers/users.test.js |
-| FL-BE-USR-036 | deleteUserById removes user record | tests/controllers/users.test.js |
-| FL-BE-USR-037 | setUserPassword updates password hash and temp flag | tests/controllers/users.test.js |
-| FL-BE-USR-038 | setUserPassword rejects passwords that fail complexity checks | tests/controllers/users.test.js |
-| FL-BE-USR-039 | getUserByUsername returns user and null for missing | tests/controllers/users.test.js |
-
-      3. ### Accounts Controller Integration Tests {#accounts-controller-integration-tests}
+      2. ### Authentication Middleware Tests {#authentication-middleware-tests}
 
 | Test ID | Test Description | Source |
 | :---- | :---- | :---- |
-| FL-BE-ACC-001 | createAccount allows multiple accounts in same category/subcategory | tests/controllers/accounts.test.js |
-| FL-BE-ACC-002 | createAccount rejects invalid statement types | tests/controllers/accounts.test.js |
-| FL-BE-ACC-003 | createAccount rejects unknown categories or subcategories | tests/controllers/accounts.test.js |
+| FL-MW-AUTH-001 | public-path bypass, protected-route header validation, and invalid-session handling | tests/middleware/auth.test.js |
+| FL-MW-AUTH-002 | authenticated requests refresh session-expiry headers correctly | tests/middleware/auth.test.js |
+| FL-MW-AUTH-003 | temporary-password restrictions and protected page access behavior are enforced | tests/middleware/auth.test.js |
 
-      4. ### User Route Integration Tests {#user-route-integration-tests}
+      3. ### Users Controller Integration Tests {#users-controller-integration-tests}
 
 | Test ID | Test Description | Source |
 | :---- | :---- | :---- |
-| FL-RT-USR-001 | GET /api/users/security-questions-list is public and returns available security questions | tests/routes/users.test.js |
-| FL-RT-USR-002 | GET /api/users/get-user/:userId returns user details for admin | tests/routes/users.test.js |
-| FL-RT-USR-003 | GET /api/users/get-user/:userId rejects non-admins | tests/routes/users.test.js |
-| FL-RT-USR-004 | GET /api/users/list-users returns list for admin and rejects missing session | tests/routes/users.test.js |
-| FL-RT-USR-005 | POST /api/users/email-user sends email for admin and 400s on missing fields | tests/routes/users.test.js |
-| FL-RT-USR-006 | GET /api/users/approve-user/:userId approves pending user (and emails) | tests/routes/users.test.js |
-| FL-RT-USR-007 | GET /api/users/approve-user/:userId rejects non-pending users | tests/routes/users.test.js |
-| FL-RT-USR-008 | POST /api/users/change-password updates password with current password (multipart) | tests/routes/users.test.js |
-| FL-RT-USR-009 | POST /api/users/update-security-questions rejects invalid current password | tests/routes/users.test.js |
-| FL-RT-USR-010 | POST /api/users/register\_new\_user is public and creates pending user | tests/routes/users.test.js |
-| FL-RT-USR-011 | Password reset flow: GET /reset-password issues token, then /security-questions and /verify-security-answers | tests/routes/users.test.js |
-| FL-RT-USR-012 | Admin user management endpoints: suspend, reinstate, update-user-field, delete-user, reset-user-password | tests/routes/users.test.js |
+| FL-BE-USR-001 | session lookup helpers, admin checks, and user identity retrieval behave correctly for valid, missing, and expired sessions | tests/controllers/users.test.js |
+| FL-BE-USR-002 | approval, rejection, suspension, reinstatement, and logged-in-user listing update account state correctly | tests/controllers/users.test.js |
+| FL-BE-USR-003 | password change, temp-password clearing, password history, security-question update, and answer verification rules are enforced | tests/controllers/users.test.js |
+| FL-BE-USR-004 | createUser handles pending-user creation, duplicate username suffixing, invalid-role rejection, and email-trigger behavior | tests/controllers/users.test.js |
+| FL-BE-USR-005 | scheduled lifecycle helpers handle inactive logout, expired-suspension restoration, password-expiry warnings, and expired-password suspension | tests/controllers/users.test.js |
+| FL-BE-USR-006 | profile update, direct password-set, deleteUserById, and username lookup utilities behave correctly | tests/controllers/users.test.js |
 
-   3. ## Sprint 1 UI E2E Test Catalog {#sprint-1-ui-e2e-test-catalog}
+      4. ### Accounts Controller Integration Tests {#accounts-controller-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-BE-ACC-001 | createAccount accepts valid same-category/subcategory combinations and rejects invalid statement/category selections | tests/controllers/accounts.test.js |
+| FL-BE-ACC-002 | addCategory and addSubcategory preserve ordering when duplicate order indexes are inserted | tests/controllers/accounts.test.js |
+| FL-BE-ACC-003 | account create/update operations write audit history and no-op updates avoid unnecessary audit rows | tests/controllers/accounts.test.js |
+
+      5. ### Transactions Controller Integration Tests {#transactions-controller-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-BE-TRN-001 | approveJournalEntry posts ledger rows, rolls balances, and remains idempotent for already-processed journals | tests/controllers/transactions.test.js |
+| FL-BE-TRN-002 | rejectJournalEntry requires a reason, updates status/comment, and avoids ledger posting on rejection | tests/controllers/transactions.test.js |
+| FL-BE-TRN-003 | journal queue/detail, ledger listing, and journal-document download metadata queries return the expected review data | tests/controllers/transactions.test.js |
+
+      6. ### Authentication Route Integration Tests {#authentication-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-AUTH-001 | GET /api/auth/status returns correct logged-out and logged-in session states | tests/routes/auth.test.js |
+| FL-RT-AUTH-002 | POST /api/auth/logout validates headers and closes active sessions | tests/routes/auth.test.js |
+| FL-RT-AUTH-003 | POST /api/auth/login rejects unknown, inactive, suspended, and repeated-failure users while enforcing lockout logic | tests/routes/auth.test.js |
+| FL-RT-AUTH-004 | POST /api/auth/login authenticates valid users, restores expired suspensions, and flags temporary-password state | tests/routes/auth.test.js |
+
+      7. ### User Route Integration Tests {#user-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-USR-001 | public security-question and registration endpoints return expected data and create pending registrations | tests/routes/users.test.js |
+| FL-RT-USR-002 | administrator-only user retrieval, user listing, create-user, and update-user-field endpoints enforce RBAC and field validation | tests/routes/users.test.js |
+| FL-RT-USR-003 | admin email, account-contact email, approval, rejection, suspension, reinstatement, deletion, and password-reset routes perform the expected workflow side effects | tests/routes/users.test.js |
+| FL-RT-USR-004 | password change and security-question update routes require current-password validation | tests/routes/users.test.js |
+| FL-RT-USR-005 | password-reset token issuance, security-question validation, and three-attempt lockout behavior are enforced | tests/routes/users.test.js |
+
+      8. ### Accounts and Audit Route Integration Tests {#accounts-and-audit-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-ACC-001 | administrators can create accounts while manager/accountant roles are limited to the intended read-only or non-admin surfaces | tests/routes/accounts.test.js |
+| FL-RT-ACC-002 | manager/accountant restrictions on create, update, and deactivate operations are enforced | tests/routes/accounts.test.js |
+| FL-RT-ACC-003 | role-based page rendering exposes the intended account-email and audit features by role | tests/routes/accounts.test.js |
+| FL-RT-ACC-004 | account audit-history retrieval and filtered audit-page reporting behave correctly for authorized roles | tests/routes/accounts.test.js |
+
+      9. ### Transactions and Journal Submission Route Integration Tests {#transactions-and-journal-submission-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-TRN-001 | reference-code availability endpoint returns correct available/unavailable and validation-error responses | tests/routes/transactions_new_entry.test.js |
+| FL-RT-TRN-002 | new journal-entry submission enforces payload presence, JSON validity, required documents, balance validation, duplicate-account rejection, and duplicate reference-code rejection | tests/routes/transactions_new_entry.test.js |
+| FL-RT-TRN-003 | valid journal-entry submission persists balanced lines, stores documents, and creates the expected journal record | tests/routes/transactions_new_entry.test.js |
+| FL-RT-TRN-004 | manager users can list queue entries, fetch detail, approve, reject with reason, and review adjusting-entry filters | tests/routes/transactions.test.js |
+| FL-RT-TRN-005 | accountant and administrator role restrictions are enforced across queue, approval, and journal-review surfaces | tests/routes/transactions.test.js |
+| FL-RT-TRN-006 | journal submission notifications, debit-before-credit ordering, specific balance-error propagation, ledger filtering/running-balance behavior, and journal-document download rules operate correctly | tests/routes/transactions.test.js |
+
+      10. ### Adjustments Route Integration Tests {#adjustments-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-ADJ-001 | accountant users can create and list pending adjustment entries | tests/routes/adjustments.test.js |
+| FL-RT-ADJ-002 | manager approval posts ledger rows and non-manager approval attempts are rejected | tests/routes/adjustments.test.js |
+
+      11. ### Reports Route Integration Tests {#reports-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-RPT-001 | manager users can generate trial balance, income statement, balance sheet, and retained earnings reports | tests/routes/reports.test.js |
+| FL-RT-RPT-002 | accountant users are denied access to report-generation routes | tests/routes/reports.test.js |
+| FL-RT-RPT-003 | report email endpoint generates and sends CSV output for authorized users and rejects unauthorized roles | tests/routes/reports_email.test.js |
+
+      12. ### Dashboard Route Integration Tests {#dashboard-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-DB-001 | manager dashboard rendering includes financial ratios and workflow-alert content | tests/routes/dashboard.test.js |
+| FL-RT-DB-002 | administrator dashboard preserves user-management content while sharing dashboard summary and ratio components | tests/routes/dashboard.test.js |
+
+      13. ### Miscellaneous Route Integration Tests {#miscellaneous-route-integration-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-RT-MISC-001 | messages routes validate input and return catalog-backed message lookups | tests/routes/misc_routes.test.js |
+| FL-RT-MISC-002 | image route returns default and stored icons with the expected fallback behavior | tests/routes/misc_routes.test.js |
+| FL-RT-MISC-003 | user-docs placeholder routes return the current placeholder responses | tests/routes/misc_routes.test.js |
+
+      14. ### Service and Utility Tests {#service-and-utility-tests}
+
+| Test ID | Test Description | Source |
+| :---- | :---- | :---- |
+| FL-SVC-001 | SMTP transport configuration, attachment handling, and templated-email dispatch operate correctly | tests/services/email.test.js |
+| FL-SVC-002 | EJS email rendering composes the base layout correctly with and without optional button markup | tests/services/email_renderer.test.js |
+| FL-SVC-003 | message catalog lookup, replacement, de-duplication, caching, and fallback behavior operate correctly | tests/services/message_catalog.test.js |
+| FL-UT-001 | logger writes valid DB rows and handles nonexistent user IDs without violating foreign-key constraints | tests/utils/logger.test.js |
+| FL-UT-002 | sanitizeInput and generateRandomToken enforce escaping, normalization, and token-shape expectations | tests/utils/sanitize.test.js |
+| FL-UT-003 | cleanupUserData preserves referenced files and removes orphaned user-document files | tests/utils/utilities.test.js |
+
+   3. ## UI E2E Test Catalog {#ui-e2e-test-catalog}
 
 | Test ID | Test Description | Source |
 | :---- | :---- | :---- |
 | FL-UI-S1-001 | admin can sign in from the login UI | tests/ui/sprint1.ui.spec.js |
-| FL-UI-S1-002 | new user form shows and validates the starts-with-letter password rule | tests/ui/sprint1.ui.spec.js |
+| FL-UI-S1-002 | request-access form shows and validates the starts-with-letter password rule | tests/ui/sprint1.ui.spec.js |
 | FL-UI-S1-003 | profile change-password UI shows requirements and mismatch feedback | tests/ui/sprint1.ui.spec.js |
-
-## 
+| FL-UI-S1-004 | transactions page smoke verifies that a manager can open the queue modal and see live ledger rows | tests/ui/sprint1.ui.spec.js |

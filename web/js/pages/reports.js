@@ -18,10 +18,123 @@ const fetchWithAuth = async (url, options = {}) => {
     return response;
 };
 
-const formatCurrency = (value) => {
+const formatFinancialAmount = (value, { blankZero = false } = {}) => {
     const numeric = Number(value || 0);
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(numeric);
+    if (!Number.isFinite(numeric)) {
+        return "0.00";
+    }
+    if (blankZero && Math.abs(numeric) < 0.0005) {
+        return "";
+    }
+    const formatted = new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Math.abs(numeric));
+    return numeric < 0 ? `(${formatted})` : formatted;
 };
+
+const formatStatementDate = (value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized) {
+        return "";
+    }
+    const parsed = new Date(`${normalized}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) {
+        return normalized;
+    }
+    return new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+    }).format(parsed);
+};
+
+const isMonthEndRange = (fromDate, toDate) => {
+    const from = new Date(`${fromDate}T00:00:00.000Z`);
+    const to = new Date(`${toDate}T00:00:00.000Z`);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        return false;
+    }
+    const lastDay = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 0)).getUTCDate();
+    return from.getUTCFullYear() === to.getUTCFullYear() && from.getUTCMonth() === to.getUTCMonth() && from.getUTCDate() === 1 && to.getUTCDate() === lastDay;
+};
+
+const buildStatementDateLine = ({ asOfDate = "", fromDate = "", toDate = "" } = {}) => {
+    if (asOfDate) {
+        return `As of ${formatStatementDate(asOfDate)}`;
+    }
+    if (fromDate && toDate) {
+        if (isMonthEndRange(fromDate, toDate)) {
+            return `For the Month Ended ${formatStatementDate(toDate)}`;
+        }
+        return `For the Period ${formatStatementDate(fromDate)} to ${formatStatementDate(toDate)}`;
+    }
+    return "";
+};
+
+const renderStatementHeader = ({ companyName, title, dateLine }) => `
+    <header class="statement-header">
+        <p class="statement-header__company">${escapeHtml(companyName)}</p>
+        <p class="statement-header__title">${escapeHtml(title)}</p>
+        <p class="statement-header__date">${escapeHtml(dateLine)}</p>
+    </header>
+`;
+
+const renderStatementTable = ({ rowsHtml, totalLabel = "", totalAmount = null, emptyMessage = "No data available.", totalModifierClass = "" } = {}) => `
+    <table class="statement-table">
+        <tbody>
+            ${rowsHtml || `<tr><td>${escapeHtml(emptyMessage)}</td><td class="statement-table__amount"></td></tr>`}
+            ${totalLabel ? `<tr class="statement-table__total ${totalModifierClass}"><th scope="row">${escapeHtml(totalLabel)}</th><td class="statement-table__amount"><strong>${formatFinancialAmount(totalAmount)}</strong></td></tr>` : ""}
+        </tbody>
+    </table>
+`;
+
+const renderSingleAmountRows = (lines = [], amountSelector) =>
+    lines
+        .map((line) => {
+            const amount = typeof amountSelector === "function" ? amountSelector(line) : line?.amount;
+            return `<tr><td>${escapeHtml(line.account_name || line.label || line.metric || "")}</td><td class="statement-table__amount">${formatFinancialAmount(amount)}</td></tr>`;
+        })
+        .join("");
+
+const renderGroupedStatementSection = ({ heading, groups = [], totalLabel, totalAmount, emptyMessage }) => {
+    const hasGroups = Array.isArray(groups) && groups.length > 0;
+    return `
+        <section class="statement-section">
+            <h3 class="statement-section__title">${escapeHtml(heading)}</h3>
+            ${
+                hasGroups
+                    ? groups
+                          .map(
+                              (group) => `
+                                <div class="statement-group">
+                                    <h4 class="statement-group__title">${escapeHtml(group.title)}</h4>
+                                    ${renderStatementTable({
+                                        rowsHtml: renderSingleAmountRows(group.lines, (line) => line.display_amount ?? line.amount),
+                                        totalLabel: group.total_label,
+                                        totalAmount: group.total,
+                                    })}
+                                </div>
+                            `,
+                          )
+                          .join("")
+                    : renderStatementTable({ emptyMessage })
+            }
+            <div class="statement-section__grand-total">
+                <span>${escapeHtml(totalLabel)}</span>
+                <strong>${formatFinancialAmount(totalAmount)}</strong>
+            </div>
+        </section>
+    `;
+};
+
+const buildReportChrome = ({ companyName, title, dateLine, bodyHtml, modifierClass = "" }) => `
+    <article class="report-sheet ${modifierClass}">
+        ${renderStatementHeader({ companyName, title, dateLine })}
+        ${bodyHtml}
+    </article>
+`;
 
 const escapeHtml = (value) =>
     String(value || "")
@@ -72,18 +185,20 @@ const renderTrialBalance = (report) => {
         .map(
             (line) => `
             <tr>
-                <td>${escapeHtml(line.account_number)}</td>
                 <td>${escapeHtml(line.account_name)}</td>
-                <td>${escapeHtml(line.statement_type)}</td>
-                <td>${formatCurrency(line.debit_balance)}</td>
-                <td>${formatCurrency(line.credit_balance)}</td>
+                <td class="statement-table__amount">${formatFinancialAmount(line.debit_balance, { blankZero: true })}</td>
+                <td class="statement-table__amount">${formatFinancialAmount(line.credit_balance, { blankZero: true })}</td>
             </tr>`,
         )
         .join("");
 
+    const dateLine = buildStatementDateLine({ asOfDate: report?.as_of_date || "" });
+    const title = report?.title_line || "Adjusted Trial Balance";
+    const companyName = report?.company_name || "FinLedger";
+
     return {
-        title: "Trial Balance",
-        periodLabel: `As of ${escapeHtml(report?.as_of_date || "")}`,
+        title,
+        periodLabel: dateLine,
         highlight: report?.totals?.is_balanced ? "Trial balance is balanced." : "Trial balance is not balanced.",
         csvRows: rows.map((line) => ({
             account_number: line.account_number,
@@ -92,35 +207,42 @@ const renderTrialBalance = (report) => {
             debit_balance: line.debit_balance,
             credit_balance: line.credit_balance,
         })),
-        html: `
-            <table class="table table--wide">
-                <thead>
-                    <tr>
-                        <th>Account #</th>
-                        <th>Account</th>
-                        <th>Statement</th>
-                        <th>Debit</th>
-                        <th>Credit</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${htmlRows || '<tr><td colspan="5">No data available.</td></tr>'}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="3"><strong>Totals</strong></td>
-                        <td><strong>${formatCurrency(report?.totals?.total_debits)}</strong></td>
-                        <td><strong>${formatCurrency(report?.totals?.total_credits)}</strong></td>
-                    </tr>
-                </tfoot>
-            </table>
-        `,
+        html: buildReportChrome({
+            companyName,
+            title,
+            dateLine,
+            modifierClass: "report-sheet--trial-balance",
+            bodyHtml: `
+                <table class="statement-table statement-table--trial-balance">
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th class="statement-table__amount">Debit</th>
+                            <th class="statement-table__amount">Credit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${htmlRows || '<tr><td>No data available.</td><td class="statement-table__amount"></td><td class="statement-table__amount"></td></tr>'}
+                    </tbody>
+                    <tfoot>
+                        <tr class="statement-table__total statement-table__total--double-rule">
+                            <th scope="row">Totals</th>
+                            <td class="statement-table__amount"><strong>${formatFinancialAmount(report?.totals?.total_debits)}</strong></td>
+                            <td class="statement-table__amount"><strong>${formatFinancialAmount(report?.totals?.total_credits)}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `,
+        }),
     };
 };
 
 const renderIncomeStatement = (report) => {
-    const revenueRows = (report?.revenue_lines || []).map((line) => `<tr><td>${escapeHtml(line.account_number)}</td><td>${escapeHtml(line.account_name)}</td><td>${formatCurrency(line.amount)}</td></tr>`).join("");
-    const expenseRows = (report?.expense_lines || []).map((line) => `<tr><td>${escapeHtml(line.account_number)}</td><td>${escapeHtml(line.account_name)}</td><td>${formatCurrency(line.amount)}</td></tr>`).join("");
+    const revenueRows = renderSingleAmountRows(report?.revenue_lines || []);
+    const expenseRows = renderSingleAmountRows(report?.expense_lines || []);
+    const dateLine = buildStatementDateLine({ fromDate: report?.from_date || "", toDate: report?.to_date || "" });
+    const title = report?.title_line || "Income Statement";
+    const companyName = report?.company_name || "FinLedger";
 
     const csvRows = [
         ...(report?.revenue_lines || []).map((line) => ({ section: "Revenue", account_number: line.account_number, account_name: line.account_name, amount: line.amount })),
@@ -129,87 +251,156 @@ const renderIncomeStatement = (report) => {
     ];
 
     return {
-        title: "Income Statement",
-        periodLabel: `${escapeHtml(report?.from_date || "")} to ${escapeHtml(report?.to_date || "")}`,
-        highlight: `Net Income: ${formatCurrency(report?.totals?.net_income || 0)}`,
+        title,
+        periodLabel: dateLine,
+        highlight: `Net Income: ${formatFinancialAmount(report?.totals?.net_income || 0)}`,
         csvRows,
-        html: `
-            <div class="stack">
-                <h3>Revenue</h3>
-                <table class="table table--wide">
-                    <thead><tr><th>Account #</th><th>Account</th><th>Amount</th></tr></thead>
-                    <tbody>${revenueRows || '<tr><td colspan="3">No revenue data.</td></tr>'}</tbody>
-                </table>
-                <h3>Expenses</h3>
-                <table class="table table--wide">
-                    <thead><tr><th>Account #</th><th>Account</th><th>Amount</th></tr></thead>
-                    <tbody>${expenseRows || '<tr><td colspan="3">No expense data.</td></tr>'}</tbody>
-                </table>
-                <div class="notice">
-                    Total Revenue: <strong>${formatCurrency(report?.totals?.total_revenue || 0)}</strong>
-                    | Total Expense: <strong>${formatCurrency(report?.totals?.total_expense || 0)}</strong>
-                    | Net Income: <strong>${formatCurrency(report?.totals?.net_income || 0)}</strong>
+        html: buildReportChrome({
+            companyName,
+            title,
+            dateLine,
+            bodyHtml: `
+                <section class="statement-section">
+                    <h3 class="statement-section__title">Revenues</h3>
+                    ${renderStatementTable({
+                        rowsHtml: revenueRows,
+                        totalLabel: "Total Revenues",
+                        totalAmount: report?.totals?.total_revenue || 0,
+                        emptyMessage: "No revenue data.",
+                    })}
+                </section>
+                <section class="statement-section">
+                    <h3 class="statement-section__title">Expenses</h3>
+                    ${renderStatementTable({
+                        rowsHtml: expenseRows,
+                        totalLabel: "Total Expenses",
+                        totalAmount: report?.totals?.total_expense || 0,
+                        emptyMessage: "No expense data.",
+                    })}
+                </section>
+                <div class="statement-callout">
+                    <span>Net Income</span>
+                    <strong>${formatFinancialAmount(report?.totals?.net_income || 0)}</strong>
                 </div>
-            </div>
-        `,
+            `,
+        }),
     };
 };
 
 const renderBalanceSheet = (report) => {
-    const assetRows = (report?.assets || []).map((line) => `<tr><td>${escapeHtml(line.account_number)}</td><td>${escapeHtml(line.account_name)}</td><td>${formatCurrency(line.amount)}</td></tr>`).join("");
-    const liabRows = (report?.liabilities_and_equity || []).map((line) => `<tr><td>${escapeHtml(line.account_number)}</td><td>${escapeHtml(line.account_name)}</td><td>${formatCurrency(line.amount)}</td></tr>`).join("");
+    const dateLine = buildStatementDateLine({ asOfDate: report?.as_of_date || "" });
+    const title = report?.title_line || "Balance Sheet";
+    const companyName = report?.company_name || "FinLedger";
+    const equityRows = renderSingleAmountRows(report?.equity || [], (line) => line.display_amount ?? line.amount);
 
     const csvRows = [...(report?.assets || []).map((line) => ({ section: "Assets", account_number: line.account_number, account_name: line.account_name, amount: line.amount })), ...(report?.liabilities_and_equity || []).map((line) => ({ section: "Liabilities and Equity", account_number: line.account_number, account_name: line.account_name, amount: line.amount }))];
 
     return {
-        title: "Balance Sheet",
-        periodLabel: `As of ${escapeHtml(report?.as_of_date || "")}`,
+        title,
+        periodLabel: dateLine,
         highlight: report?.totals?.is_balanced ? "Balance Sheet is balanced." : "Balance Sheet is not balanced.",
         csvRows,
-        html: `
-            <div class="stack">
-                <h3>Assets</h3>
-                <table class="table table--wide">
-                    <thead><tr><th>Account #</th><th>Account</th><th>Amount</th></tr></thead>
-                    <tbody>${assetRows || '<tr><td colspan="3">No asset data.</td></tr>'}</tbody>
-                </table>
-                <h3>Liabilities and Equity</h3>
-                <table class="table table--wide">
-                    <thead><tr><th>Account #</th><th>Account</th><th>Amount</th></tr></thead>
-                    <tbody>${liabRows || '<tr><td colspan="3">No liability/equity data.</td></tr>'}</tbody>
-                </table>
-                <div class="notice">
-                    Total Assets: <strong>${formatCurrency(report?.totals?.total_assets || 0)}</strong>
-                    | Total Liabilities and Equity: <strong>${formatCurrency(report?.totals?.total_liabilities_and_equity || 0)}</strong>
+        html: buildReportChrome({
+            companyName,
+            title,
+            dateLine,
+            modifierClass: "report-sheet--balance-sheet",
+            bodyHtml: `
+                <div class="balance-sheet-grid">
+                    ${renderGroupedStatementSection({
+                        heading: "Assets",
+                        groups: report?.asset_groups || [],
+                        totalLabel: "Total Assets",
+                        totalAmount: report?.totals?.total_assets || 0,
+                        emptyMessage: "No asset data.",
+                    })}
+                    <section class="statement-section">
+                        <h3 class="statement-section__title">Liabilities</h3>
+                        ${
+                            (report?.liability_groups || []).length
+                                ? (report.liability_groups || [])
+                                      .map(
+                                          (group) => `
+                                            <div class="statement-group">
+                                                <h4 class="statement-group__title">${escapeHtml(group.title)}</h4>
+                                                ${renderStatementTable({
+                                                    rowsHtml: renderSingleAmountRows(group.lines, (line) => line.display_amount ?? line.amount),
+                                                    totalLabel: group.total_label,
+                                                    totalAmount: group.total,
+                                                })}
+                                            </div>
+                                        `,
+                                      )
+                                      .join("")
+                                : renderStatementTable({ emptyMessage: "No liability data." })
+                        }
+                        <div class="statement-section__grand-total">
+                            <span>Total Liabilities</span>
+                            <strong>${formatFinancialAmount(report?.totals?.total_liabilities || 0)}</strong>
+                        </div>
+
+                        <h3 class="statement-section__title statement-section__title--spaced">Stockholders' Equity</h3>
+                        ${renderStatementTable({
+                            rowsHtml: equityRows,
+                            totalLabel: "Total Stockholders' Equity",
+                            totalAmount: report?.totals?.total_equity || 0,
+                            emptyMessage: "No equity data.",
+                        })}
+
+                        <div class="statement-section__grand-total statement-section__grand-total--double-rule">
+                            <span>Total Liabilities and Stockholders' Equity</span>
+                            <strong>${formatFinancialAmount(report?.totals?.total_liabilities_and_equity || 0)}</strong>
+                        </div>
+                    </section>
                 </div>
-            </div>
-        `,
+            `,
+        }),
     };
 };
 
 const renderRetainedEarnings = (report) => {
     const values = report?.values || {};
+    const rows =
+        Array.isArray(report?.lines) && report.lines.length
+            ? report.lines
+            : [
+                  { label: "Beginning Retained Earnings", amount: values.beginning_retained_earnings || 0, kind: "base" },
+                  { label: "Add: Net Income", amount: values.net_income || 0, kind: "addition" },
+                  { label: "Less: Distributions", amount: values.distributions || 0, kind: "deduction" },
+                  { label: "Ending Retained Earnings", amount: values.ending_retained_earnings || 0, kind: "total" },
+              ];
+    const dateLine = buildStatementDateLine({ fromDate: report?.from_date || "", toDate: report?.to_date || "" });
+    const title = report?.title_line || "Statement of Retained Earnings";
+    const companyName = report?.company_name || "FinLedger";
     return {
-        title: "Retained Earnings Statement",
-        periodLabel: `${escapeHtml(report?.from_date || "")} to ${escapeHtml(report?.to_date || "")}`,
-        highlight: `Ending Retained Earnings: ${formatCurrency(values.ending_retained_earnings || 0)}`,
+        title,
+        periodLabel: dateLine,
+        highlight: `Ending Retained Earnings: ${formatFinancialAmount(values.ending_retained_earnings || 0)}`,
         csvRows: [
             { metric: "Beginning Retained Earnings", amount: values.beginning_retained_earnings || 0 },
             { metric: "Net Income", amount: values.net_income || 0 },
             { metric: "Distributions", amount: values.distributions || 0 },
             { metric: "Ending Retained Earnings", amount: values.ending_retained_earnings || 0 },
         ],
-        html: `
-            <table class="table table--wide">
-                <thead><tr><th>Metric</th><th>Amount</th></tr></thead>
-                <tbody>
-                    <tr><td>Beginning Retained Earnings</td><td>${formatCurrency(values.beginning_retained_earnings || 0)}</td></tr>
-                    <tr><td>Net Income</td><td>${formatCurrency(values.net_income || 0)}</td></tr>
-                    <tr><td>Distributions</td><td>${formatCurrency(values.distributions || 0)}</td></tr>
-                    <tr><td><strong>Ending Retained Earnings</strong></td><td><strong>${formatCurrency(values.ending_retained_earnings || 0)}</strong></td></tr>
-                </tbody>
-            </table>
-        `,
+        html: buildReportChrome({
+            companyName,
+            title,
+            dateLine,
+            bodyHtml: `
+                ${renderStatementTable({
+                    rowsHtml: rows
+                        .map(
+                            (line) => `
+                                <tr class="${line.kind === "total" ? "statement-table__emphasis" : ""}">
+                                    <td>${escapeHtml(line.label)}</td>
+                                    <td class="statement-table__amount">${formatFinancialAmount(line.amount)}</td>
+                                </tr>
+                            `,
+                        )
+                        .join(""),
+                })}
+            `,
+        }),
     };
 };
 
