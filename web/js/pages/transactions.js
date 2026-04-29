@@ -1,7 +1,7 @@
 const authHelpers = await loadFetchWithAuth();
 const { fetchWithAuth } = authHelpers;
 const domHelpers = await loadDomHelpers();
-const { createCell, createInput, createSelect, createTextarea } = domHelpers;
+const { appendOptions, createCell, createInput, createSelect, createTextarea } = domHelpers;
 
 let showLoadingOverlayFn, hideLoadingOverlayFn, showErrorModalFn, showMessageModalFn;
 let accountsList = [];
@@ -19,6 +19,60 @@ const LEDGER_DEFAULT_LIMIT = 200;
 let refreshJournalSubmitButtonStateFn = () => {};
 let sortDraftJournalRowsFn = () => {};
 let refreshJournalLinePresentationFn = () => {};
+let refreshJournalAccountOptionsFn = () => {};
+
+const normalizeJournalAccountId = (value) => {
+    const accountId = Number(value);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+        return null;
+    }
+    return accountId;
+};
+
+const buildAvailableJournalAccountOptions = ({ selectedAccountId = null, excludedAccountIds = new Set() } = {}) => {
+    const normalizedSelectedAccountId = normalizeJournalAccountId(selectedAccountId);
+    return accountsList
+        .filter((account) => {
+            const accountId = normalizeJournalAccountId(account?.id);
+            if (accountId === null) {
+                return false;
+            }
+            return accountId === normalizedSelectedAccountId || !excludedAccountIds.has(accountId);
+        })
+        .map((account) => ({ value: account.id, label: account.account_name }));
+};
+
+const populateJournalAccountSelect = (accountSelect, { selectedAccountId = null, excludedAccountIds = new Set(), autoSelectFirstAvailable = false } = {}) => {
+    if (!accountSelect) {
+        return null;
+    }
+
+    const normalizedSelectedAccountId = normalizeJournalAccountId(selectedAccountId);
+    const availableOptions = buildAvailableJournalAccountOptions({
+        selectedAccountId: normalizedSelectedAccountId,
+        excludedAccountIds,
+    });
+    let nextSelectedAccountId = normalizedSelectedAccountId;
+
+    const hasSelectedOption = nextSelectedAccountId !== null && availableOptions.some((option) => normalizeJournalAccountId(option.value) === nextSelectedAccountId);
+    if (!hasSelectedOption) {
+        nextSelectedAccountId = autoSelectFirstAvailable && availableOptions.length > 0 ? normalizeJournalAccountId(availableOptions[0].value) : null;
+    }
+
+    accountSelect.replaceChildren();
+    if (nextSelectedAccountId === null) {
+        const placeholderOption = document.createElement("option");
+        placeholderOption.value = "";
+        placeholderOption.textContent = availableOptions.length > 0 ? "Select account" : "No accounts available";
+        placeholderOption.selected = true;
+        accountSelect.appendChild(placeholderOption);
+    }
+    appendOptions(accountSelect, availableOptions, nextSelectedAccountId ?? "");
+    accountSelect.disabled = availableOptions.length === 0;
+    accountSelect.value = nextSelectedAccountId === null ? "" : String(nextSelectedAccountId);
+
+    return nextSelectedAccountId;
+};
 
 const loadAccounts = async () => {
     try {
@@ -281,7 +335,7 @@ const openJournalLineDocumentsModal = (lineNumber) => {
     journalLineDocumentsModal.setAttribute("aria-hidden", "false");
 };
 
-const buildJournalLine = async (rowNum) => {
+const buildJournalLine = async (rowNum, { selectedAccountId = null, excludedAccountIds = new Set(), autoSelectFirstAvailable = true } = {}) => {
     const { formatNumberAsCurrency, formatNumberWithCommas } = await loadNumericHelpers();
     formatNumberAsCurrencyFn = formatNumberAsCurrency;
     formatNumberWithCommasFn = formatNumberWithCommas;
@@ -293,9 +347,16 @@ const buildJournalLine = async (rowNum) => {
     const creditCell = createCell({});
     const actionsCell = createCell({});
 
-    const accountSelectOptions = accountsList.map((account) => ({ value: account.id, label: account.account_name }));
-    const accountSelect = createSelect(accountSelectOptions, "Journal line account");
+    const accountSelect = createSelect([], "", "data-journal-line-account-select");
     accountSelect.id = `account-${rowNum}`;
+    populateJournalAccountSelect(accountSelect, {
+        selectedAccountId,
+        excludedAccountIds,
+        autoSelectFirstAvailable,
+    });
+    accountSelect.addEventListener("change", () => {
+        refreshJournalAccountOptionsFn(row.parentElement);
+    });
     accountCell.appendChild(accountSelect);
     const descriptionInput = createInput("text", "", "data-line-note");
     descriptionInput.placeholder = "Optional line note";
@@ -310,11 +371,13 @@ const buildJournalLine = async (rowNum) => {
             debitInput.value = debitInput.value.replace(/[^0-9.-]/g, "");
         }
         refreshJournalLinePresentationFn(row);
-        sortDraftJournalRowsFn(row.parentElement);
         updateJournalEntryTotals(row.parentElement);
     });
     debitInput.addEventListener("blur", () => {
         debitInput.value = formatNumberAsCurrencyFn(debitInput.value);
+        refreshJournalLinePresentationFn(row);
+        sortDraftJournalRowsFn(row.parentElement);
+        updateJournalEntryTotals(row.parentElement);
     });
     debitInput.id = `debit-${rowNum}`;
     debitCell.appendChild(debitInput);
@@ -327,11 +390,13 @@ const buildJournalLine = async (rowNum) => {
             creditInput.value = creditInput.value.replace(/[^0-9.-]/g, "");
         }
         refreshJournalLinePresentationFn(row);
-        sortDraftJournalRowsFn(row.parentElement);
         updateJournalEntryTotals(row.parentElement);
     });
     creditInput.addEventListener("blur", () => {
         creditInput.value = formatNumberAsCurrencyFn(creditInput.value);
+        refreshJournalLinePresentationFn(row);
+        sortDraftJournalRowsFn(row.parentElement);
+        updateJournalEntryTotals(row.parentElement);
     });
     creditInput.id = `credit-${rowNum}`;
     creditCell.appendChild(creditInput);
@@ -544,9 +609,28 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         queueModal.setAttribute("aria-hidden", visible ? "false" : "true");
     };
 
+    const removeJournalIdFromHash = () => {
+        const currentHash = window.location.hash || "#/transactions";
+        const [hashPath, hashQuery = ""] = currentHash.split("?");
+        if (!hashQuery) {
+            return;
+        }
+
+        const hashParams = new URLSearchParams(hashQuery);
+        if (!hashParams.has("journal_id")) {
+            return;
+        }
+
+        hashParams.delete("journal_id");
+        const nextHash = hashParams.toString() ? `${hashPath}?${hashParams.toString()}` : hashPath;
+        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+        window.history.replaceState(window.history.state, "", nextUrl);
+    };
+
     const closeQueueModal = () => {
         activeQueueJournalEntryId = null;
         setQueueModalVisible(false);
+        removeJournalIdFromHash();
     };
 
     const setQueueDecisionButtonsState = ({ pending = false, busy = false } = {}) => {
@@ -677,7 +761,8 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             const descriptionCell = createCell({ text: line.line_description || "-", isLongText: true });
             const debitCell = createCell({ text: line.dc === "debit" ? formatCurrencyDisplay(line.amount) : "$0.00", isCurrency: true });
             const creditCell = createCell({ text: line.dc === "credit" ? formatCurrencyDisplay(line.amount) : "$0.00", isCurrency: true });
-            const lineDocsCell = createCell({});
+            const lineDocsCell = createCell({ isLongText: true });
+            lineDocsCell.className = "journal-queue-modal-line-docs";
 
             row.classList.toggle("journal-line-row--credit", isCreditLine);
             accountCell.classList.toggle("journal-line-account--credit", isCreditLine);
@@ -1225,15 +1310,83 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     });
 
     const draftJournalLines = document.querySelector("[data-journal-lines]");
+    const getSelectedJournalAccountIds = (journalLinesContainer = draftJournalLines, { excludeRow = null } = {}) => {
+        if (!journalLinesContainer) {
+            return new Set();
+        }
+        return Array.from(journalLinesContainer.querySelectorAll("tr")).reduce((selectedAccountIds, row) => {
+            if (row === excludeRow) {
+                return selectedAccountIds;
+            }
+            const accountId = normalizeJournalAccountId(row.querySelector("select[data-journal-line-account-select]")?.value);
+            if (accountId !== null) {
+                selectedAccountIds.add(accountId);
+            }
+            return selectedAccountIds;
+        }, new Set());
+    };
+
+    const getNextAvailableJournalAccountId = (journalLinesContainer = draftJournalLines) => {
+        const selectedAccountIds = getSelectedJournalAccountIds(journalLinesContainer);
+        const nextAvailableAccount = accountsList.find((account) => !selectedAccountIds.has(normalizeJournalAccountId(account.id)));
+        return normalizeJournalAccountId(nextAvailableAccount?.id);
+    };
+
+    const refreshJournalAccountOptions = (journalLinesContainer = draftJournalLines, { autoAssignUnselectedRows = false } = {}) => {
+        if (!journalLinesContainer) {
+            return;
+        }
+
+        const encounteredAccountIds = new Set();
+        Array.from(journalLinesContainer.querySelectorAll("tr")).forEach((row) => {
+            const accountSelect = row.querySelector("select[data-journal-line-account-select]");
+            if (!accountSelect) {
+                return;
+            }
+
+            const currentSelectedAccountId = normalizeJournalAccountId(accountSelect.value);
+            const uniqueSelectedAccountId = currentSelectedAccountId !== null && !encounteredAccountIds.has(currentSelectedAccountId) ? currentSelectedAccountId : null;
+            if (uniqueSelectedAccountId !== null) {
+                encounteredAccountIds.add(uniqueSelectedAccountId);
+            }
+
+            populateJournalAccountSelect(accountSelect, {
+                selectedAccountId: uniqueSelectedAccountId,
+                excludedAccountIds: getSelectedJournalAccountIds(journalLinesContainer, { excludeRow: row }),
+                autoSelectFirstAvailable: autoAssignUnselectedRows && uniqueSelectedAccountId === null,
+            });
+        });
+
+        refreshJournalSubmitButtonStateFn();
+    };
+    refreshJournalAccountOptionsFn = refreshJournalAccountOptions;
+
+    const appendDraftJournalLine = async (journalLinesContainer = draftJournalLines) => {
+        if (!journalLinesContainer) {
+            return;
+        }
+        const excludedAccountIds = getSelectedJournalAccountIds(journalLinesContainer);
+        const selectedAccountId = getNextAvailableJournalAccountId(journalLinesContainer);
+        journalLinesContainer.appendChild(
+            await buildJournalLine(draftJournalLineCounter++, {
+                selectedAccountId,
+                excludedAccountIds,
+                autoSelectFirstAvailable: selectedAccountId === null,
+            }),
+        );
+    };
+
     if (draftJournalLines) {
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+        await appendDraftJournalLine(draftJournalLines);
+        await appendDraftJournalLine(draftJournalLines);
+        updateJournalEntryTotals(draftJournalLines);
 
         const addLineButton = document.querySelector("[data-add-line-button]");
         if (addLineButton) {
             addLineButton.addEventListener("click", async () => {
-                draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+                await appendDraftJournalLine(draftJournalLines);
                 renumberJournalRows(draftJournalLines);
+                refreshJournalAccountOptions(draftJournalLines, { autoAssignUnselectedRows: true });
                 updateJournalEntryTotals(draftJournalLines);
             });
         }
@@ -1245,6 +1398,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                     row.remove();
                     draftJournalLineCounter = Math.max(1, draftJournalLineCounter - 1);
                     renumberJournalRows(draftJournalLines);
+                    refreshJournalAccountOptions(draftJournalLines, { autoAssignUnselectedRows: true });
                     updateJournalEntryTotals(draftJournalLines);
                 }
             }
@@ -1325,7 +1479,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                 descriptionInput.id = `description-${nextLineNumber}`;
             }
 
-            const accountSelect = row.querySelector("select");
+            const accountSelect = row.querySelector("select[data-journal-line-account-select]");
             if (accountSelect) {
                 accountSelect.id = `account-${nextLineNumber}`;
             }
@@ -1371,6 +1525,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         renumberJournalRows(journalLinesContainer);
     };
     sortDraftJournalRowsFn = sortDraftJournalRows;
+    sortDraftJournalRows(draftJournalLines);
 
     const getDuplicateJournalAccountRows = (journalLinesContainer = draftJournalLines) => {
         if (!journalLinesContainer) {
@@ -1378,8 +1533,8 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         }
         const rowsByAccountId = new Map();
         Array.from(journalLinesContainer.querySelectorAll("tr")).forEach((row) => {
-            const accountId = Number(row.querySelector("select")?.value);
-            if (!Number.isSafeInteger(accountId) || accountId <= 0 || getJournalLineType(row) === "empty") {
+            const accountId = normalizeJournalAccountId(row.querySelector("select[data-journal-line-account-select]")?.value);
+            if (accountId === null || getJournalLineType(row) === "empty") {
                 return;
             }
             const matchingRows = rowsByAccountId.get(accountId) || [];
@@ -1465,7 +1620,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             return;
         }
         if (issueCode === "ERR_JOURNAL_DUPLICATE_ACCOUNT") {
-            getDuplicateJournalAccountRows()[0]?.querySelector("select")?.focus();
+            getDuplicateJournalAccountRows()[0]?.querySelector("select[data-journal-line-account-select]")?.focus();
             return;
         }
         if (issueCode === JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE || issueCode === JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE) {
@@ -1700,9 +1855,10 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         }
         draftJournalLines.replaceChildren();
         draftJournalLineCounter = 1;
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+        await appendDraftJournalLine(draftJournalLines);
+        await appendDraftJournalLine(draftJournalLines);
         renumberJournalRows(draftJournalLines);
+        refreshJournalAccountOptions(draftJournalLines, { autoAssignUnselectedRows: true });
         updateJournalEntryTotals(draftJournalLines);
     };
 
@@ -1744,7 +1900,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         const seenAccountIds = new Set();
 
         rows.forEach((row, index) => {
-            const accountSelect = row.querySelector("select");
+            const accountSelect = row.querySelector("select[data-journal-line-account-select]");
             const description = row.querySelector("input[data-line-note]")?.value?.trim() || "";
             const debitInput = row.querySelector("input[data-debit-inputs]");
             const creditInput = row.querySelector("input[data-credit-inputs]");
@@ -1761,8 +1917,8 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             if (hasDebit && hasCredit) {
                 throw new Error("ERR_INVALID_SELECTION");
             }
-            const accountId = Number(accountSelect?.value);
-            if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+            const accountId = normalizeJournalAccountId(accountSelect?.value);
+            if (accountId === null) {
                 throw new Error("ERR_INVALID_SELECTION");
             }
             if (seenAccountIds.has(accountId)) {
@@ -1980,8 +2136,8 @@ async function loadNumericHelpers() {
 async function loadDomHelpers() {
     const moduleUrl = new URL("/js/utils/dom_helpers.js", window.location.origin).href;
     const module = await import(moduleUrl);
-    const { createCell, createInput, createSelect, createTextarea } = module;
-    return { createCell, createInput, createSelect, createTextarea };
+    const { appendOptions, createCell, createInput, createSelect, createTextarea } = module;
+    return { appendOptions, createCell, createInput, createSelect, createTextarea };
 }
 
 async function loadMessagesHelper() {

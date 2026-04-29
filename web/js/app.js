@@ -94,7 +94,10 @@ window.FinLedgerLoading = {
 };
 const brandLogo = document.querySelector("[data-brand-logo]");
 if (brandLogo) {
-    brandLogo.addEventListener("click", () => {
+    brandLogo.addEventListener("click", (event) => {
+        if (event.target.closest("#calendar_button, #popup_calendar_container")) {
+            return;
+        }
         window.location.hash = `#/${DEFAULT_ROUTE}`;
     });
     brandLogo.style.cursor = "pointer";
@@ -185,6 +188,10 @@ if (popupCalendarContainer) {
             console.log("Toggled calendar visibility");
         });
     }
+
+    popupCalendarContainer.addEventListener("click", (event) => {
+        event.stopPropagation();
+    });
 
     document.addEventListener("click", (event) => {
         if (!popupCalendarContainer.contains(event.target) && event.target !== calendarButton && !calendarButton?.contains(event.target)) {
@@ -358,20 +365,14 @@ async function fetchPageMarkup(pageName) {
     console.log("Fetch page markup failed:", response.status);
     if (response.status === 401) {
         let resJson = null;
-        try{
+        try {
             resJson = await response.clone().json();
-        }catch(err){
+        } catch (err) {
             console.error(err);
             return;
         }
         const errorCode = resJson?.errorCode;
-        const unauthenticatedCodes = new Set([
-            "ERR_MISSING_AUTH_HEADER",
-            "ERR_INVALID_AUTH_HEADER",
-            "ERR_MISSING_USER_ID_HEADER",
-            "ERR_INVALID_OR_EXPIRED_TOKEN",
-            "ERR_NOT_LOGGED_IN",
-        ]);
+        const unauthenticatedCodes = new Set(["ERR_MISSING_AUTH_HEADER", "ERR_INVALID_AUTH_HEADER", "ERR_MISSING_USER_ID_HEADER", "ERR_INVALID_OR_EXPIRED_TOKEN", "ERR_NOT_LOGGED_IN"]);
         if (unauthenticatedCodes.has(errorCode)) {
             window.location.hash = "#/not_logged_in";
             return;

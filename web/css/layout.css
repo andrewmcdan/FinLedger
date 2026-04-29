@@ -19,6 +19,8 @@
     background: rgba(255, 255, 255, 0.88);
     border-bottom: 1px solid var(--border);
     backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 200;
 }
 
 .brand {
@@ -26,6 +28,7 @@
     align-items: center;
     gap: 0.9rem;
     justify-self: start;
+    position: relative;
 }
 
 .brand-mark {
@@ -66,21 +69,28 @@
 #calendar_button {
     background-color: var(--accent);
     border-radius: 5px;
+    cursor: pointer;
+}
+
+#popup_calendar_container {
+    position: relative;
+    z-index: 260;
 }
 
 #popup_calendar {
     position: absolute;
-    top: 20px;
-    left: 20px;
+    top: calc(100% + 0.75rem);
+    left: 0;
     background-color: var(--surface-strong);
     border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: 0 16px 24px rgba(21, 31, 40, 0.14);
     padding: 0.75rem;
-    z-index: 10;
+    z-index: 280;
     height: 45rem;
     width: 40rem;
     overflow: hidden;
+    cursor: default;
 }
 
 .calendar {
@@ -90,6 +100,7 @@
     border-radius: 16px;
     box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
     overflow: hidden;
+    cursor: default;
 }
 
 .cal-header {
@@ -180,6 +191,7 @@
     align-items: center;
     justify-content: center;
     text-align: center;
+    cursor: default;
 }
 
 /* remove right border on last column */
@@ -246,6 +258,7 @@
 .user-profile-button-container {
     justify-self: end;
     position: relative;
+    z-index: 260;
 }
 
 #user_profile_button {
@@ -274,7 +287,7 @@
     transition:
         opacity 0.2s ease,
         transform 0.2s ease;
-    z-index: 1;
+    z-index: 280;
 }
 
 .user-profile-button-container.is-open .profile-menu {
