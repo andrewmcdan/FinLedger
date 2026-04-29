@@ -435,6 +435,8 @@ const REPORT_CONFIG = {
     },
 };
 
+const REPORT_PRINT_CLASS = "report-print-only";
+
 export default function initReports({ showLoadingOverlay, hideLoadingOverlay, showErrorModal } = {}) {
     const reportTypeSelect = document.querySelector("[data-report-type]");
     const asOfInput = document.querySelector("[data-report-as-of]");
@@ -458,6 +460,7 @@ export default function initReports({ showLoadingOverlay, hideLoadingOverlay, sh
 
     let lastRenderedCsvRows = [];
     let lastRenderedReportType = reportTypeSelect.value;
+    let isReportPrintInProgress = false;
 
     const now = todayIso();
     asOfInput.value = now;
@@ -511,6 +514,45 @@ export default function initReports({ showLoadingOverlay, hideLoadingOverlay, sh
         outputEl.innerHTML = rendered.html;
         lastRenderedCsvRows = rendered.csvRows || [];
         lastRenderedReportType = reportTypeSelect.value;
+    };
+
+    const clearPrintMode = () => {
+        document.body.classList.remove(REPORT_PRINT_CLASS);
+        isReportPrintInProgress = false;
+    };
+
+    const printRenderedReport = () => {
+        const reportSheet = outputEl.querySelector(".report-sheet");
+        if (!reportSheet) {
+            if (typeof showErrorModal === "function") {
+                showErrorModal("ERR_INVALID_SELECTION", false);
+            }
+            return;
+        }
+
+        if (isReportPrintInProgress) {
+            return;
+        }
+
+        isReportPrintInProgress = true;
+        document.body.classList.add(REPORT_PRINT_CLASS);
+
+        const handleAfterPrint = () => {
+            window.removeEventListener("afterprint", handleAfterPrint);
+            clearPrintMode();
+        };
+
+        window.addEventListener("afterprint", handleAfterPrint, { once: true });
+
+        try {
+            window.print();
+        } catch (error) {
+            window.removeEventListener("afterprint", handleAfterPrint);
+            clearPrintMode();
+            if (typeof showErrorModal === "function") {
+                showErrorModal("ERR_INTERNAL_SERVER", false);
+            }
+        }
     };
 
     const generateReport = async () => {
@@ -591,9 +633,7 @@ export default function initReports({ showLoadingOverlay, hideLoadingOverlay, sh
         }
     });
 
-    printBtn.addEventListener("click", () => {
-        window.print();
-    });
+    printBtn.addEventListener("click", printRenderedReport);
 
     updateVisibleDateInputs();
     generateReport();

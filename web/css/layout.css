@@ -1322,6 +1322,35 @@ textarea {
     .balance-sheet-grid {
         gap: 1rem;
     }
+
+    body.report-print-only #money-canvas,
+    body.report-print-only .app-header,
+    body.report-print-only #global_message_line,
+    body.report-print-only #loading_overlay,
+    body.report-print-only .page-header,
+    body.report-print-only [data-report-controls-card],
+    body.report-print-only [data-report-summary-card],
+    body.report-print-only [data-report-output-card] > h2 {
+        display: none !important;
+    }
+
+    body.report-print-only .app-main,
+    body.report-print-only .page,
+    body.report-print-only .page > .stack,
+    body.report-print-only [data-report-output-card] {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        max-width: none;
+    }
+
+    body.report-print-only [data-report-output],
+    body.report-print-only [data-report-output] .table-scroll {
+        overflow: visible !important;
+        padding: 0;
+    }
 }
 .hidden {
     display: none;
