@@ -324,6 +324,9 @@ test("manager can generate all sprint 4 financial reports", async () => {
 
         assert.equal(tbResponse.statusCode, 200);
         assert.equal(tbResponse.body.report_type, "trial_balance");
+        assert.equal(tbResponse.body.title_line, "Adjusted Trial Balance");
+        assert.equal(tbResponse.body.heading_lines.length, 3);
+        assert.ok(tbResponse.body.subtitle_line);
         assert.equal(tbResponse.body.totals.is_balanced, true);
 
         const isResponse = await requestJson({
@@ -335,6 +338,9 @@ test("manager can generate all sprint 4 financial reports", async () => {
 
         assert.equal(isResponse.statusCode, 200);
         assert.equal(isResponse.body.report_type, "income_statement");
+        assert.equal(isResponse.body.title_line, "Income Statement");
+        assert.equal(isResponse.body.heading_lines.length, 3);
+        assert.ok(isResponse.body.subtitle_line);
         assert.equal(Number(isResponse.body.totals.total_revenue), 1000);
         assert.equal(Number(isResponse.body.totals.total_expense), 300);
         assert.equal(Number(isResponse.body.totals.net_income), 700);
@@ -348,7 +354,12 @@ test("manager can generate all sprint 4 financial reports", async () => {
 
         assert.equal(bsResponse.statusCode, 200);
         assert.equal(bsResponse.body.report_type, "balance_sheet");
+        assert.equal(bsResponse.body.title_line, "Balance Sheet");
+        assert.equal(bsResponse.body.heading_lines.length, 3);
+        assert.ok(bsResponse.body.subtitle_line);
         assert.equal(Number(bsResponse.body.totals.total_assets), 700);
+        assert.equal(Number(bsResponse.body.totals.total_liabilities), 0);
+        assert.equal(Number(bsResponse.body.totals.total_equity), 700);
         assert.equal(Number(bsResponse.body.totals.total_liabilities_and_equity), 700);
         assert.equal(bsResponse.body.totals.is_balanced, true);
 
@@ -361,6 +372,9 @@ test("manager can generate all sprint 4 financial reports", async () => {
 
         assert.equal(reResponse.statusCode, 200);
         assert.equal(reResponse.body.report_type, "retained_earnings");
+        assert.equal(reResponse.body.title_line, "Statement of Retained Earnings");
+        assert.equal(reResponse.body.heading_lines.length, 3);
+        assert.ok(reResponse.body.subtitle_line);
         assert.equal(Number(reResponse.body.values.beginning_retained_earnings), 700);
         assert.equal(Number(reResponse.body.values.net_income), 0);
         assert.equal(Number(reResponse.body.values.distributions), 0);

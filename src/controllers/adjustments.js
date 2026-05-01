@@ -86,6 +86,16 @@ const normalizeReason = (value) => {
     return reason;
 };
 
+const ensureUniqueAccountIds = (lines = []) => {
+    const seenAccountIds = new Set();
+    for (const line of lines) {
+        if (seenAccountIds.has(line.account_id)) {
+            throw createCodeError("ERR_JOURNAL_DUPLICATE_ACCOUNT");
+        }
+        seenAccountIds.add(line.account_id);
+    }
+};
+
 const createAdjustmentEntry = async (userId, payload = {}) => {
     const createdBy = normalizePositiveInteger(userId);
     const description = String(payload.description || "").trim();
@@ -128,6 +138,8 @@ const createAdjustmentEntry = async (userId, payload = {}) => {
             line_description: lineDescription,
         };
     });
+
+    ensureUniqueAccountIds(normalizedLines);
 
     totalDebits = Number(totalDebits.toFixed(2));
     totalCredits = Number(totalCredits.toFixed(2));

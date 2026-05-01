@@ -42,11 +42,11 @@
     cursor: pointer;
 }
 
-.modal td,
 .modal input,
 .modal select,
 .modal textarea {
     width: 450px;
+    max-width: 100%;
 }
 
 #journal_line_documents_modal .modal-content {
@@ -55,6 +55,37 @@
 
 #journal_queue_view_modal .modal-content {
     max-width: 980px;
+}
+
+#journal_queue_view_modal .journal-queue-modal-lines-scroll {
+    align-self: flex-start;
+    width: auto;
+    max-width: min(100%, 58rem);
+}
+
+#journal_queue_view_modal .journal-queue-modal-lines-table {
+    width: max-content;
+    min-width: 0;
+}
+
+#journal_queue_view_modal .journal-queue-modal-lines-table th,
+#journal_queue_view_modal .journal-queue-modal-lines-table td {
+    width: auto;
+    padding: 0.55rem 0.7rem;
+}
+
+#journal_queue_view_modal .journal-queue-modal-lines-table td[data-long-text] {
+    max-width: 16rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#journal_queue_view_modal .journal-queue-modal-line-docs .journal-line-doc-pills {
+    max-width: 100%;
+}
+
+#journal_queue_view_modal .journal-queue-modal-line-docs .journal-line-doc-pill {
+    max-width: 100%;
 }
 
 #journal_line_documents_checklist {

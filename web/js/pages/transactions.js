@@ -1,7 +1,7 @@
 const authHelpers = await loadFetchWithAuth();
 const { fetchWithAuth } = authHelpers;
 const domHelpers = await loadDomHelpers();
-const { createCell, createInput, createSelect, createTextarea } = domHelpers;
+const { appendOptions, createCell, createInput, createSelect, createTextarea } = domHelpers;
 
 let showLoadingOverlayFn, hideLoadingOverlayFn, showErrorModalFn, showMessageModalFn;
 let accountsList = [];
@@ -17,6 +17,62 @@ const JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE = "ERR_JOURNAL_REFERENCE_CODE_C
 const JOURNAL_ENTRY_NOT_BALANCED_ERROR_CODE = "ERR_JOURNAL_ENTRY_NOT_BALANCED";
 const LEDGER_DEFAULT_LIMIT = 200;
 let refreshJournalSubmitButtonStateFn = () => {};
+let sortDraftJournalRowsFn = () => {};
+let refreshJournalLinePresentationFn = () => {};
+let refreshJournalAccountOptionsFn = () => {};
+
+const normalizeJournalAccountId = (value) => {
+    const accountId = Number(value);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+        return null;
+    }
+    return accountId;
+};
+
+const buildAvailableJournalAccountOptions = ({ selectedAccountId = null, excludedAccountIds = new Set() } = {}) => {
+    const normalizedSelectedAccountId = normalizeJournalAccountId(selectedAccountId);
+    return accountsList
+        .filter((account) => {
+            const accountId = normalizeJournalAccountId(account?.id);
+            if (accountId === null) {
+                return false;
+            }
+            return accountId === normalizedSelectedAccountId || !excludedAccountIds.has(accountId);
+        })
+        .map((account) => ({ value: account.id, label: account.account_name }));
+};
+
+const populateJournalAccountSelect = (accountSelect, { selectedAccountId = null, excludedAccountIds = new Set(), autoSelectFirstAvailable = false } = {}) => {
+    if (!accountSelect) {
+        return null;
+    }
+
+    const normalizedSelectedAccountId = normalizeJournalAccountId(selectedAccountId);
+    const availableOptions = buildAvailableJournalAccountOptions({
+        selectedAccountId: normalizedSelectedAccountId,
+        excludedAccountIds,
+    });
+    let nextSelectedAccountId = normalizedSelectedAccountId;
+
+    const hasSelectedOption = nextSelectedAccountId !== null && availableOptions.some((option) => normalizeJournalAccountId(option.value) === nextSelectedAccountId);
+    if (!hasSelectedOption) {
+        nextSelectedAccountId = autoSelectFirstAvailable && availableOptions.length > 0 ? normalizeJournalAccountId(availableOptions[0].value) : null;
+    }
+
+    accountSelect.replaceChildren();
+    if (nextSelectedAccountId === null) {
+        const placeholderOption = document.createElement("option");
+        placeholderOption.value = "";
+        placeholderOption.textContent = availableOptions.length > 0 ? "Select account" : "No accounts available";
+        placeholderOption.selected = true;
+        accountSelect.appendChild(placeholderOption);
+    }
+    appendOptions(accountSelect, availableOptions, nextSelectedAccountId ?? "");
+    accountSelect.disabled = availableOptions.length === 0;
+    accountSelect.value = nextSelectedAccountId === null ? "" : String(nextSelectedAccountId);
+
+    return nextSelectedAccountId;
+};
 
 const loadAccounts = async () => {
     try {
@@ -279,7 +335,7 @@ const openJournalLineDocumentsModal = (lineNumber) => {
     journalLineDocumentsModal.setAttribute("aria-hidden", "false");
 };
 
-const buildJournalLine = async (rowNum) => {
+const buildJournalLine = async (rowNum, { selectedAccountId = null, excludedAccountIds = new Set(), autoSelectFirstAvailable = true } = {}) => {
     const { formatNumberAsCurrency, formatNumberWithCommas } = await loadNumericHelpers();
     formatNumberAsCurrencyFn = formatNumberAsCurrency;
     formatNumberWithCommasFn = formatNumberWithCommas;
@@ -291,9 +347,16 @@ const buildJournalLine = async (rowNum) => {
     const creditCell = createCell({});
     const actionsCell = createCell({});
 
-    const accountSelectOptions = accountsList.map((account) => ({ value: account.id, label: account.account_name }));
-    const accountSelect = createSelect(accountSelectOptions, "Journal line account");
+    const accountSelect = createSelect([], "", "data-journal-line-account-select");
     accountSelect.id = `account-${rowNum}`;
+    populateJournalAccountSelect(accountSelect, {
+        selectedAccountId,
+        excludedAccountIds,
+        autoSelectFirstAvailable,
+    });
+    accountSelect.addEventListener("change", () => {
+        refreshJournalAccountOptionsFn(row.parentElement);
+    });
     accountCell.appendChild(accountSelect);
     const descriptionInput = createInput("text", "", "data-line-note");
     descriptionInput.placeholder = "Optional line note";
@@ -307,10 +370,14 @@ const buildJournalLine = async (rowNum) => {
         if (/[a-zA-Z]/.test(debitInput.value)) {
             debitInput.value = debitInput.value.replace(/[^0-9.-]/g, "");
         }
+        refreshJournalLinePresentationFn(row);
         updateJournalEntryTotals(row.parentElement);
     });
     debitInput.addEventListener("blur", () => {
         debitInput.value = formatNumberAsCurrencyFn(debitInput.value);
+        refreshJournalLinePresentationFn(row);
+        sortDraftJournalRowsFn(row.parentElement);
+        updateJournalEntryTotals(row.parentElement);
     });
     debitInput.id = `debit-${rowNum}`;
     debitCell.appendChild(debitInput);
@@ -322,10 +389,14 @@ const buildJournalLine = async (rowNum) => {
         if (/[a-zA-Z]/.test(creditInput.value)) {
             creditInput.value = creditInput.value.replace(/[^0-9.-]/g, "");
         }
+        refreshJournalLinePresentationFn(row);
         updateJournalEntryTotals(row.parentElement);
     });
     creditInput.addEventListener("blur", () => {
         creditInput.value = formatNumberAsCurrencyFn(creditInput.value);
+        refreshJournalLinePresentationFn(row);
+        sortDraftJournalRowsFn(row.parentElement);
+        updateJournalEntryTotals(row.parentElement);
     });
     creditInput.id = `credit-${rowNum}`;
     creditCell.appendChild(creditInput);
@@ -358,6 +429,7 @@ const buildJournalLine = async (rowNum) => {
     row.appendChild(debitCell);
     row.appendChild(creditCell);
     row.appendChild(actionsCell);
+    refreshJournalLinePresentationFn(row);
     return row;
 };
 
@@ -537,9 +609,28 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         queueModal.setAttribute("aria-hidden", visible ? "false" : "true");
     };
 
+    const removeJournalIdFromHash = () => {
+        const currentHash = window.location.hash || "#/transactions";
+        const [hashPath, hashQuery = ""] = currentHash.split("?");
+        if (!hashQuery) {
+            return;
+        }
+
+        const hashParams = new URLSearchParams(hashQuery);
+        if (!hashParams.has("journal_id")) {
+            return;
+        }
+
+        hashParams.delete("journal_id");
+        const nextHash = hashParams.toString() ? `${hashPath}?${hashParams.toString()}` : hashPath;
+        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+        window.history.replaceState(window.history.state, "", nextUrl);
+    };
+
     const closeQueueModal = () => {
         activeQueueJournalEntryId = null;
         setQueueModalVisible(false);
+        removeJournalIdFromHash();
     };
 
     const setQueueDecisionButtonsState = ({ pending = false, busy = false } = {}) => {
@@ -563,8 +654,8 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         const descriptionCell = createCell({ text: entry.description || "-", isLongText: true });
         const typeCell = createCell({ text: toQueueJournalTypeLabel(entry.journal_type) });
         const createdByCell = createCell({ text: entry.created_by_username || "-" });
-        const debitCell = createCell({ text: formatCurrencyDisplay(entry.total_debits) });
-        const creditCell = createCell({ text: formatCurrencyDisplay(entry.total_credits) });
+        const debitCell = createCell({ text: formatCurrencyDisplay(entry.total_debits), isCurrency: true });
+        const creditCell = createCell({ text: formatCurrencyDisplay(entry.total_credits), isCurrency: true });
         const statusCell = createCell({});
         const statusBadge = document.createElement("span");
         statusBadge.className = toQueueBadgeClass(entry.status);
@@ -664,12 +755,18 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
 
         lines.forEach((line) => {
             const row = document.createElement("tr");
+            const isCreditLine = line.dc === "credit";
             const lineNumberCell = createCell({ text: line.line_no });
             const accountCell = createCell({ text: line.account_name || line.account_id || "-" });
             const descriptionCell = createCell({ text: line.line_description || "-", isLongText: true });
-            const debitCell = createCell({ text: line.dc === "debit" ? formatCurrencyDisplay(line.amount) : "$0.00" });
-            const creditCell = createCell({ text: line.dc === "credit" ? formatCurrencyDisplay(line.amount) : "$0.00" });
-            const lineDocsCell = createCell({});
+            const debitCell = createCell({ text: line.dc === "debit" ? formatCurrencyDisplay(line.amount) : "$0.00", isCurrency: true });
+            const creditCell = createCell({ text: line.dc === "credit" ? formatCurrencyDisplay(line.amount) : "$0.00", isCurrency: true });
+            const lineDocsCell = createCell({ isLongText: true });
+            lineDocsCell.className = "journal-queue-modal-line-docs";
+
+            row.classList.toggle("journal-line-row--credit", isCreditLine);
+            accountCell.classList.toggle("journal-line-account--credit", isCreditLine);
+            descriptionCell.classList.toggle("journal-line-description--credit", isCreditLine);
 
             if (Array.isArray(line.documents) && line.documents.length > 0) {
                 const docsContainer = document.createElement("div");
@@ -960,6 +1057,9 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
 
     if (journalQueueTableBody) {
         await loadJournalQueue();
+    }
+
+    if (queueModal) {
         const urlParamsHelper = await loadUrlParamHelper();
         const journalIdFromUrl = urlParamsHelper.getUrlParam("journal_id");
         if (journalIdFromUrl) {
@@ -1013,7 +1113,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     const appendPostingReferenceElement = (cell, row) => {
         const postingReferenceLabel = buildPostingReferenceLabel(row);
         const journalEntryId = Number(row?.journal_entry_id);
-        const canNavigateToQueueEntry = !!journalQueueTableBody && Number.isSafeInteger(journalEntryId) && journalEntryId > 0;
+        const canNavigateToQueueEntry = !!queueModal && Number.isSafeInteger(journalEntryId) && journalEntryId > 0;
         if (!canNavigateToQueueEntry) {
             cell.textContent = postingReferenceLabel;
             return;
@@ -1046,9 +1146,9 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             const descriptionCell = createCell({ text: entry.description || "-", isLongText: true });
             const postingReferenceCell = createCell({});
             appendPostingReferenceElement(postingReferenceCell, entry);
-            const debitCell = createCell({ text: entry.dc === "debit" ? formatCurrencyDisplay(entry.amount) : "$0.00" });
-            const creditCell = createCell({ text: entry.dc === "credit" ? formatCurrencyDisplay(entry.amount) : "$0.00" });
-            const balanceCell = createCell({ text: formatCurrencyDisplay(entry.running_balance) });
+            const debitCell = createCell({ text: entry.dc === "debit" ? formatCurrencyDisplay(entry.amount) : "$0.00", isCurrency: true });
+            const creditCell = createCell({ text: entry.dc === "credit" ? formatCurrencyDisplay(entry.amount) : "$0.00", isCurrency: true });
+            const balanceCell = createCell({ text: formatCurrencyDisplay(entry.running_balance), isCurrency: true });
 
             row.appendChild(dateCell);
             row.appendChild(accountCell);
@@ -1081,7 +1181,7 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             const dateCell = createCell({ text: formatDateForDisplay(entry.entry_date) });
             const postingReferenceCell = createCell({});
             appendPostingReferenceElement(postingReferenceCell, entry);
-            const amountCell = createCell({ text: formatCurrencyDisplay(entry.amount) });
+            const amountCell = createCell({ text: formatCurrencyDisplay(entry.amount), isCurrency: true });
 
             row.appendChild(dateCell);
             row.appendChild(postingReferenceCell);
@@ -1210,14 +1310,83 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     });
 
     const draftJournalLines = document.querySelector("[data-journal-lines]");
+    const getSelectedJournalAccountIds = (journalLinesContainer = draftJournalLines, { excludeRow = null } = {}) => {
+        if (!journalLinesContainer) {
+            return new Set();
+        }
+        return Array.from(journalLinesContainer.querySelectorAll("tr")).reduce((selectedAccountIds, row) => {
+            if (row === excludeRow) {
+                return selectedAccountIds;
+            }
+            const accountId = normalizeJournalAccountId(row.querySelector("select[data-journal-line-account-select]")?.value);
+            if (accountId !== null) {
+                selectedAccountIds.add(accountId);
+            }
+            return selectedAccountIds;
+        }, new Set());
+    };
+
+    const getNextAvailableJournalAccountId = (journalLinesContainer = draftJournalLines) => {
+        const selectedAccountIds = getSelectedJournalAccountIds(journalLinesContainer);
+        const nextAvailableAccount = accountsList.find((account) => !selectedAccountIds.has(normalizeJournalAccountId(account.id)));
+        return normalizeJournalAccountId(nextAvailableAccount?.id);
+    };
+
+    const refreshJournalAccountOptions = (journalLinesContainer = draftJournalLines, { autoAssignUnselectedRows = false } = {}) => {
+        if (!journalLinesContainer) {
+            return;
+        }
+
+        const encounteredAccountIds = new Set();
+        Array.from(journalLinesContainer.querySelectorAll("tr")).forEach((row) => {
+            const accountSelect = row.querySelector("select[data-journal-line-account-select]");
+            if (!accountSelect) {
+                return;
+            }
+
+            const currentSelectedAccountId = normalizeJournalAccountId(accountSelect.value);
+            const uniqueSelectedAccountId = currentSelectedAccountId !== null && !encounteredAccountIds.has(currentSelectedAccountId) ? currentSelectedAccountId : null;
+            if (uniqueSelectedAccountId !== null) {
+                encounteredAccountIds.add(uniqueSelectedAccountId);
+            }
+
+            populateJournalAccountSelect(accountSelect, {
+                selectedAccountId: uniqueSelectedAccountId,
+                excludedAccountIds: getSelectedJournalAccountIds(journalLinesContainer, { excludeRow: row }),
+                autoSelectFirstAvailable: autoAssignUnselectedRows && uniqueSelectedAccountId === null,
+            });
+        });
+
+        refreshJournalSubmitButtonStateFn();
+    };
+    refreshJournalAccountOptionsFn = refreshJournalAccountOptions;
+
+    const appendDraftJournalLine = async (journalLinesContainer = draftJournalLines) => {
+        if (!journalLinesContainer) {
+            return;
+        }
+        const excludedAccountIds = getSelectedJournalAccountIds(journalLinesContainer);
+        const selectedAccountId = getNextAvailableJournalAccountId(journalLinesContainer);
+        journalLinesContainer.appendChild(
+            await buildJournalLine(draftJournalLineCounter++, {
+                selectedAccountId,
+                excludedAccountIds,
+                autoSelectFirstAvailable: selectedAccountId === null,
+            }),
+        );
+    };
+
     if (draftJournalLines) {
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+        await appendDraftJournalLine(draftJournalLines);
+        await appendDraftJournalLine(draftJournalLines);
+        updateJournalEntryTotals(draftJournalLines);
 
         const addLineButton = document.querySelector("[data-add-line-button]");
         if (addLineButton) {
             addLineButton.addEventListener("click", async () => {
-                draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+                await appendDraftJournalLine(draftJournalLines);
+                renumberJournalRows(draftJournalLines);
+                refreshJournalAccountOptions(draftJournalLines, { autoAssignUnselectedRows: true });
                 updateJournalEntryTotals(draftJournalLines);
             });
         }
@@ -1228,45 +1397,8 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
                 if (row) {
                     row.remove();
                     draftJournalLineCounter = Math.max(1, draftJournalLineCounter - 1);
-                    // Re-number remaining rows
-                    const rows = draftJournalLines.querySelectorAll("tr");
-                    const nextLineDocumentAssociations = new Map();
-                    rows.forEach((r, index) => {
-                        const cell = r.querySelector("td");
-                        if (cell) {
-                            cell.textContent = index + 1;
-                        }
-                        // adjust input IDs to match new row numbers
-                        const debitInput = r.querySelector("input[data-debit-inputs]");
-                        const creditInput = r.querySelector("input[data-credit-inputs]");
-                        if (debitInput) {
-                            debitInput.id = `debit-${index + 1}`;
-                        }
-                        if (creditInput) {
-                            creditInput.id = `credit-${index + 1}`;
-                        }
-
-                        const lineDocsButton = r.querySelector("button[data-journal-line-documents-button]");
-                        if (lineDocsButton) {
-                            const previousLineNumber = lineDocsButton.getAttribute("data-journal-line-number") || String(index + 1);
-                            if (lineDocumentAssociations.has(previousLineNumber)) {
-                                nextLineDocumentAssociations.set(String(index + 1), new Set(lineDocumentAssociations.get(previousLineNumber)));
-                            }
-                            lineDocsButton.setAttribute("data-journal-line-number", String(index + 1));
-                        }
-
-                        const descriptionInput = r.querySelector("input[data-line-note]");
-                        if (descriptionInput) {
-                            descriptionInput.id = `description-${index + 1}`;
-                        }
-
-                        const accountSelect = r.querySelector("select");
-                        if (accountSelect) {
-                            accountSelect.id = `account-${index + 1}`;
-                        }
-                    });
-                    lineDocumentAssociations = nextLineDocumentAssociations;
-                    syncVisibleJournalLineDocumentsModal();
+                    renumberJournalRows(draftJournalLines);
+                    refreshJournalAccountOptions(draftJournalLines, { autoAssignUnselectedRows: true });
                     updateJournalEntryTotals(draftJournalLines);
                 }
             }
@@ -1294,6 +1426,125 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
     let journalReferenceAvailabilityPending = false;
     let isJournalSubmissionInFlight = false;
     let journalSubmitBlockingIssueCodes = [];
+
+    const getJournalLineType = (row) => {
+        const debitInput = row?.querySelector("input[data-debit-inputs]");
+        const creditInput = row?.querySelector("input[data-credit-inputs]");
+        const debitAmount = parseCurrencyInput(debitInput?.value || "");
+        const creditAmount = parseCurrencyInput(creditInput?.value || "");
+        if (Number.isFinite(debitAmount) && debitAmount > 0) {
+            return "debit";
+        }
+        if (Number.isFinite(creditAmount) && creditAmount > 0) {
+            return "credit";
+        }
+        return "empty";
+    };
+
+    const refreshJournalLinePresentation = (row) => {
+        if (!row) {
+            return;
+        }
+        const rowType = getJournalLineType(row);
+        row.classList.toggle("journal-line-row--credit", rowType === "credit");
+        row.children[1]?.classList.toggle("journal-line-account--credit", rowType === "credit");
+        row.children[2]?.classList.toggle("journal-line-description--credit", rowType === "credit");
+    };
+    refreshJournalLinePresentationFn = refreshJournalLinePresentation;
+
+    const renumberJournalRows = (journalLinesContainer = draftJournalLines) => {
+        if (!journalLinesContainer) {
+            return;
+        }
+        const rows = journalLinesContainer.querySelectorAll("tr");
+        const nextLineDocumentAssociations = new Map();
+        rows.forEach((row, index) => {
+            const nextLineNumber = index + 1;
+            const lineNumberCell = row.querySelector("td");
+            if (lineNumberCell) {
+                lineNumberCell.textContent = nextLineNumber;
+            }
+
+            const debitInput = row.querySelector("input[data-debit-inputs]");
+            const creditInput = row.querySelector("input[data-credit-inputs]");
+            if (debitInput) {
+                debitInput.id = `debit-${nextLineNumber}`;
+            }
+            if (creditInput) {
+                creditInput.id = `credit-${nextLineNumber}`;
+            }
+
+            const descriptionInput = row.querySelector("input[data-line-note]");
+            if (descriptionInput) {
+                descriptionInput.id = `description-${nextLineNumber}`;
+            }
+
+            const accountSelect = row.querySelector("select[data-journal-line-account-select]");
+            if (accountSelect) {
+                accountSelect.id = `account-${nextLineNumber}`;
+            }
+
+            const lineDocsButton = row.querySelector("button[data-journal-line-documents-button]");
+            if (lineDocsButton) {
+                const previousLineNumber = lineDocsButton.getAttribute("data-journal-line-number") || String(nextLineNumber);
+                if (lineDocumentAssociations.has(previousLineNumber)) {
+                    nextLineDocumentAssociations.set(String(nextLineNumber), new Set(lineDocumentAssociations.get(previousLineNumber)));
+                }
+                lineDocsButton.setAttribute("data-journal-line-number", String(nextLineNumber));
+            }
+
+            refreshJournalLinePresentation(row);
+        });
+        lineDocumentAssociations = nextLineDocumentAssociations;
+        syncVisibleJournalLineDocumentsModal();
+    };
+
+    const sortDraftJournalRows = (journalLinesContainer = draftJournalLines) => {
+        if (!journalLinesContainer) {
+            return;
+        }
+        const rows = Array.from(journalLinesContainer.querySelectorAll("tr"));
+        const priorityByType = {
+            debit: 0,
+            credit: 1,
+            empty: 2,
+        };
+
+        rows.sort((left, right) => {
+            const priorityDiff = priorityByType[getJournalLineType(left)] - priorityByType[getJournalLineType(right)];
+            if (priorityDiff !== 0) {
+                return priorityDiff;
+            }
+            const leftLineNumber = Number(left.querySelector("td")?.textContent || 0);
+            const rightLineNumber = Number(right.querySelector("td")?.textContent || 0);
+            return leftLineNumber - rightLineNumber;
+        }).forEach((row) => {
+            journalLinesContainer.appendChild(row);
+        });
+
+        renumberJournalRows(journalLinesContainer);
+    };
+    sortDraftJournalRowsFn = sortDraftJournalRows;
+    sortDraftJournalRows(draftJournalLines);
+
+    const getDuplicateJournalAccountRows = (journalLinesContainer = draftJournalLines) => {
+        if (!journalLinesContainer) {
+            return [];
+        }
+        const rowsByAccountId = new Map();
+        Array.from(journalLinesContainer.querySelectorAll("tr")).forEach((row) => {
+            const accountId = normalizeJournalAccountId(row.querySelector("select[data-journal-line-account-select]")?.value);
+            if (accountId === null || getJournalLineType(row) === "empty") {
+                return;
+            }
+            const matchingRows = rowsByAccountId.get(accountId) || [];
+            matchingRows.push(row);
+            rowsByAccountId.set(accountId, matchingRows);
+        });
+        return Array.from(rowsByAccountId.values())
+            .filter((matchingRows) => matchingRows.length > 1)
+            .flat();
+    };
 
     const getJournalEntryBalanceState = () => {
         if (!draftJournalLines) {
@@ -1337,6 +1588,10 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             issues.push("ERR_NO_FILE_UPLOADED");
         }
 
+        if (getDuplicateJournalAccountRows().length > 0) {
+            issues.push("ERR_JOURNAL_DUPLICATE_ACCOUNT");
+        }
+
         const balanceState = getJournalEntryBalanceState();
         const isBalanced = !balanceState.hasInvalidAmounts && balanceState.difference === 0;
         if (!isBalanced) {
@@ -1362,6 +1617,10 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         }
         if (issueCode === JOURNAL_ENTRY_NOT_BALANCED_ERROR_CODE) {
             draftJournalLines?.querySelector("input[data-debit-inputs], input[data-credit-inputs]")?.focus();
+            return;
+        }
+        if (issueCode === "ERR_JOURNAL_DUPLICATE_ACCOUNT") {
+            getDuplicateJournalAccountRows()[0]?.querySelector("select[data-journal-line-account-select]")?.focus();
             return;
         }
         if (issueCode === JOURNAL_REFERENCE_CHECK_PENDING_ERROR_CODE || issueCode === JOURNAL_REFERENCE_NOT_AVAILABLE_ERROR_CODE) {
@@ -1596,8 +1855,10 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         }
         draftJournalLines.replaceChildren();
         draftJournalLineCounter = 1;
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
-        draftJournalLines.appendChild(await buildJournalLine(draftJournalLineCounter++));
+        await appendDraftJournalLine(draftJournalLines);
+        await appendDraftJournalLine(draftJournalLines);
+        renumberJournalRows(draftJournalLines);
+        refreshJournalAccountOptions(draftJournalLines, { autoAssignUnselectedRows: true });
         updateJournalEntryTotals(draftJournalLines);
     };
 
@@ -1636,9 +1897,10 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
         const lines = [];
         let totalDebits = 0;
         let totalCredits = 0;
+        const seenAccountIds = new Set();
 
         rows.forEach((row, index) => {
-            const accountSelect = row.querySelector("select");
+            const accountSelect = row.querySelector("select[data-journal-line-account-select]");
             const description = row.querySelector("input[data-line-note]")?.value?.trim() || "";
             const debitInput = row.querySelector("input[data-debit-inputs]");
             const creditInput = row.querySelector("input[data-credit-inputs]");
@@ -1655,10 +1917,14 @@ export default async function initTransactions({ showLoadingOverlay, hideLoading
             if (hasDebit && hasCredit) {
                 throw new Error("ERR_INVALID_SELECTION");
             }
-            const accountId = Number(accountSelect?.value);
-            if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+            const accountId = normalizeJournalAccountId(accountSelect?.value);
+            if (accountId === null) {
                 throw new Error("ERR_INVALID_SELECTION");
             }
+            if (seenAccountIds.has(accountId)) {
+                throw new Error("ERR_JOURNAL_DUPLICATE_ACCOUNT");
+            }
+            seenAccountIds.add(accountId);
             const lineNoText = row.querySelector("td")?.textContent?.trim() || String(index + 1);
             const lineNo = Number.isSafeInteger(Number(lineNoText)) ? Number(lineNoText) : index + 1;
             const lineDocIds = Array.from(lineDocumentAssociations.get(String(lineNo)) || []);
@@ -1870,8 +2136,8 @@ async function loadNumericHelpers() {
 async function loadDomHelpers() {
     const moduleUrl = new URL("/js/utils/dom_helpers.js", window.location.origin).href;
     const module = await import(moduleUrl);
-    const { createCell, createInput, createSelect, createTextarea } = module;
-    return { createCell, createInput, createSelect, createTextarea };
+    const { appendOptions, createCell, createInput, createSelect, createTextarea } = module;
+    return { appendOptions, createCell, createInput, createSelect, createTextarea };
 }
 
 async function loadMessagesHelper() {

@@ -1,4 +1,5 @@
 # FinLedger
+
 [![Tests](https://github.com/andrewmcdan/FinLedger/actions/workflows/tests.yml/badge.svg)](https://github.com/andrewmcdan/FinLedger/actions/workflows/tests.yml)
 
 FinLedger is a web-based accounting and financial management system with role-based access and core accounting workflow modules, built as a semester-long team project for our Application Domain class at KSU.
@@ -11,10 +12,12 @@ Current implementation status:
 - Full financial-report generation workflows are still in progress.
 
 ## Requirements
+
 - Node.js with npm
 - PostgreSQL (or Docker)
 
 ## Environment
+
 Copy `.env.example` to `.env` and `.env.test`, then adjust values as needed. Use `.env` for local/dev and `.env.test` for the test database.
 
 ```bash
@@ -23,6 +26,7 @@ cp .env.example .env.test
 ```
 
 ## Run locally (without Docker)
+
 Make sure PostgreSQL is running with credentials matching `.env`, then:
 
 ```bash
@@ -34,6 +38,7 @@ npm run start
 Visit `http://localhost:3050` (or the port set in `.env`).
 
 ## Run with Docker
+
 This starts the app and PostgreSQL using Docker Compose:
 
 ```bash
@@ -43,6 +48,7 @@ docker compose up --build
 Visit `http://localhost:3050` (or the port set in `.env`).
 
 ## Testing
+
 Run the built-in Node.js test runner:
 
 ```bash
@@ -59,6 +65,7 @@ npm run db-init:test
 ```
 
 ## Development
+
 To run the app in development mode with auto-reloading:
 
 ```bash
@@ -68,11 +75,22 @@ npm run dev
 
 Running the "dev" script will trigger `db-init` first to ensure the database is set up.
 
+## Solved Problem Data
+
+For sprint evaluation, FinLedger includes a dedicated seed for the Addams & Family solved problem dataset used in the accounting cycle exercise.
+
+```bash
+npm run solved-data-seed
+```
+
+This loads all April transactions from [accounting_solved_problem_markdown.md](accounting_solved_problem_markdown.md), the six adjusting entries, and the optional closing entry unless `--skip-closing` is supplied.
+
 If you want to use the postgresql database in a Docker container during development, run:
 
 ```bash
 docker compose up db
 ```
+
 Then ensure your `.env` file points to the Docker container's database settings.
 
 ## Attribution
@@ -88,11 +106,12 @@ The attribution.md file is generated using [scripts/format_license_info.py](scri
 npm install -g nlf
 ```
 
-and run with 
+and run with
 
 ```bash
 python3 ./scripts/format_license_info.py licenses.txt -o attribution.md --project "FinLedger"
 ```
 
 ## License
+
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -16,7 +16,9 @@ const createCodeError = (code) => {
 };
 
 const normalizeExtension = (value) => {
-    const extension = String(value || "").trim().toLowerCase();
+    const extension = String(value || "")
+        .trim()
+        .toLowerCase();
     if (!extension) {
         return "";
     }
@@ -54,7 +56,9 @@ const normalizeReferenceCode = (referenceCode) => {
 };
 
 const normalizeJournalStatus = (status, { allowAll = true } = {}) => {
-    const normalizedStatus = String(status || "pending").trim().toLowerCase();
+    const normalizedStatus = String(status || "pending")
+        .trim()
+        .toLowerCase();
     if (allowAll && normalizedStatus === "all") {
         return "all";
     }
@@ -138,6 +142,20 @@ const normalizeJournalEntryId = (journalEntryId) => {
         throw createCodeError("ERR_INVALID_SELECTION");
     }
     return parsed;
+};
+
+const ensureUniqueAccountIds = (lines = []) => {
+    const seenAccountIds = new Set();
+    for (const line of lines) {
+        const normalizedAccountId = Number(line?.account_id);
+        if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
+            throw createCodeError("ERR_INVALID_SELECTION");
+        }
+        if (seenAccountIds.has(normalizedAccountId)) {
+            throw createCodeError("ERR_JOURNAL_DUPLICATE_ACCOUNT");
+        }
+        seenAccountIds.add(normalizedAccountId);
+    }
 };
 
 const normalizeManagerComment = (comment, { required = false } = {}) => {
@@ -294,9 +312,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
                     throw createCodeError("ERR_INVALID_SELECTION");
                 }
 
-                const payloadMetaData = payloadDocument.meta_data && typeof payloadDocument.meta_data === "object" && !Array.isArray(payloadDocument.meta_data)
-                    ? payloadDocument.meta_data
-                    : {};
+                const payloadMetaData = payloadDocument.meta_data && typeof payloadDocument.meta_data === "object" && !Array.isArray(payloadDocument.meta_data) ? payloadDocument.meta_data : {};
                 const storedMetaData = {
                     ...payloadMetaData,
                     mime_type: uploadedDocument.mime_type || null,
@@ -363,6 +379,8 @@ const createJournalEntry = async (userId, entryData = {}) => {
                 };
             });
 
+            ensureUniqueAccountIds(normalizedLines);
+
             totalDebits = Number(totalDebits.toFixed(2));
             totalCredits = Number(totalCredits.toFixed(2));
             const orderedLines = sortJournalLinesDebitsFirst(normalizedLines);
@@ -378,15 +396,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
                  VALUES
                     ($1, $2, $3, 'pending', $4, $5, $6, $6, $7)
                  RETURNING id, journal_type, entry_date, description, status, total_debits, total_credits, created_at, reference_code`,
-                [
-                    journalType,
-                    normalizeEntryDate(entryData.entry_date),
-                    description,
-                    totalDebits,
-                    totalCredits,
-                    numericUserId,
-                    providedReferenceCode,
-                ],
+                [journalType, normalizeEntryDate(entryData.entry_date), description, totalDebits, totalCredits, numericUserId, providedReferenceCode],
             );
             const journalEntry = { ...journalEntryInsertResult.rows[0] };
             if (!journalEntry.reference_code) {
@@ -420,9 +430,7 @@ const createJournalEntry = async (userId, entryData = {}) => {
                 });
             }
 
-            const journalEntryDocumentIds = Array.isArray(entryData.journal_entry_document_ids) && entryData.journal_entry_document_ids.length > 0
-                ? entryData.journal_entry_document_ids.map((id) => String(id))
-                : Array.from(documentLookupByClientId.keys());
+            const journalEntryDocumentIds = Array.isArray(entryData.journal_entry_document_ids) && entryData.journal_entry_document_ids.length > 0 ? entryData.journal_entry_document_ids.map((id) => String(id)) : Array.from(documentLookupByClientId.keys());
 
             const uniqueEntryDocumentIds = new Set(journalEntryDocumentIds);
             for (const clientDocumentId of uniqueEntryDocumentIds) {
@@ -458,11 +466,17 @@ const createJournalEntry = async (userId, entryData = {}) => {
                 }
             }
 
-            log("info", "Journal entry created", {
-                journal_entry_id: journalEntry.id,
-                line_count: persistedLines.length,
-                document_count: persistedDocuments.length,
-            }, utilities.getCallerInfo(), numericUserId);
+            log(
+                "info",
+                "Journal entry created",
+                {
+                    journal_entry_id: journalEntry.id,
+                    line_count: persistedLines.length,
+                    document_count: persistedDocuments.length,
+                },
+                utilities.getCallerInfo(),
+                numericUserId,
+            );
 
             return {
                 id: journalEntry.id,
@@ -982,17 +996,7 @@ const approveJournalEntry = async ({ journalEntryId, managerUserId, managerComme
                     ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, now(), $9)
                  ON CONFLICT (journal_entry_line_id) DO NOTHING
                  RETURNING id`,
-                [
-                    line.account_id,
-                    journalEntry.entry_date,
-                    line.dc,
-                    line.amount,
-                    line.line_description || journalEntry.description || null,
-                    line.id,
-                    normalizedJournalEntryId,
-                    referenceCode,
-                    normalizedManagerUserId,
-                ],
+                [line.account_id, journalEntry.entry_date, line.dc, line.amount, line.line_description || journalEntry.description || null, line.id, normalizedJournalEntryId, referenceCode, normalizedManagerUserId],
             );
 
             // Keep posting idempotent: only roll up account totals when the ledger row is newly inserted.
