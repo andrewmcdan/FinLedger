@@ -531,3 +531,213 @@ test("listLedgerEntries and getJournalDocumentDownloadInfo provide live ledger/d
         }
     }
 });
+
+test("approveJournalEntry rejects missing journal entry", async () => {
+    const manager = await insertUser({ username: "manager-missing", email: "manager-missing@example.com", role: "manager" });
+
+    await assert.rejects(
+        () =>
+            approveJournalEntry({
+                journalEntryId: 999999,
+                managerUserId: manager.id,
+                managerComment: "Approve missing entry",
+            }),
+        (error) => error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND",
+    );
+});
+
+test("rejectJournalEntry rejects missing journal entry", async () => {
+    const manager = await insertUser({ username: "manager-reject-missing", email: "manager-reject-missing@example.com", role: "manager" });
+
+    await assert.rejects(
+        () =>
+            rejectJournalEntry({
+                journalEntryId: 999999,
+                managerUserId: manager.id,
+                managerComment: "Reject missing entry",
+            }),
+        (error) => error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND",
+    );
+});
+
+test("rejectJournalEntry rejects already-processed journals", async () => {
+    const manager = await insertUser({ username: "manager-reject-processed", email: "manager-reject-processed@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct-reject-processed", email: "acct-reject-processed@example.com", role: "accountant" });
+    const categories = await seedCategories();
+
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Cash Reject Processed",
+        accountNumber: 1000000101,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Liability Reject Processed",
+        accountNumber: 2000000101,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const seeded = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 88,
+    });
+
+    await rejectJournalEntry({
+        journalEntryId: seeded.journalEntryId,
+        managerUserId: manager.id,
+        managerComment: "First rejection",
+    });
+
+    await assert.rejects(
+        () =>
+            rejectJournalEntry({
+                journalEntryId: seeded.journalEntryId,
+                managerUserId: manager.id,
+                managerComment: "Second rejection",
+            }),
+        (error) => error?.code === "ERR_JOURNAL_ENTRY_NOT_PENDING",
+    );
+});
+
+test("listJournalQueue supports status all", async () => {
+    const manager = await insertUser({ username: "manager-queue-all", email: "manager-queue-all@example.com", role: "manager" });
+    const accountant = await insertUser({ username: "acct-queue-all", email: "acct-queue-all@example.com", role: "accountant" });
+    const categories = await seedCategories();
+
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Cash Queue All",
+        accountNumber: 1000000102,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Liability Queue All",
+        accountNumber: 2000000102,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const pending = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 25,
+    });
+
+    const approved = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 35,
+    });
+
+    await approveJournalEntry({
+        journalEntryId: approved.journalEntryId,
+        managerUserId: manager.id,
+        managerComment: "Approved for queue all",
+    });
+
+    const rejected = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 45,
+    });
+
+    await rejectJournalEntry({
+        journalEntryId: rejected.journalEntryId,
+        managerUserId: manager.id,
+        managerComment: "Rejected for queue all",
+    });
+
+    const queue = await listJournalQueue({ status: "all", limit: 50, offset: 0 });
+    assert.equal(queue.total, 3);
+    assert.equal(queue.rows.length, 3);
+});
+
+test("listJournalQueue rejects invalid status", async () => {
+    await assert.rejects(
+        () => listJournalQueue({ status: "bad-status" }),
+        (error) => error?.code === "ERR_INVALID_SELECTION",
+    );
+});
+
+test("listLedgerEntries rejects invalid account filter", async () => {
+    await assert.rejects(
+        () => listLedgerEntries({ accountId: "not-a-number" }),
+        (error) => error?.code === "ERR_INVALID_SELECTION",
+    );
+});
+
+test("getJournalEntryDetail rejects missing journal entry", async () => {
+    await assert.rejects(
+        () => getJournalEntryDetail(999999),
+        (error) => error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND",
+    );
+});
+
+test("getJournalDocumentDownloadInfo rejects unrelated document", async () => {
+    const accountant = await insertUser({ username: "acct-unrelated-doc", email: "acct-unrelated-doc@example.com", role: "accountant" });
+    const categories = await seedCategories();
+
+    const debitAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Cash Unrelated Doc",
+        accountNumber: 1000000103,
+        normalSide: "debit",
+        accountCategoryId: categories.assetsCategoryId,
+        accountSubcategoryId: categories.assetsSubcategoryId,
+        accountOrder: 10,
+    });
+
+    const creditAccount = await insertAccount({
+        userId: accountant.id,
+        accountName: "Liability Unrelated Doc",
+        accountNumber: 2000000103,
+        normalSide: "credit",
+        accountCategoryId: categories.liabilitiesCategoryId,
+        accountSubcategoryId: categories.liabilitiesSubcategoryId,
+        accountOrder: 20,
+    });
+
+    const seeded = await seedPendingJournalEntry({
+        createdByUserId: accountant.id,
+        debitAccountId: debitAccount.id,
+        creditAccountId: creditAccount.id,
+        amount: 55,
+    });
+
+    const unrelatedDoc = await db.query(
+        `INSERT INTO documents (user_id, title, original_file_name, file_extension, meta_data)
+         VALUES ($1, 'Unrelated', 'unrelated.pdf', '.pdf', '{}'::jsonb)
+         RETURNING id`,
+        [accountant.id],
+    );
+
+    await assert.rejects(
+        () =>
+            getJournalDocumentDownloadInfo({
+                journalEntryId: seeded.journalEntryId,
+                documentId: unrelatedDoc.rows[0].id,
+            }),
+        (error) => error?.code === "ERR_JOURNAL_ENTRY_NOT_FOUND",
+    );
+});
+
